@@ -1,0 +1,1354 @@
+import React, { useState, useEffect } from 'react';
+import api from '../api/axios';
+import { Subject, Assignment, Submission, DashboardStats } from '../types';
+import { useAuth } from '../context/AuthContext';
+import {
+  LayoutDashboard,
+  BookOpen,
+  FileCheck,
+  Inbox,
+  Plus,
+  Search,
+  Download,
+  FileSpreadsheet,
+  Archive,
+  Calendar,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Edit2,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  Loader2,
+  RefreshCw,
+  LogOut,
+  FileText,
+  KeyRound,
+  Settings,
+} from 'lucide-react';
+
+export const AdminDashboard: React.FC = () => {
+  const { logout } = useAuth();
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'subjects' | 'assignments' | 'submissions' | 'settings'>('dashboard');
+
+  // Join Code state
+  const [joinCode, setJoinCode] = useState<string>('');
+  const [isJoinCodeActive, setIsJoinCodeActive] = useState<boolean>(true);
+
+  // Stats state
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentSubmissions, setRecentSubmissions] = useState<Submission[]>([]);
+  const [loadingStats, setLoadingStats] = useState<boolean>(false);
+
+  // Subjects state
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
+  const [subjectModalOpen, setSubjectModalOpen] = useState<boolean>(false);
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
+  const [subjectForm, setSubjectForm] = useState({ name: '', code: '', description: '', isActive: true });
+
+  // Assignments state
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState<boolean>(false);
+  const [assignmentModalOpen, setAssignmentModalOpen] = useState<boolean>(false);
+  const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
+  const [assignmentForm, setAssignmentForm] = useState({
+    subjectId: '',
+    title: '',
+    description: '',
+    deadline: '',
+    allowLateSubmission: false,
+    allowedFileTypes: 'pdf, doc, docx, ppt, pptx, zip',
+    maxFileSize: 10,
+    isActive: true,
+  });
+
+  // Submissions list state
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [totalSubmissionsCount, setTotalSubmissionsCount] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [loadingSubmissions, setLoadingSubmissions] = useState<boolean>(false);
+
+  // Filters state
+  const [filterSubjectId, setFilterSubjectId] = useState<string>('');
+  const [filterAssignmentId, setFilterAssignmentId] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Global notification banner
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const showToast = (type: 'success' | 'error', text: string) => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 5000);
+  };
+
+  // FETCH DASHBOARD STATS
+  const fetchDashboardStats = async () => {
+    try {
+      setLoadingStats(true);
+      const res = await api.get('/submissions/stats/dashboard');
+      if (res.data.success) {
+        setStats(res.data.stats);
+        setRecentSubmissions(res.data.recentSubmissions);
+      }
+    } catch (err) {
+      showToast('error', 'Failed to load dashboard statistics.');
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  // FETCH SUBJECTS
+  const fetchSubjects = async () => {
+    try {
+      setLoadingSubjects(true);
+      const res = await api.get('/subjects?includeInactive=true');
+      if (res.data.success) {
+        setSubjects(res.data.subjects);
+      }
+    } catch (err) {
+      showToast('error', 'Failed to fetch subjects list.');
+    } finally {
+      setLoadingSubjects(false);
+    }
+  };
+
+  // FETCH ASSIGNMENTS
+  const fetchAssignments = async () => {
+    try {
+      setLoadingAssignments(true);
+      const res = await api.get('/assignments?includeInactive=true');
+      if (res.data.success) {
+        setAssignments(res.data.assignments);
+      }
+    } catch (err) {
+      showToast('error', 'Failed to fetch assignments list.');
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  // FETCH SUBMISSIONS
+  const fetchSubmissions = async (page: number = 1) => {
+    try {
+      setLoadingSubmissions(true);
+      let query = `/submissions?page=${page}&limit=10`;
+      if (filterSubjectId) query += `&subjectId=${filterSubjectId}`;
+      if (filterAssignmentId) query += `&assignmentId=${filterAssignmentId}`;
+      if (filterStatus) query += `&status=${filterStatus}`;
+      if (searchQuery) query += `&search=${encodeURIComponent(searchQuery.trim())}`;
+
+      const res = await api.get(query);
+      if (res.data.success) {
+        setSubmissions(res.data.submissions);
+        setTotalSubmissionsCount(res.data.total);
+        setCurrentPage(res.data.page);
+        setTotalPages(res.data.pages);
+      }
+    } catch (err) {
+      showToast('error', 'Failed to fetch submissions.');
+    } finally {
+      setLoadingSubmissions(false);
+    }
+  };
+
+  const [customJoinInput, setCustomJoinInput] = useState<string>('');
+  const [isEditingCode, setIsEditingCode] = useState<boolean>(false);
+
+  const fetchJoinCode = async () => {
+    try {
+      const res = await api.get('/admin/settings/join-code');
+      if (res.data.success) {
+        setJoinCode(res.data.joinCode);
+        setCustomJoinInput(res.data.joinCode);
+        setIsJoinCodeActive(res.data.isJoinCodeActive);
+      }
+    } catch (err) {
+      console.error('Failed to fetch class join code:', err);
+    }
+  };
+
+  const handleUpdateJoinCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customJoinInput.trim()) {
+      showToast('error', 'Join code cannot be empty.');
+      return;
+    }
+    try {
+      const res = await api.put('/admin/settings/join-code', { customCode: customJoinInput.trim() });
+      if (res.data.success) {
+        setJoinCode(res.data.joinCode);
+        setCustomJoinInput(res.data.joinCode);
+        setIsJoinCodeActive(true);
+        setIsEditingCode(false);
+        showToast('success', res.data.message);
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to update join code.');
+    }
+  };
+
+  const handleRegenerateJoinCode = async () => {
+    if (!window.confirm('Regenerate Class Join Code? Old code will stop working.')) return;
+    try {
+      const res = await api.post('/admin/settings/join-code/regenerate');
+      if (res.data.success) {
+        setJoinCode(res.data.joinCode);
+        setCustomJoinInput(res.data.joinCode);
+        setIsJoinCodeActive(res.data.isJoinCodeActive);
+        showToast('success', res.data.message);
+      }
+    } catch (err) {
+      showToast('error', 'Failed to regenerate join code.');
+    }
+  };
+
+  const handleToggleJoinCode = async () => {
+    try {
+      const res = await api.patch('/admin/settings/join-code/toggle');
+      if (res.data.success) {
+        setIsJoinCodeActive(res.data.isJoinCodeActive);
+        showToast('success', res.data.message);
+      }
+    } catch (err) {
+      showToast('error', 'Failed to toggle join code.');
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardStats();
+    fetchSubjects();
+    fetchAssignments();
+    fetchJoinCode();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'submissions') {
+      fetchSubmissions(currentPage);
+    }
+  }, [activeTab, currentPage, filterSubjectId, filterAssignmentId, filterStatus]);
+
+  // SUBJECT MODAL SUBMIT
+  const handleSaveSubject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingSubject) {
+        const res = await api.put(`/subjects/${editingSubject._id}`, subjectForm);
+        if (res.data.success) {
+          showToast('success', 'Subject updated successfully.');
+          fetchSubjects();
+          setSubjectModalOpen(false);
+        }
+      } else {
+        const res = await api.post('/subjects', subjectForm);
+        if (res.data.success) {
+          showToast('success', 'Subject created successfully.');
+          fetchSubjects();
+          setSubjectModalOpen(false);
+        }
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to save subject.');
+    }
+  };
+
+  const handleDeleteSubject = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete/deactivate this subject?')) return;
+    try {
+      const res = await api.delete(`/subjects/${id}`);
+      if (res.data.success) {
+        showToast('success', res.data.message);
+        fetchSubjects();
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to delete subject.');
+    }
+  };
+
+  // ASSIGNMENT MODAL SUBMIT
+  const handleSaveAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const allowedArray = assignmentForm.allowedFileTypes
+        .split(',')
+        .map((s) => s.trim().replace('.', '').toLowerCase())
+        .filter(Boolean);
+
+      const payload = {
+        ...assignmentForm,
+        allowedFileTypes: allowedArray,
+        maxFileSize: Number(assignmentForm.maxFileSize),
+      };
+
+      if (editingAssignment) {
+        const res = await api.put(`/assignments/${editingAssignment._id}`, payload);
+        if (res.data.success) {
+          showToast('success', 'Assignment updated successfully.');
+          fetchAssignments();
+          setAssignmentModalOpen(false);
+        }
+      } else {
+        const res = await api.post('/assignments', payload);
+        if (res.data.success) {
+          showToast('success', 'Assignment created successfully.');
+          fetchAssignments();
+          setAssignmentModalOpen(false);
+        }
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to save assignment.');
+    }
+  };
+
+  const handleDeleteAssignment = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete/deactivate this assignment?')) return;
+    try {
+      const res = await api.delete(`/assignments/${id}`);
+      if (res.data.success) {
+        showToast('success', res.data.message);
+        fetchAssignments();
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to delete assignment.');
+    }
+  };
+
+  // SINGLE FILE DOWNLOAD
+  const handleDownloadSingle = async (submissionId: string, filename: string, cloudinaryUrl?: string) => {
+    try {
+      showToast('success', `Initiating file download...`);
+      const response = await api.get(`/submissions/${submissionId}/download`, {
+        responseType: 'blob',
+      });
+      const contentType = (response.headers['content-type'] as string) || 'application/octet-stream';
+      const blob = new Blob([response.data], { type: contentType });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 100);
+    } catch (err) {
+      if (cloudinaryUrl) {
+        window.open(cloudinaryUrl, '_blank');
+        showToast('success', 'Opening file directly in browser...');
+      } else {
+        showToast('error', 'Failed to download file.');
+      }
+    }
+  };
+
+  // ZIP DOWNLOAD
+  const handleDownloadZip = async (assignmentId: string) => {
+    try {
+      showToast('success', 'Generating ZIP archive of all submissions... Please wait.');
+      const response = await api.get(`/assignments/${assignmentId}/submissions/download-zip`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Assignment_Submissions.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 100);
+    } catch (err: any) {
+      showToast('error', 'Failed to download ZIP file.');
+    }
+  };
+
+  // CSV EXPORT
+  const handleExportCsv = async (assignmentId: string) => {
+    try {
+      showToast('success', 'Exporting CSV file...');
+      const response = await api.get(`/assignments/${assignmentId}/submissions/export-csv`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Submissions_Export.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      showToast('error', 'Failed to export CSV.');
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    return new Date(dateStr).toLocaleString('en-US', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
+
+  return (
+    <div className="min-h-[90vh] flex flex-col md:flex-row bg-slate-100">
+      {/* SIDEBAR */}
+      <aside className="w-full md:w-64 bg-slate-900 text-slate-300 shrink-0 border-r border-slate-800">
+        <div className="p-6 border-b border-slate-800">
+          <h2 className="text-xs uppercase tracking-wider text-slate-500 font-bold">CR Admin Portal</h2>
+          <p className="text-sm font-semibold text-white mt-1">Management Suite</p>
+        </div>
+
+        <nav className="p-4 space-y-1">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+              activeTab === 'dashboard'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <LayoutDashboard className="w-5 h-5" />
+            Dashboard
+          </button>
+
+          <button
+            onClick={() => setActiveTab('subjects')}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+              activeTab === 'subjects'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <BookOpen className="w-5 h-5" />
+            Subjects ({subjects.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('assignments')}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+              activeTab === 'assignments'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <FileCheck className="w-5 h-5" />
+            Assignments ({assignments.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('submissions')}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+              activeTab === 'submissions'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <Inbox className="w-5 h-5" />
+            Submissions
+          </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+              activeTab === 'settings'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <KeyRound className="w-5 h-5" />
+            Class Join Code
+          </button>
+        </nav>
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 p-6 sm:p-8 max-w-7xl">
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div
+            className={`mb-6 p-4 rounded-xl text-sm font-medium flex items-center gap-3 border shadow-sm ${
+              toastMessage.type === 'success'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-red-50 text-red-800 border-red-200'
+            }`}
+          >
+            {toastMessage.type === 'success' ? (
+              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+            )}
+            <span>{toastMessage.text}</span>
+          </div>
+        )}
+
+        {/* 1. DASHBOARD OVERVIEW TAB */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-8">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
+              <p className="text-slate-500 text-sm">Real-time statistics for class assignment submissions.</p>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase text-slate-500">Subjects</span>
+                  <BookOpen className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="text-3xl font-extrabold text-slate-900 mt-2">
+                  {stats ? stats.totalSubjects : 0}
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase text-slate-500">Assignments</span>
+                  <FileCheck className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div className="text-3xl font-extrabold text-slate-900 mt-2">
+                  {stats ? stats.totalAssignments : 0}
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase text-slate-500">Total Submissions</span>
+                  <Inbox className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div className="text-3xl font-extrabold text-slate-900 mt-2">
+                  {stats ? stats.totalSubmissions : 0}
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase text-slate-500">Today</span>
+                  <Calendar className="w-5 h-5 text-amber-600" />
+                </div>
+                <div className="text-3xl font-extrabold text-slate-900 mt-2">
+                  {stats ? stats.todaysSubmissions : 0}
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase text-slate-500">Late Submissions</span>
+                  <Clock className="w-5 h-5 text-red-600" />
+                </div>
+                <div className="text-3xl font-extrabold text-slate-900 mt-2">
+                  {stats ? stats.lateSubmissions : 0}
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Submissions Table */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-900">Recent Submissions</h3>
+                <button
+                  onClick={() => setActiveTab('submissions')}
+                  className="text-xs font-bold text-blue-600 hover:underline"
+                >
+                  View All Submissions →
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
+                      <th className="p-3">Student</th>
+                      <th className="p-3">Roll #</th>
+                      <th className="p-3">Subject</th>
+                      <th className="p-3">Assignment</th>
+                      <th className="p-3">Submitted At</th>
+                      <th className="p-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {recentSubmissions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-6 text-slate-400 text-sm">
+                          No recent submissions recorded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      recentSubmissions.map((sub) => (
+                        <tr key={sub._id} className="hover:bg-slate-50/80">
+                          <td className="p-3 font-semibold text-slate-900">{sub.studentName}</td>
+                          <td className="p-3 font-mono font-medium text-slate-700">{sub.rollNumber}</td>
+                          <td className="p-3 font-medium text-slate-700">
+                            {(sub.subjectId as any)?.name || 'Subject'}
+                          </td>
+                          <td className="p-3 font-medium text-slate-700">
+                            {(sub.assignmentId as any)?.title || 'Assignment'}
+                          </td>
+                          <td className="p-3 text-slate-500 text-xs">{formatDate(sub.submittedAt)}</td>
+                          <td className="p-3">
+                            {sub.isLate ? (
+                              <span className="px-2 py-0.5 text-xs font-bold bg-red-100 text-red-700 rounded-md">
+                                LATE
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 text-xs font-bold bg-emerald-100 text-emerald-700 rounded-md">
+                                ON TIME
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 2. SUBJECTS TAB */}
+        {activeTab === 'subjects' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Subject Management</h1>
+                <p className="text-slate-500 text-sm">Configure subjects for student submissions.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingSubject(null);
+                  setSubjectForm({ name: '', code: '', description: '', isActive: true });
+                  setSubjectModalOpen(true);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow transition"
+              >
+                <Plus className="w-4 h-4" /> Add Subject
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
+                    <th className="p-4">Code</th>
+                    <th className="p-4">Subject Name</th>
+                    <th className="p-4">Description</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {subjects.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-8 text-slate-400">
+                        No subjects created yet. Click 'Add Subject' to create one.
+                      </td>
+                    </tr>
+                  ) : (
+                    subjects.map((sub) => (
+                      <tr key={sub._id} className="hover:bg-slate-50/80">
+                        <td className="p-4 font-mono font-bold text-blue-700">{sub.code}</td>
+                        <td className="p-4 font-bold text-slate-900">{sub.name}</td>
+                        <td className="p-4 text-slate-500 text-xs max-w-xs truncate">
+                          {sub.description || 'No description'}
+                        </td>
+                        <td className="p-4">
+                          {sub.isActive ? (
+                            <span className="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 text-xs font-bold bg-slate-200 text-slate-600 rounded-full">
+                              Inactive
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-4 text-right space-x-2">
+                          <button
+                            onClick={() => {
+                              setEditingSubject(sub);
+                              setSubjectForm({
+                                name: sub.name,
+                                code: sub.code,
+                                description: sub.description || '',
+                                isActive: sub.isActive,
+                              });
+                              setSubjectModalOpen(true);
+                            }}
+                            className="p-1.5 hover:bg-slate-200 text-slate-600 rounded-lg transition"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSubject(sub._id)}
+                            className="p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 3. ASSIGNMENTS TAB */}
+        {activeTab === 'assignments' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Assignment Management</h1>
+                <p className="text-slate-500 text-sm">Create and configure class assignments and deadlines.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingAssignment(null);
+                  setAssignmentForm({
+                    subjectId: subjects[0]?._id || '',
+                    title: '',
+                    description: '',
+                    deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+                    allowLateSubmission: false,
+                    allowedFileTypes: 'pdf, doc, docx, ppt, pptx, zip',
+                    maxFileSize: 10,
+                    isActive: true,
+                  });
+                  setAssignmentModalOpen(true);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow transition"
+              >
+                <Plus className="w-4 h-4" /> Create Assignment
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
+                    <th className="p-4">Subject</th>
+                    <th className="p-4">Title</th>
+                    <th className="p-4">Deadline</th>
+                    <th className="p-4">Late Allowed</th>
+                    <th className="p-4">Allowed Files</th>
+                    <th className="p-4">Max Size</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {assignments.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-8 text-slate-400">
+                        No assignments created yet. Click 'Create Assignment' to create one.
+                      </td>
+                    </tr>
+                  ) : (
+                    assignments.map((ass) => (
+                      <tr key={ass._id} className="hover:bg-slate-50/80">
+                        <td className="p-4 font-bold text-blue-700">
+                          {(ass.subjectId as any)?.name || 'N/A'} ({(ass.subjectId as any)?.code || ''})
+                        </td>
+                        <td className="p-4 font-bold text-slate-900">{ass.title}</td>
+                        <td className="p-4 text-xs font-semibold text-slate-700">{formatDate(ass.deadline)}</td>
+                        <td className="p-4 text-xs">
+                          {ass.allowLateSubmission ? (
+                            <span className="font-bold text-emerald-700">Yes</span>
+                          ) : (
+                            <span className="font-bold text-red-700">No</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-xs font-mono font-medium text-slate-600">
+                          {ass.allowedFileTypes.join(', ').toUpperCase()}
+                        </td>
+                        <td className="p-4 text-xs font-bold text-slate-700">{ass.maxFileSize} MB</td>
+                        <td className="p-4">
+                          {ass.isActive ? (
+                            <span className="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 text-xs font-bold bg-slate-200 text-slate-600 rounded-full">
+                              Inactive
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-4 text-right space-x-2">
+                          <button
+                            title="Download All as ZIP"
+                            onClick={() => handleDownloadZip(ass._id)}
+                            className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button
+                            title="Export CSV"
+                            onClick={() => handleExportCsv(ass._id)}
+                            className="p-1.5 hover:bg-emerald-100 text-emerald-600 rounded-lg transition"
+                          >
+                            <FileSpreadsheet className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingAssignment(ass);
+                              setAssignmentForm({
+                                subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string),
+                                title: ass.title,
+                                description: ass.description || '',
+                                deadline: new Date(ass.deadline).toISOString().slice(0, 16),
+                                allowLateSubmission: ass.allowLateSubmission,
+                                allowedFileTypes: ass.allowedFileTypes.join(', '),
+                                maxFileSize: ass.maxFileSize,
+                                isActive: ass.isActive,
+                              });
+                              setAssignmentModalOpen(true);
+                            }}
+                            className="p-1.5 hover:bg-slate-200 text-slate-600 rounded-lg transition"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAssignment(ass._id)}
+                            className="p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 4. SUBMISSIONS TAB */}
+        {activeTab === 'submissions' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Student Submissions</h1>
+                <p className="text-slate-500 text-sm">Browse, search, filter, and download student submissions.</p>
+              </div>
+
+              {/* Batch Action Buttons if assignment filtered */}
+              {filterAssignmentId && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDownloadZip(filterAssignmentId)}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition"
+                  >
+                    <Download className="w-4 h-4" /> Download All as ZIP
+                  </button>
+                  <button
+                    onClick={() => handleExportCsv(filterAssignmentId)}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" /> Export CSV
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Filter Bar */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+              {/* Search */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search name or roll #"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && fetchSubmissions(1)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Subject Filter */}
+              <select
+                value={filterSubjectId}
+                onChange={(e) => {
+                  setFilterSubjectId(e.target.value);
+                  setFilterAssignmentId('');
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                <option value="">All Subjects</option>
+                {subjects.map((sub) => (
+                  <option key={sub._id} value={sub._id}>
+                    {sub.name} ({sub.code})
+                  </option>
+                ))}
+              </select>
+
+              {/* Assignment Filter */}
+              <select
+                value={filterAssignmentId}
+                onChange={(e) => {
+                  setFilterAssignmentId(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                <option value="">All Assignments</option>
+                {assignments
+                  .filter((a) => !filterSubjectId || (a.subjectId as any)?._id === filterSubjectId || a.subjectId === filterSubjectId)
+                  .map((ass) => (
+                    <option key={ass._id} value={ass._id}>
+                      {ass.title}
+                    </option>
+                  ))}
+              </select>
+
+              {/* Status Filter */}
+              <select
+                value={filterStatus}
+                onChange={(e) => {
+                  setFilterStatus(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                <option value="">All Statuses</option>
+                <option value="Submitted">On Time</option>
+                <option value="Late">Late</option>
+              </select>
+            </div>
+
+            {/* Submissions Table */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
+                    <th className="p-4">Submission ID</th>
+                    <th className="p-4">Roll #</th>
+                    <th className="p-4">Student Name</th>
+                    <th className="p-4">Subject</th>
+                    <th className="p-4">Assignment</th>
+                    <th className="p-4">File Name</th>
+                    <th className="p-4">Submitted At</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4">Email</th>
+                    <th className="p-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loadingSubmissions ? (
+                    <tr>
+                      <td colSpan={10} className="text-center py-10">
+                        <div className="flex items-center justify-center gap-2 text-slate-500">
+                          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                          <span>Loading submissions...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : submissions.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="text-center py-10 text-slate-400">
+                        No submissions match the selected filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    submissions.map((sub) => (
+                      <tr key={sub._id} className="hover:bg-slate-50/80">
+                        <td className="p-4 font-mono text-xs font-bold text-slate-700">{sub.submissionId}</td>
+                        <td className="p-4 font-mono font-bold text-slate-900">{sub.rollNumber}</td>
+                        <td className="p-4 font-semibold text-slate-900">{sub.studentName}</td>
+                        <td className="p-4 text-xs font-medium text-slate-700">
+                          {(sub.subjectId as any)?.code || 'N/A'}
+                        </td>
+                        <td className="p-4 text-xs font-medium text-slate-700">
+                          {(sub.assignmentId as any)?.title || 'N/A'}
+                        </td>
+                        <td className="p-4 text-xs font-medium text-blue-600 max-w-[160px] truncate">
+                          {sub.originalFileName}
+                        </td>
+                        <td className="p-4 text-xs text-slate-500">{formatDate(sub.submittedAt)}</td>
+                        <td className="p-4">
+                          {sub.isLate ? (
+                            <span className="px-2 py-0.5 text-xs font-bold bg-red-100 text-red-700 rounded-md">
+                              LATE
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 text-xs font-bold bg-emerald-100 text-emerald-700 rounded-md">
+                              ON TIME
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-4 text-xs">
+                          {sub.emailStatus === 'Sent' ? (
+                            <span className="text-emerald-600 font-semibold">Sent</span>
+                          ) : (
+                            <span className="text-amber-600 font-semibold">Failed</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={() => handleDownloadSingle(sub._id, sub.originalFileName, sub.cloudinarySecureUrl)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg transition"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Download
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+
+              {/* Pagination Controls */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500">
+                  Showing page {currentPage} of {totalPages} ({totalSubmissionsCount} total submissions)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    className="p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 5. SETTINGS TAB — CLASS JOIN CODE MANAGEMENT */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Class Access & Join Code Settings</h1>
+              <p className="text-slate-500 text-sm">
+                Control student self-registration access. Students require an active Class Join Code to register.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6 max-w-2xl">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Active Class Join Code</h3>
+                  <p className="text-xs text-slate-500">Share this code with your class students to allow self-registration.</p>
+                </div>
+                <button
+                  onClick={handleToggleJoinCode}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${
+                    isJoinCodeActive
+                      ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                      : 'bg-red-100 text-red-800 hover:bg-red-200'
+                  }`}
+                >
+                  {isJoinCodeActive ? 'Active (Registration Open)' : 'Disabled (Registration Blocked)'}
+                </button>
+              </div>
+
+              {isEditingCode ? (
+                <form onSubmit={handleUpdateJoinCode} className="bg-slate-50 border border-blue-200 rounded-2xl p-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                      Set Custom Class Join Code (Edited by CR)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. MYCLASS2026"
+                      value={customJoinInput}
+                      onChange={(e) => setCustomJoinInput(e.target.value.toUpperCase())}
+                      required
+                      className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl font-mono text-xl font-extrabold uppercase text-blue-700 tracking-wider focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingCode(false)}
+                      className="px-4 py-2 text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow"
+                    >
+                      Save Join Code
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <span className="text-xs font-bold uppercase text-slate-400">Class Join Code</span>
+                    <div className="text-3xl font-extrabold font-mono text-blue-700 tracking-wider mt-1">
+                      {joinCode || 'CLASS-2026-PORTAL'}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomJoinInput(joinCode);
+                        setIsEditingCode(true);
+                      }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1.5"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" /> Edit Code
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(joinCode);
+                        showToast('success', 'Class Join Code copied to clipboard!');
+                      }}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition"
+                    >
+                      Copy Code
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleRegenerateJoinCode}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-slate-200 font-bold text-xs rounded-xl transition flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Auto-Generate
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 space-y-1">
+                <p className="font-bold">How Class Registration Works:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-blue-800">
+                  <li>Students self-register using their Name, Roll Number, Email, and this Class Join Code.</li>
+                  <li>After registration, students receive a Brevo email verification link.</li>
+                  <li>Students logging in via Google for the first time will also be prompted for this Class Join Code and their Roll Number.</li>
+                  <li>You can regenerate or disable the Join Code at any time to block new signups.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: ADD / EDIT SUBJECT */}
+        {subjectModalOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+              <h3 className="text-lg font-bold text-slate-900">
+                {editingSubject ? 'Edit Subject' : 'Add New Subject'}
+              </h3>
+              <form onSubmit={handleSaveSubject} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Subject Code</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. OOP"
+                    value={subjectForm.code}
+                    onChange={(e) => setSubjectForm({ ...subjectForm, code: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 border rounded-xl font-mono text-sm uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Subject Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Object Oriented Programming"
+                    value={subjectForm.name}
+                    onChange={(e) => setSubjectForm({ ...subjectForm, name: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Description</label>
+                  <textarea
+                    placeholder="Optional description"
+                    value={subjectForm.description}
+                    onChange={(e) => setSubjectForm({ ...subjectForm, description: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="subjectActive"
+                    checked={subjectForm.isActive}
+                    onChange={(e) => setSubjectForm({ ...subjectForm, isActive: e.target.checked })}
+                    className="rounded text-blue-600"
+                  />
+                  <label htmlFor="subjectActive" className="text-xs font-bold text-slate-700">
+                    Active Subject
+                  </label>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setSubjectModalOpen(false)}
+                    className="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+                  >
+                    Save Subject
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: ADD / EDIT ASSIGNMENT */}
+        {assignmentModalOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 my-8">
+              <h3 className="text-lg font-bold text-slate-900">
+                {editingAssignment ? 'Edit Assignment' : 'Create Assignment'}
+              </h3>
+              <form onSubmit={handleSaveAssignment} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Subject</label>
+                  <select
+                    value={assignmentForm.subjectId}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, subjectId: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 border rounded-xl text-sm font-semibold"
+                  >
+                    <option value="">-- Select Subject --</option>
+                    {subjects.map((s) => (
+                      <option key={s._id} value={s._id}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Assignment Title</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. OOP Assignment 01"
+                    value={assignmentForm.title}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, title: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 border rounded-xl text-sm font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Description</label>
+                  <textarea
+                    placeholder="Assignment instructions..."
+                    value={assignmentForm.description}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, description: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Deadline Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={assignmentForm.deadline}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, deadline: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 border rounded-xl text-sm font-semibold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Allowed File Types</label>
+                    <input
+                      type="text"
+                      placeholder="pdf, doc, docx, ppt, zip"
+                      value={assignmentForm.allowedFileTypes}
+                      onChange={(e) => setAssignmentForm({ ...assignmentForm, allowedFileTypes: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Max File Size (MB)</label>
+                    <input
+                      type="number"
+                      value={assignmentForm.maxFileSize}
+                      onChange={(e) => setAssignmentForm({ ...assignmentForm, maxFileSize: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-1">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="allowLate"
+                      checked={assignmentForm.allowLateSubmission}
+                      onChange={(e) =>
+                        setAssignmentForm({ ...assignmentForm, allowLateSubmission: e.target.checked })
+                      }
+                      className="rounded text-blue-600"
+                    />
+                    <label htmlFor="allowLate" className="text-xs font-bold text-slate-700">
+                      Allow Late Submissions after Deadline
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="assignmentActive"
+                      checked={assignmentForm.isActive}
+                      onChange={(e) => setAssignmentForm({ ...assignmentForm, isActive: e.target.checked })}
+                      className="rounded text-blue-600"
+                    />
+                    <label htmlFor="assignmentActive" className="text-xs font-bold text-slate-700">
+                      Active Assignment
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setAssignmentModalOpen(false)}
+                    className="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+                  >
+                    Save Assignment
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
