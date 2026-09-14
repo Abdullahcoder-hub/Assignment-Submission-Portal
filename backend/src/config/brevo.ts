@@ -1,4 +1,4 @@
-import * as Brevo from '@getbrevo/brevo';
+import axios from 'axios';
 import moment from 'moment-timezone';
 import dotenv from 'dotenv';
 
@@ -9,6 +9,15 @@ const senderEmail = process.env.BREVO_SENDER_EMAIL || 'cr@assignmentportal.com';
 const senderName = process.env.BREVO_SENDER_NAME || 'Class Representative';
 const timezone = process.env.TIMEZONE || 'Asia/Karachi';
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+const sendBrevoEmail = async (subject: string, htmlContent: string, toEmail: string, toName: string) => {
+  await axios.post('https://api.brevo.com/v3/smtp/email', {
+    sender: { name: senderName, email: senderEmail },
+    to: [{ email: toEmail, name: toName }],
+    subject,
+    htmlContent,
+  }, { headers: { 'api-key': apiKey, 'content-type': 'application/json' } });
+};
 
 export interface SendConfirmationEmailParams {
   toEmail: string;
@@ -113,16 +122,7 @@ export const sendSubmissionConfirmationEmail = async (
   `;
 
   try {
-    const apiInstance = new Brevo.TransactionalEmailsApi();
-    apiInstance.setApiKey(Brevo.TransactionalEmailsApiApiKeys.apiKey, apiKey);
-
-    const sendSmtpEmail = new Brevo.SendSmtpEmail();
-    sendSmtpEmail.subject = `Assignment Submission Confirmation — ${params.subjectCode} ${params.assignmentTitle}`;
-    sendSmtpEmail.htmlContent = htmlContent;
-    sendSmtpEmail.sender = { name: senderName, email: senderEmail };
-    sendSmtpEmail.to = [{ email: params.toEmail, name: params.toName }];
-
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    await sendBrevoEmail(`Assignment Submission Confirmation — ${params.subjectCode} ${params.assignmentTitle}`, htmlContent, params.toEmail, params.toName);
     return { success: true };
   } catch (error: any) {
     console.error('[Brevo Email Error]:', error?.response?.body || error?.message || error);
@@ -163,16 +163,7 @@ export const sendStudentVerificationEmail = async (
   `;
 
   try {
-    const apiInstance = new Brevo.TransactionalEmailsApi();
-    apiInstance.setApiKey(Brevo.TransactionalEmailsApiApiKeys.apiKey, apiKey);
-
-    const sendSmtpEmail = new Brevo.SendSmtpEmail();
-    sendSmtpEmail.subject = `Verify Your Email — Class Assignment Portal`;
-    sendSmtpEmail.htmlContent = htmlContent;
-    sendSmtpEmail.sender = { name: senderName, email: senderEmail };
-    sendSmtpEmail.to = [{ email: toEmail, name: toName }];
-
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    await sendBrevoEmail('Verify Your Email — Class Assignment Portal', htmlContent, toEmail, toName);
     return { success: true };
   } catch (error: any) {
     console.error('[Brevo Verification Email Error]:', error);
@@ -213,16 +204,7 @@ export const sendPasswordResetEmail = async (
   `;
 
   try {
-    const apiInstance = new Brevo.TransactionalEmailsApi();
-    apiInstance.setApiKey(Brevo.TransactionalEmailsApiApiKeys.apiKey, apiKey);
-
-    const sendSmtpEmail = new Brevo.SendSmtpEmail();
-    sendSmtpEmail.subject = `Reset Password — Class Assignment Portal`;
-    sendSmtpEmail.htmlContent = htmlContent;
-    sendSmtpEmail.sender = { name: senderName, email: senderEmail };
-    sendSmtpEmail.to = [{ email: toEmail, name: toName }];
-
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    await sendBrevoEmail('Reset Password — Class Assignment Portal', htmlContent, toEmail, toName);
     return { success: true };
   } catch (error: any) {
     console.error('[Brevo Reset Email Error]:', error);
