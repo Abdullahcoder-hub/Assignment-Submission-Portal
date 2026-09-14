@@ -5,8 +5,8 @@ const router = Router();
 
 router.get('/health', (req: Request, res: Response) => {
   const databaseConnected = mongoose.connection.readyState === 1;
-  res.status(databaseConnected ? 200 : 503).json({
-    success: databaseConnected,
+  res.status(200).json({
+    success: true,
     message: databaseConnected ? 'API is running' : 'API is running, but database is unavailable',
     database: databaseConnected ? 'connected' : 'disconnected',
   });
