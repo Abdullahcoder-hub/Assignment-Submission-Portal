@@ -8,7 +8,11 @@ const apiKey = process.env.BREVO_API_KEY || '';
 const senderEmail = process.env.BREVO_SENDER_EMAIL || 'cr@assignmentportal.com';
 const senderName = process.env.BREVO_SENDER_NAME || 'Class Representative';
 const timezone = process.env.TIMEZONE || 'Asia/Karachi';
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+const frontendUrl = process.env.FRONTEND_URL?.replace(/\/$/, '');
+
+if (!frontendUrl) {
+  throw new Error('FRONTEND_URL must be configured before starting the backend.');
+}
 
 const sendBrevoEmail = async (subject: string, htmlContent: string, toEmail: string, toName: string) => {
   await axios.post('https://api.brevo.com/v3/smtp/email', {

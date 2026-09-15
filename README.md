@@ -65,6 +65,8 @@ CLASS_JOIN_CODE=CLASS-2026-PORTAL
 GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 ```
 
+For deployment, set `FRONTEND_URL` in the backend hosting environment to the deployed frontend URL (for example, `https://your-frontend.vercel.app`). This URL is used in email verification and password reset links.
+
 Run the backend development server:
 
 ```bash
