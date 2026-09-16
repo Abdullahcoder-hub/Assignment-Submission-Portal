@@ -767,6 +767,30 @@ export const StudentDashboard: React.FC = () => {
               </select>
             </div>
 
+            {groupSubjectId && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Select Group Assignment <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={groupAssignmentId}
+                  onChange={(e) => setGroupAssignmentId(e.target.value)}
+                  disabled={selectedGroupAssignments.length === 0}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold"
+                >
+                  <option value="">-- Select Group Assignment --</option>
+                  {selectedGroupAssignments.map((assignment) => (
+                    <option key={assignment._id} value={assignment._id}>
+                      {assignment.title} (Max {assignment.maxGroupSize || 4} members)
+                    </option>
+                  ))}
+                </select>
+                {selectedGroupAssignments.length === 0 && (
+                  <p className="text-xs text-amber-700 font-semibold mt-2">No group assignment is available for this subject.</p>
+                )}
+              </div>
+            )}
+
             {/* Assignment Details & Late Check */}
             {selectedAssignment && (
               <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 space-y-2 text-sm text-blue-900">
@@ -1088,24 +1112,6 @@ export const StudentDashboard: React.FC = () => {
                 {/* CREATE NEW GROUP FORM */}
                 {groupMode === 'create' && (
                   <form onSubmit={handleCreateGroup} className="space-y-6 bg-slate-50/70 p-6 rounded-2xl border border-slate-200">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                        Group Assignment <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={groupAssignmentId}
-                        onChange={(e) => setGroupAssignmentId(e.target.value)}
-                        className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold text-slate-800"
-                      >
-                        <option value="">-- Select Group Assignment --</option>
-                        {selectedGroupAssignments.map((assignment) => (
-                          <option key={assignment._id} value={assignment._id}>
-                            {assignment.title} (Up to {assignment.maxGroupSize || maxGroupMembers} members)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
                     <div>
                       <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                         Group Name <span className="text-red-500">*</span>
