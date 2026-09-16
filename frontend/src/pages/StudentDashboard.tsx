@@ -242,6 +242,7 @@ export const StudentDashboard: React.FC = () => {
       : assignment.subjectId._id;
     return assignmentSubjectId === groupSubjectId;
   });
+  const selectedGroupAssignmentIds = selectedGroupAssignments.map((assignment) => assignment._id).join(',');
   const maxGroupMembers = selectedGroupAssignments.find((assignment) => assignment._id === groupAssignmentId)?.maxGroupSize || 4;
 
   useEffect(() => {
@@ -305,7 +306,10 @@ export const StudentDashboard: React.FC = () => {
 
   // Group Registration Handlers
   useEffect(() => {
-    if (!groupSubjectId || !groupAssignmentId) {
+    const assignmentBelongsToSubject = selectedGroupAssignments.some(
+      (assignment) => assignment._id === groupAssignmentId
+    );
+    if (!groupSubjectId || !groupAssignmentId || !assignmentBelongsToSubject) {
       setMyGroup(null);
       setLoadingMyGroup(false);
       return;
@@ -315,7 +319,6 @@ export const StudentDashboard: React.FC = () => {
       Array.from({ length: maxGroupMembers - 1 }, () => ({ name: '', rollNumber: '' }))
     );
     setLeaderIndex(0);
-    setGroupAssignmentId('');
 
     const fetchGroupData = async () => {
       try {
@@ -334,7 +337,7 @@ export const StudentDashboard: React.FC = () => {
     };
 
     fetchGroupData();
-  }, [groupSubjectId, groupAssignmentId]);
+  }, [groupSubjectId, groupAssignmentId, selectedGroupAssignmentIds]);
 
   useEffect(() => {
     if (!groupSubjectId) return;
@@ -356,7 +359,7 @@ export const StudentDashboard: React.FC = () => {
     if (selectedGroupAssignments.length > 0 && !selectedGroupAssignments.some((assignment) => assignment._id === groupAssignmentId)) {
       setGroupAssignmentId(selectedGroupAssignments[0]._id);
     }
-  }, [selectedGroupAssignments, groupAssignmentId]);
+  }, [selectedGroupAssignmentIds, groupAssignmentId]);
 
   useEffect(() => {
     if (!groupSubjectId) return;
