@@ -241,14 +241,14 @@ export const StudentLogin: React.FC = () => {
         </div>
 
         {/* Official Google OAuth Login Button */}
-        <div className="flex justify-center">
+        <div className="flex justify-center w-full">
           <GoogleLogin
             onSuccess={handleGoogleSuccess}
             onError={() => setErrorMsg('Google login failed or popup was closed.')}
             theme="outline"
             shape="pill"
             size="large"
-            width="100%"
+            width="320"
           />
         </div>
 
