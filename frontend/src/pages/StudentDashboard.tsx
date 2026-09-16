@@ -326,13 +326,6 @@ export const StudentDashboard: React.FC = () => {
         if (res.data.success) {
           setMyGroup(res.data.group);
         }
-
-        // Fetch previous groups for "Continue Existing Group" option
-        setLoadingPrevGroups(true);
-        const prevRes = await api.get('/groups/my-previous-groups');
-        if (prevRes.data.success) {
-          setPreviousGroups(prevRes.data.groups);
-        }
       } catch (err) {
         console.error('Failed to fetch group info:', err);
       } finally {
@@ -343,6 +336,22 @@ export const StudentDashboard: React.FC = () => {
 
     fetchGroupData();
   }, [groupSubjectId, groupAssignmentId]);
+
+  useEffect(() => {
+    if (!groupSubjectId) return;
+    const fetchPreviousGroups = async () => {
+      try {
+        setLoadingPrevGroups(true);
+        const res = await api.get('/groups/my-previous-groups');
+        if (res.data.success) setPreviousGroups(res.data.groups);
+      } catch (err) {
+        console.error('Failed to fetch previous groups:', err);
+      } finally {
+        setLoadingPrevGroups(false);
+      }
+    };
+    fetchPreviousGroups();
+  }, [groupSubjectId]);
 
   useEffect(() => {
     if (selectedGroupAssignments.length > 0 && !selectedGroupAssignments.some((assignment) => assignment._id === groupAssignmentId)) {
