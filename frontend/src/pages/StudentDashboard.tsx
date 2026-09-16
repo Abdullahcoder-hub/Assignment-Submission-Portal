@@ -495,7 +495,7 @@ export const StudentDashboard: React.FC = () => {
   const canSubmitNow = !isLateBlocked || (lateReqStatus && lateReqStatus.status === 'Approved');
 
   return (
-    <div className="student-dashboard max-w-6xl mx-auto py-8 px-4 space-y-8 min-w-0">
+    <div className="student-dashboard w-full max-w-6xl mx-auto py-6 sm:py-8 px-3 sm:px-4 space-y-6 sm:space-y-8 min-w-0">
       {/* PROFILE SUMMARY HEADER */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 border border-slate-800">
         <div className="flex items-center gap-4">

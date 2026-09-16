@@ -28,21 +28,28 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    let maxLimit = 4;
-    let assignment = null;
-    if (assignmentId) {
-      assignment = await Assignment.findById(assignmentId);
-      if (assignment) {
-        if (assignment.submissionType === 'Individual') {
-          res.status(400).json({
-            success: false,
-            message: 'Group registration is not allowed for this assignment because the CR set it to Individual Submission.',
-          });
-          return;
-        }
-        maxLimit = assignment.maxGroupSize || 4;
-      }
+    if (!assignmentId) {
+      res.status(400).json({ success: false, message: 'Please select a group assignment.' });
+      return;
     }
+
+    const assignment = await Assignment.findById(assignmentId);
+    if (!assignment || !assignment.isActive) {
+      res.status(400).json({ success: false, message: 'Selected group assignment is not available.' });
+      return;
+    }
+    if (assignment.subjectId.toString() !== subject._id.toString()) {
+      res.status(400).json({ success: false, message: 'Selected assignment does not belong to the selected subject.' });
+      return;
+    }
+    if (assignment.submissionType === 'Individual') {
+      res.status(400).json({
+        success: false,
+        message: 'Group registration is not allowed for this assignment because the CR set it to Individual Submission.',
+      });
+      return;
+    }
+    const maxLimit = assignment.maxGroupSize || 4;
 
     // Parse member roll numbers & names
     const memberNameMap: Record<string, string> = {};
@@ -159,6 +166,10 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
     });
   } catch (error: any) {
     console.error('[Create Group Error]:', error);
+    if (error?.code === 11000) {
+      res.status(400).json({ success: false, message: 'One of these roll numbers is already registered in a group for this subject.' });
+      return;
+    }
     res.status(500).json({ success: false, message: 'Failed to create group.' });
   }
 };
