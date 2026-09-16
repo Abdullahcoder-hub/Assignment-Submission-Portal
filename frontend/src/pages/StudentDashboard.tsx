@@ -243,6 +243,8 @@ export const StudentDashboard: React.FC = () => {
     return assignmentSubjectId === groupSubjectId;
   });
   const selectedGroupAssignmentIds = selectedGroupAssignments.map((assignment) => assignment._id).join(',');
+  const selectedGroupAssignment = selectedGroupAssignments.find((assignment) => assignment._id === groupAssignmentId);
+  const selectedGroupSubject = subjects.find((subject) => subject._id === groupSubjectId);
   const maxGroupMembers = selectedGroupAssignments.find((assignment) => assignment._id === groupAssignmentId)?.maxGroupSize || 4;
 
   useEffect(() => {
@@ -356,7 +358,9 @@ export const StudentDashboard: React.FC = () => {
   }, [groupSubjectId]);
 
   useEffect(() => {
-    if (selectedGroupAssignments.length > 0 && !selectedGroupAssignments.some((assignment) => assignment._id === groupAssignmentId)) {
+    if (selectedGroupAssignments.length === 0) {
+      setGroupAssignmentId('');
+    } else if (!selectedGroupAssignments.some((assignment) => assignment._id === groupAssignmentId)) {
       setGroupAssignmentId(selectedGroupAssignments[0]._id);
     }
   }, [selectedGroupAssignmentIds, groupAssignmentId]);
@@ -455,11 +459,9 @@ export const StudentDashboard: React.FC = () => {
       setGroupSubmitting(true);
       setGroupMsg(null);
       const res = await api.post('/groups/continue', {
-        groupName: prevGroup.groupName,
-        subjectId: groupSubjectId,
-        assignmentId: groupAssignmentId || undefined,
-        members: prevGroup.members,
-        leader: prevGroup.leader,
+        previousGroupId: prevGroup._id,
+        newSubjectId: groupSubjectId,
+        newAssignmentId: groupAssignmentId,
       });
 
       if (res.data.success) {
@@ -767,30 +769,6 @@ export const StudentDashboard: React.FC = () => {
               </select>
             </div>
 
-            {groupSubjectId && (
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Select Group Assignment <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={groupAssignmentId}
-                  onChange={(e) => setGroupAssignmentId(e.target.value)}
-                  disabled={selectedGroupAssignments.length === 0}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold"
-                >
-                  <option value="">-- Select Group Assignment --</option>
-                  {selectedGroupAssignments.map((assignment) => (
-                    <option key={assignment._id} value={assignment._id}>
-                      {assignment.title} (Max {assignment.maxGroupSize || 4} members)
-                    </option>
-                  ))}
-                </select>
-                {selectedGroupAssignments.length === 0 && (
-                  <p className="text-xs text-amber-700 font-semibold mt-2">No group assignment is available for this subject.</p>
-                )}
-              </div>
-            )}
-
             {/* Assignment Details & Late Check */}
             {selectedAssignment && (
               <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 space-y-2 text-sm text-blue-900">
@@ -1013,13 +991,37 @@ export const StudentDashboard: React.FC = () => {
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold"
               >
                 <option value="">-- Select Subject for Group Registration --</option>
-                {subjects.map((sub) => (
+                {groupSubjects.map((sub) => (
                   <option key={sub._id} value={sub._id}>
                     {sub.name} ({sub.code})
                   </option>
                 ))}
               </select>
             </div>
+
+            {groupSubjectId && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Select Assignment <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={groupAssignmentId}
+                  onChange={(e) => setGroupAssignmentId(e.target.value)}
+                  disabled={selectedGroupAssignments.length === 0}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold"
+                >
+                  <option value="">-- Select Assignment --</option>
+                  {selectedGroupAssignments.map((assignment) => (
+                    <option key={assignment._id} value={assignment._id}>
+                      {assignment.title} (Max {assignment.maxGroupSize || 4} members)
+                    </option>
+                  ))}
+                </select>
+                {selectedGroupAssignments.length === 0 && (
+                  <p className="text-xs text-amber-700 font-semibold mt-2">No active group assignment is available for this subject.</p>
+                )}
+              </div>
+            )}
 
             {groupMsg && (
               <div
@@ -1047,6 +1049,9 @@ export const StudentDashboard: React.FC = () => {
                   <div>
                     <span className="text-xs text-emerald-700 uppercase font-bold tracking-wider">Registered Group</span>
                     <h3 className="text-xl font-extrabold text-slate-900">{myGroup.groupName}</h3>
+                    <p className="text-xs text-emerald-800 font-semibold mt-1">
+                      {selectedGroupSubject?.name} ({selectedGroupSubject?.code}) / {selectedGroupAssignment?.title}
+                    </p>
                   </div>
                   <span className="px-3 py-1 bg-emerald-600 text-white font-bold text-xs rounded-full">
                     {myGroup.members.length} Member(s)

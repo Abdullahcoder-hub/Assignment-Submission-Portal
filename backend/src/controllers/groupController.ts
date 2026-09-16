@@ -232,6 +232,18 @@ export const continueGroup = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    if (assignment.subjectId.toString() !== subject._id.toString()) {
+      res.status(400).json({ success: false, message: 'Selected assignment does not belong to the selected subject.' });
+      return;
+    }
+    if (assignment.submissionType === 'Individual') {
+      res.status(400).json({
+        success: false,
+        message: 'Group registration is not allowed for this assignment because the CR set it to Individual Submission.',
+      });
+      return;
+    }
+
     const maxLimit = assignment.maxGroupSize || 4;
     if (prevGroup.members.length > maxLimit) {
       res.status(400).json({
