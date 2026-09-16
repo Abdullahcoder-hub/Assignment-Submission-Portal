@@ -99,6 +99,15 @@ export interface StudentUser {
   role: 'STUDENT';
 }
 
+export interface RegisteredStudent {
+  _id: string;
+  name: string;
+  email: string;
+  rollNumber: string;
+  isEmailVerified: boolean;
+  createdAt: string;
+}
+
 export type UserRole = 'ADMIN' | 'STUDENT';
 
 export interface DashboardStats {

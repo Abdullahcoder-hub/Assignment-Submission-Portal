@@ -456,3 +456,53 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
     res.status(500).json({ success: false, message: 'Failed to fetch student profile.' });
   }
 };
+
+/**
+ * 8. LOGGED-IN STUDENT CHANGE PASSWORD
+ */
+export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.student) {
+      res.status(401).json({ success: false, message: 'Not authenticated.' });
+      return;
+    }
+
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ success: false, message: 'Please enter current and new password.' });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      res.status(400).json({ success: false, message: 'New passwords do not match.' });
+      return;
+    }
+
+    const passValidation = validatePasswordStrength(newPassword);
+    if (!passValidation.isValid) {
+      res.status(400).json({ success: false, message: passValidation.message });
+      return;
+    }
+
+    const student = await Student.findById(req.student.id);
+    if (!student || !student.passwordHash) {
+      res.status(404).json({ success: false, message: 'Student account not found.' });
+      return;
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, student.passwordHash);
+    if (!isMatch) {
+      res.status(400).json({ success: false, message: 'Current password is incorrect.' });
+      return;
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    student.passwordHash = await bcrypt.hash(newPassword, salt);
+    await student.save();
+
+    res.status(200).json({ success: true, message: 'Password changed successfully.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to change password.' });
+  }
+};

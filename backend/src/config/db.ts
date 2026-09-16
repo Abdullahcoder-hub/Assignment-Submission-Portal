@@ -16,6 +16,15 @@ export const connectDB = async (): Promise<void> => {
       serverSelectionTimeoutMS: 15000,
     });
     console.log(`[MongoDB] Connected: ${conn.connection.host}`);
+
+    // Synchronize Group model indexes to drop legacy non-subject-wise indexes
+    try {
+      const Group = (await import('../models/Group.js')).default;
+      await (Group as any).syncIndexes();
+      console.log('[MongoDB] Group indexes synchronized successfully.');
+    } catch (idxErr) {
+      console.warn('[MongoDB] Group index sync warning:', idxErr);
+    }
   } catch (error) {
     console.error('[MongoDB] Connection Error:', error);
     throw error;

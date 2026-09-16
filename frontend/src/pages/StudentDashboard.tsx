@@ -25,13 +25,15 @@ import {
   Check,
   X,
   Crown,
+  KeyRound,
+  Shield,
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
   const student = user as StudentUser;
 
-  const [activeTab, setActiveTab] = useState<'submit' | 'groups' | 'history'>('submit');
+  const [activeTab, setActiveTab] = useState<'submit' | 'groups' | 'history' | 'security'>('submit');
 
   // Subjects & Assignments
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -78,6 +80,72 @@ export const StudentDashboard: React.FC = () => {
   const [loadingPrevGroups, setLoadingPrevGroups] = useState<boolean>(false);
   const [groupSubmitting, setGroupSubmitting] = useState<boolean>(false);
   const [groupMsg, setGroupMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Change Password State
+  const [currentPassword, setCurrentPassword] = useState<string>('');
+  const [newPassword, setNewPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [changingPass, setChangingPass] = useState<boolean>(false);
+  const [passMsg, setPassMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [deadlineTick, setDeadlineTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setDeadlineTick(Date.now()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassMsg(null);
+    if (!currentPassword || !newPassword) {
+      setPassMsg({ type: 'error', text: 'Please fill in all password fields.' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPassMsg({ type: 'error', text: 'New passwords do not match.' });
+      return;
+    }
+    try {
+      setChangingPass(true);
+      const res = await api.post('/auth/student/change-password', {
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      });
+      if (res.data.success) {
+        setPassMsg({ type: 'success', text: res.data.message });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch (err: any) {
+      setPassMsg({ type: 'error', text: err.response?.data?.message || 'Failed to change password.' });
+    } finally {
+      setChangingPass(false);
+    }
+  };
+
+  const getDeadlineCountdown = (deadlineStr: string) => {
+    const diff = new Date(deadlineStr).getTime() - deadlineTick;
+    if (diff <= 0) {
+      return { text: '⌛ Deadline Passed', color: 'bg-red-100 text-red-800 border-red-300 font-bold' };
+    }
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (days > 0) {
+      return {
+        text: `⏳ Due in ${days}d ${remainingHours}h ${mins}m`,
+        color: 'bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold',
+      };
+    }
+    return {
+      text: `⏳ Due in ${hours}h ${mins}m (Ending Soon!)`,
+      color: 'bg-amber-100 text-amber-800 border-amber-300 font-extrabold animate-pulse',
+    };
+  };
 
   // Fetch Subjects & Profile Data
   const fetchStudentData = async () => {
@@ -252,7 +320,9 @@ export const StudentDashboard: React.FC = () => {
       try {
         setLoadingMyGroup(true);
         setGroupMsg(null);
-        const res = await api.get(`/groups/my-group/${groupSubjectId}`);
+        let groupUrl = `/groups/my-group/${groupSubjectId}`;
+        if (groupAssignmentId) groupUrl += `?assignmentId=${groupAssignmentId}`;
+        const res = await api.get(groupUrl);
         if (res.data.success) {
           setMyGroup(res.data.group);
         }
@@ -272,7 +342,7 @@ export const StudentDashboard: React.FC = () => {
     };
 
     fetchGroupData();
-  }, [groupSubjectId]);
+  }, [groupSubjectId, groupAssignmentId]);
 
   useEffect(() => {
     if (selectedGroupAssignments.length > 0 && !selectedGroupAssignments.some((assignment) => assignment._id === groupAssignmentId)) {
@@ -326,10 +396,19 @@ export const StudentDashboard: React.FC = () => {
       ...extraMembers.filter((m) => m.rollNumber.trim()),
     ];
 
-    const rollNumbers = membersPayload.map((member) => member.rollNumber.trim().toUpperCase());
-    if (new Set(rollNumbers).size !== rollNumbers.length) {
-      setGroupMsg({ type: 'error', text: 'Roll numbers must be unique. Member names may be the same.' });
-      return;
+    const seenRolls = new Set<string>();
+    for (const member of membersPayload) {
+      const roll = member.rollNumber.trim().toUpperCase();
+      if (roll) {
+        if (seenRolls.has(roll)) {
+          setGroupMsg({
+            type: 'error',
+            text: `Roll number '${member.rollNumber.trim()}' cannot be used more than once in the same group.`,
+          });
+          return;
+        }
+        seenRolls.add(roll);
+      }
     }
 
     const leaderRoll = leaderIndex === 0 ? student?.rollNumber : extraMembers[leaderIndex - 1]?.rollNumber?.trim();
@@ -497,51 +576,60 @@ export const StudentDashboard: React.FC = () => {
   return (
     <div className="student-dashboard w-full max-w-6xl mx-auto py-6 sm:py-8 px-3 sm:px-4 space-y-6 sm:space-y-8 min-w-0">
       {/* PROFILE SUMMARY HEADER */}
-      <div className="bg-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 border border-slate-800">
-        <div className="flex items-center gap-4">
-          <div className="p-4 bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded-2xl">
-            <User className="w-10 h-10" />
+      <div className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-xl flex items-center justify-between gap-4 border border-slate-800">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="p-3.5 bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded-2xl shrink-0">
+            <User className="w-8 h-8 sm:w-10 sm:h-10" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-extrabold">{student?.name}</h1>
-              <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold rounded-full">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg sm:text-2xl font-extrabold truncate">{student?.name}</h1>
+              <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold rounded-full shrink-0">
                 Verified Student
               </span>
             </div>
-            <p className="text-sm text-slate-400 mt-0.5 break-words">
-              Roll Number: <span className="font-mono font-bold text-white break-all">{student?.rollNumber}</span> &bull; Email:{' '}
-              <span className="text-slate-300 break-all">{student?.email}</span>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1 break-words">
+              Roll Number: <span className="font-mono font-bold text-white">{student?.rollNumber}</span>
+              <span className="hidden sm:inline"> &bull; Email: <span className="text-slate-300">{student?.email}</span></span>
             </p>
           </div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 gap-1.5 bg-slate-800 p-1.5 rounded-xl border border-slate-700 w-full sm:flex sm:items-center sm:gap-2 sm:w-auto">
-          <button
-            onClick={() => setActiveTab('submit')}
-            className={`w-full sm:flex-none px-4 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 ${
-              activeTab === 'submit' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Upload className="w-4 h-4" /> Submit Assignment
-          </button>
-          <button
-            onClick={() => setActiveTab('groups')}
-            className={`flex-1 sm:flex-none px-4 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 ${
-              activeTab === 'groups' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Users className="w-4 h-4" /> Group Registration
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`flex-1 sm:flex-none px-4 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 ${
-              activeTab === 'history' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <History className="w-4 h-4" /> My Submissions ({mySubmissions.length})
-          </button>
-        </div>
+      {/* DASHBOARD TAB NAVIGATION BAR */}
+      <div className="bg-slate-900 p-1.5 rounded-2xl border border-slate-800 shadow-lg grid grid-cols-1 sm:grid-cols-4 gap-1.5">
+        <button
+          onClick={() => setActiveTab('submit')}
+          className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
+            activeTab === 'submit' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Upload className="w-4 h-4" /> Submit Assignment
+        </button>
+        <button
+          onClick={() => setActiveTab('groups')}
+          className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
+            activeTab === 'groups' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Users className="w-4 h-4" /> Group Registration
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
+            activeTab === 'history' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <History className="w-4 h-4" /> My Submissions ({mySubmissions.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('security')}
+          className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
+            activeTab === 'security' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <KeyRound className="w-4 h-4" /> Change Password
+        </button>
       </div>
 
       {/* SUBMISSION RECEIPT VIEW */}
@@ -627,20 +715,15 @@ export const StudentDashboard: React.FC = () => {
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold"
               >
                 <option value="">-- Select Subject --</option>
-                {groupSubjects.map((sub) => (
+                {subjects.map((sub) => (
                   <option key={sub._id} value={sub._id}>
                     {sub.name} ({sub.code})
                   </option>
                 ))}
               </select>
-              {groupSubjects.length === 0 && (
+              {subjects.length === 0 && (
                 <p className="text-xs text-amber-700 font-semibold mt-2">
-                  No subject is currently enabled for group registration by the CR.
-                </p>
-              )}
-              {groupSubjectId && (
-                <p className="text-xs text-blue-700 font-semibold mt-2">
-                  This subject allows up to {maxGroupMembers} group members. {extraMembers.length + 1} member boxes are ready.
+                  No subjects are currently available.
                 </p>
               )}
             </div>
@@ -667,7 +750,7 @@ export const StudentDashboard: React.FC = () => {
                 </option>
                 {assignments.map((ass) => (
                   <option key={ass._id} value={ass._id}>
-                    {ass.title} ({ass.submissionType === 'Individual' ? 'Individual' : 'Group Assignment'}) - Due: {formatDate(ass.deadline)}
+                    {ass.title} ({ass.submissionType === 'Individual' ? 'Individual' : 'Group Assignment'}) - {getDeadlineCountdown(ass.deadline).text.replace('⏳ ', '')}
                   </option>
                 ))}
               </select>
@@ -692,6 +775,9 @@ export const StudentDashboard: React.FC = () => {
                   <span className="text-xs text-blue-700 bg-white px-2.5 py-1 rounded-md border border-blue-200">
                     Due: {formatDate(selectedAssignment.deadline)}
                   </span>
+                </div>
+                <div className={`inline-flex px-2.5 py-1 rounded-md border text-xs ${getDeadlineCountdown(selectedAssignment.deadline).color}`}>
+                  {getDeadlineCountdown(selectedAssignment.deadline).text}
                 </div>
                 {selectedAssignment.description && (
                   <p className="text-xs text-slate-600">{selectedAssignment.description}</p>
@@ -1280,6 +1366,97 @@ export const StudentDashboard: React.FC = () => {
               </article>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* TAB 4: ACCOUNT SECURITY & CHANGE PASSWORD */}
+      {!receipt && activeTab === 'security' && (
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden max-w-2xl mx-auto">
+          <div className="bg-slate-800 p-6 text-white border-b border-slate-700">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-blue-400" /> Account Security & Change Password
+            </h2>
+            <p className="text-slate-400 text-xs mt-1">
+              Update your account password. Make sure to choose a strong password.
+            </p>
+          </div>
+
+          <form onSubmit={handleChangePasswordSubmit} className="p-6 sm:p-8 space-y-6">
+            {passMsg && (
+              <div
+                className={`p-4 rounded-xl border text-sm flex items-center gap-2 ${
+                  passMsg.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-semibold'
+                    : 'bg-red-50 border-red-300 text-red-800 font-semibold'
+                }`}
+              >
+                {passMsg.type === 'success' ? (
+                  <Check className="w-5 h-5 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                )}
+                <span>{passMsg.text}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Current Password <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                placeholder="Enter current password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                New Password <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                placeholder="Enter new password (min 6 characters)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Confirm New Password <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold text-sm"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={changingPass}
+              className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-base rounded-xl shadow-lg transition flex items-center justify-center gap-2"
+            >
+              {changingPass ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" /> Updating Password...
+                </>
+              ) : (
+                <>
+                  <KeyRound className="w-5 h-5" /> Update Password
+                </>
+              )}
+            </button>
+          </form>
         </div>
       )}
     </div>

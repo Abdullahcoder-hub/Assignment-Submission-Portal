@@ -68,6 +68,21 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       }
     });
 
+    // Check if group name / number already exists for this subject assignment
+    const existingName = await Group.findOne({
+      subjectId: subject._id,
+      assignmentId: assignment._id,
+      groupName: { $regex: new RegExp(`^${groupName.trim()}$`, 'i') },
+    });
+
+    if (existingName) {
+      res.status(400).json({
+        success: false,
+        message: `Group "${groupName.trim()}" is already registered for this assignment. Please choose another group name or number.`,
+      });
+      return;
+    }
+
     const normalizedRolls = rawRolls.map((roll) => roll.toUpperCase());
     const duplicateRoll = normalizedRolls.find((roll, index) => normalizedRolls.indexOf(roll) !== index);
     if (duplicateRoll) {
@@ -108,9 +123,10 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       rollNumber: { $in: uniqueRolls.map(r => new RegExp(`^${r}$`, 'i')) }
     });
 
-    // Check if any roll number is ALREADY registered in a group for this subject
+    // Check if any roll number is ALREADY registered in a group for this assignment
     const existingGroup = await Group.findOne({
       subjectId: subject._id,
+      assignmentId: assignment._id,
       'members.rollNumber': { $in: uniqueRolls.map(r => new RegExp(`^${r}$`, 'i')) }
     });
 
@@ -119,7 +135,7 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       const conflictingRoll = uniqueRolls.find(r => existingRolls.includes(r));
       res.status(400).json({
         success: false,
-        message: `Roll number "${conflictingRoll}" is already registered in group "${existingGroup.groupName}" for ${subject.name}.`,
+        message: `Roll number "${conflictingRoll}" is already registered in group "${existingGroup.groupName}" for ${assignment.title}.`,
       });
       return;
     }
@@ -161,12 +177,19 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
 
     res.status(201).json({
       success: true,
-      message: 'Group registered successfully.',
+      message: `Group "${newGroup.groupName}" registered successfully.`,
       group: newGroup,
     });
   } catch (error: any) {
     console.error('[Create Group Error]:', error);
     if (error?.code === 11000) {
+      if (error?.keyPattern?.groupName || JSON.stringify(error).includes('groupName')) {
+        res.status(400).json({
+          success: false,
+          message: `Group "${req.body.groupName?.trim()}" is already registered for this subject. Please choose another group number or name.`,
+        });
+        return;
+      }
       res.status(400).json({ success: false, message: 'One of these roll numbers is already registered in a group for this subject.' });
       return;
     }
@@ -218,10 +241,11 @@ export const continueGroup = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Check if any member is ALREADY in a group for the new subject
+    // Check if any member is ALREADY in a group for the new assignment
     const memberRolls = prevGroup.members.map(m => m.rollNumber.toUpperCase());
     const existingGroup = await Group.findOne({
       subjectId: subject._id,
+      assignmentId: assignment._id,
       'members.rollNumber': { $in: memberRolls.map(r => new RegExp(`^${r}$`, 'i')) }
     });
 
@@ -230,7 +254,7 @@ export const continueGroup = async (req: AuthRequest, res: Response): Promise<vo
       const conflictingMember = prevGroup.members.find(m => existingRolls.includes(m.rollNumber.toUpperCase()));
       res.status(400).json({
         success: false,
-        message: `Member ${conflictingMember?.name} (${conflictingMember?.rollNumber}) is already in a group for ${subject.name}.`,
+        message: `Member ${conflictingMember?.name} (${conflictingMember?.rollNumber}) is already in a group for ${assignment.title}.`,
       });
       return;
     }
@@ -292,10 +316,21 @@ export const getMyGroupForSubject = async (req: AuthRequest, res: Response): Pro
     }
 
     const { subjectId } = req.params;
-    const group = await Group.findOne({
+    const { assignmentId } = req.query;
+
+    const filter: any = {
       subjectId,
-      'members.studentId': req.student.id,
-    })
+      $or: [
+        { 'members.studentId': req.student.id },
+        { 'members.rollNumber': new RegExp(`^${req.student.rollNumber.trim()}$`, 'i') },
+      ],
+    };
+
+    if (assignmentId) {
+      filter.assignmentId = assignmentId;
+    }
+
+    const group = await Group.findOne(filter)
       .populate('subjectId', 'name code')
       .populate('assignmentId', 'title');
 
@@ -305,6 +340,25 @@ export const getMyGroupForSubject = async (req: AuthRequest, res: Response): Pro
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch group.' });
+  }
+};
+
+/**
+ * 7. ADMIN DELETE GROUP
+ */
+export const deleteGroup = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const group = await Group.findById(id);
+    if (!group) {
+      res.status(404).json({ success: false, message: 'Group not found.' });
+      return;
+    }
+
+    await Group.findByIdAndDelete(id);
+    res.status(200).json({ success: true, message: `Group "${group.groupName}" deleted successfully.` });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to delete group.' });
   }
 };
 

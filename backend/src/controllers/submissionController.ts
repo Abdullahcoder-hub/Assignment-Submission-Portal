@@ -7,6 +7,7 @@ import Assignment from '../models/Assignment.js';
 import Submission from '../models/Submission.js';
 import Group from '../models/Group.js';
 import LateRequest from '../models/LateRequest.js';
+import Student from '../models/Student.js';
 import cloudinary, { uploadToCloudinary, deleteFromCloudinary, sanitizePathSegment } from '../config/cloudinary.js';
 import { sendSubmissionConfirmationEmail } from '../config/brevo.js';
 import { generateSubmissionId } from '../utils/submissionId.js';
@@ -622,5 +623,91 @@ export const deleteSubmission = async (req: AuthRequest, res: Response): Promise
     res.status(200).json({ success: true, message: 'Submission deleted successfully.' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to delete submission.' });
+  }
+};
+
+/**
+ * GET DEFAULTERS (UNSUBMITTED STUDENTS) FOR AN ASSIGNMENT
+ */
+export const getDefaulters = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { assignmentId } = req.params;
+    const assignment = await Assignment.findById(assignmentId).populate('subjectId', 'name code');
+    if (!assignment) {
+      res.status(404).json({ success: false, message: 'Assignment not found.' });
+      return;
+    }
+
+    const submissions = await Submission.find({ assignmentId }).select('studentId rollNumber');
+    const submittedStudentIds = submissions.map((s) => (s.studentId ? s.studentId.toString() : ''));
+    const submittedRolls = submissions.map((s) => s.rollNumber.toUpperCase());
+
+    const allStudents = await Student.find().select('name rollNumber email').sort({ rollNumber: 1 });
+
+    const defaulters = allStudents.filter((st) => {
+      const isSubmittedId = submittedStudentIds.includes(st._id.toString());
+      const isSubmittedRoll = submittedRolls.includes(st.rollNumber.toUpperCase());
+      return !isSubmittedId && !isSubmittedRoll;
+    });
+
+    res.status(200).json({
+      success: true,
+      assignment: {
+        id: assignment._id,
+        title: assignment.title,
+        deadline: assignment.deadline,
+        subject: assignment.subjectId,
+      },
+      count: defaulters.length,
+      totalStudents: allStudents.length,
+      defaulters,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch defaulters list.' });
+  }
+};
+
+/**
+ * EXPORT DEFAULTERS CSV
+ */
+export const exportDefaultersCsv = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { assignmentId } = req.params;
+    const assignment = await Assignment.findById(assignmentId).populate('subjectId', 'name code');
+    if (!assignment) {
+      res.status(404).json({ success: false, message: 'Assignment not found.' });
+      return;
+    }
+
+    const submissions = await Submission.find({ assignmentId }).select('studentId rollNumber');
+    const submittedStudentIds = submissions.map((s) => (s.studentId ? s.studentId.toString() : ''));
+    const submittedRolls = submissions.map((s) => s.rollNumber.toUpperCase());
+
+    const allStudents = await Student.find().select('name rollNumber email').sort({ rollNumber: 1 });
+
+    const defaulters = allStudents.filter((st) => {
+      const isSubmittedId = submittedStudentIds.includes(st._id.toString());
+      const isSubmittedRoll = submittedRolls.includes(st.rollNumber.toUpperCase());
+      return !isSubmittedId && !isSubmittedRoll;
+    });
+
+    const headers = ['Roll Number', 'Student Name', 'Email', 'Assignment', 'Subject', 'Status'];
+    const rows = defaulters.map((st) =>
+      [
+        `"${st.rollNumber}"`,
+        `"${st.name.replace(/"/g, '""')}"`,
+        `"${st.email}"`,
+        `"${assignment.title.replace(/"/g, '""')}"`,
+        `"${(assignment.subjectId as any)?.name || 'N/A'}"`,
+        `"Unsubmitted (Defaulter)"`,
+      ].join(',')
+    );
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="Defaulters_${assignment.title}_Unsubmitted.csv"`);
+    res.status(200).send(csvContent);
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to export defaulters CSV.' });
   }
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest } from '../types';
+import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest, RegisteredStudent } from '../types';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard,
@@ -32,12 +32,16 @@ import {
   X,
   Crown,
   AlertTriangle,
+  UserCheck,
+  UserX,
+  User,
+  Copy,
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'subjects' | 'assignments' | 'submissions' | 'groups' | 'late-requests' | 'settings'
+    'dashboard' | 'subjects' | 'assignments' | 'submissions' | 'groups' | 'late-requests' | 'students' | 'settings'
   >('dashboard');
 
   // Join Code state
@@ -94,6 +98,23 @@ export const AdminDashboard: React.FC = () => {
   const [lateFilterStatus, setLateFilterStatus] = useState<string>('');
   const [lateSearch, setLateSearch] = useState<string>('');
 
+  // Registered Students State
+  const [registeredStudents, setRegisteredStudents] = useState<RegisteredStudent[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
+  const [studentSearch, setStudentSearch] = useState<string>('');
+  const [editingStudent, setEditingStudent] = useState<RegisteredStudent | null>(null);
+  const [studentEditForm, setStudentEditForm] = useState({ name: '', rollNumber: '' });
+  const [studentEditModalOpen, setStudentEditModalOpen] = useState<boolean>(false);
+  const [resetPassStudent, setResetPassStudent] = useState<RegisteredStudent | null>(null);
+  const [newStudentPassInput, setNewStudentPassInput] = useState<string>('123456');
+  const [resetPassModalOpen, setResetPassModalOpen] = useState<boolean>(false);
+
+  // Defaulters State
+  const [defaultersModalOpen, setDefaultersModalOpen] = useState<boolean>(false);
+  const [selectedDefaulterAssignment, setSelectedDefaulterAssignment] = useState<Assignment | null>(null);
+  const [defaultersList, setDefaultersList] = useState<any[]>([]);
+  const [loadingDefaulters, setLoadingDefaulters] = useState<boolean>(false);
+
   // Filters state
   const [filterSubjectId, setFilterSubjectId] = useState<string>('');
   const [filterAssignmentId, setFilterAssignmentId] = useState<string>('');
@@ -128,7 +149,7 @@ export const AdminDashboard: React.FC = () => {
   const fetchSubjects = async () => {
     try {
       setLoadingSubjects(true);
-      const res = await api.get('/subjects');
+      const res = await api.get('/subjects?includeInactive=true');
       if (res.data.success) {
         setSubjects(res.data.subjects);
       }
@@ -196,6 +217,19 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleDeleteGroup = async (groupId: string, groupName: string) => {
+    if (!window.confirm(`Are you sure you want to delete group "${groupName}"?`)) return;
+    try {
+      const res = await api.delete(`/groups/${groupId}`);
+      if (res.data.success) {
+        showToast('success', res.data.message);
+        fetchGroups();
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to delete group.');
+    }
+  };
+
   // FETCH LATE REQUESTS
   const fetchLateRequests = async () => {
     try {
@@ -224,6 +258,102 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch (err: any) {
       showToast('error', err.response?.data?.message || 'Failed to update decision.');
+    }
+  };
+
+  // FETCH REGISTERED STUDENTS
+  const fetchStudents = async () => {
+    try {
+      setLoadingStudents(true);
+      let query = '/admin/students?';
+      if (studentSearch) query += `search=${encodeURIComponent(studentSearch.trim())}&`;
+      const res = await api.get(query);
+      if (res.data.success) {
+        setRegisteredStudents(res.data.students);
+      }
+    } catch (err) {
+      showToast('error', 'Failed to fetch registered students list.');
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  const handleSaveStudentEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    try {
+      const res = await api.put(`/admin/students/${editingStudent._id}`, studentEditForm);
+      if (res.data.success) {
+        showToast('success', res.data.message);
+        setStudentEditModalOpen(false);
+        fetchStudents();
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to update student details.');
+    }
+  };
+
+  const handleResetStudentPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPassStudent || !newStudentPassInput.trim()) return;
+    try {
+      const res = await api.patch(`/admin/students/${resetPassStudent._id}/reset-password`, {
+        newPassword: newStudentPassInput.trim(),
+      });
+      if (res.data.success) {
+        showToast('success', res.data.message);
+        setResetPassModalOpen(false);
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to reset password.');
+    }
+  };
+
+  const handleDeleteStudent = async (studentId: string, studentName: string, rollNumber: string) => {
+    if (!window.confirm(`Delete student account for "${studentName}" (${rollNumber})? This will also delete their submission records.`)) return;
+    try {
+      const res = await api.delete(`/admin/students/${studentId}`);
+      if (res.data.success) {
+        showToast('success', res.data.message);
+        fetchStudents();
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to delete student.');
+    }
+  };
+
+  // FETCH DEFAULTERS
+  const fetchDefaulters = async (assignment: Assignment) => {
+    try {
+      setSelectedDefaulterAssignment(assignment);
+      setDefaultersModalOpen(true);
+      setLoadingDefaulters(true);
+      const res = await api.get(`/submissions/defaulters/${assignment._id}`);
+      if (res.data.success) {
+        setDefaultersList(res.data.defaulters);
+      }
+    } catch (err) {
+      showToast('error', 'Failed to fetch defaulters list.');
+    } finally {
+      setLoadingDefaulters(false);
+    }
+  };
+
+  const handleExportDefaultersCsv = async (assignmentId: string, title: string) => {
+    try {
+      showToast('success', `Exporting defaulters CSV for ${title}...`);
+      const response = await api.get(`/submissions/defaulters/${assignmentId}/export-csv`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Defaulters_${title}_Unsubmitted.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      showToast('error', 'Failed to export defaulters CSV.');
     }
   };
 
@@ -308,8 +438,10 @@ export const AdminDashboard: React.FC = () => {
       fetchGroups();
     } else if (activeTab === 'late-requests') {
       fetchLateRequests();
+    } else if (activeTab === 'students') {
+      fetchStudents();
     }
-  }, [activeTab, currentPage, filterSubjectId, filterAssignmentId, filterStatus, groupFilterSubject, groupSearch, lateFilterSubject, lateFilterStatus, lateSearch]);
+  }, [activeTab, currentPage, filterSubjectId, filterAssignmentId, filterStatus, groupFilterSubject, groupSearch, lateFilterSubject, lateFilterStatus, lateSearch, studentSearch]);
 
   // SUBJECT MODAL SUBMIT
   const handleSaveSubject = async (e: React.FormEvent) => {
@@ -504,8 +636,21 @@ export const AdminDashboard: React.FC = () => {
     return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
   };
   
-  const assignmentStatus = (assignment: Assignment) =>
-    assignment.isActive && new Date(assignment.deadline) >= new Date() ? 'Active' : 'Closed';
+  const assignmentStatus = (assignment: Assignment) => {
+    if (!assignment.isActive) return 'Closed';
+    if (new Date() > new Date(assignment.deadline)) return 'Deadline Passed';
+    return 'Active';
+  };
+
+  const renderStatusBadge = (status: string) => {
+    if (status === 'Active') {
+      return <span className="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">Active</span>;
+    }
+    if (status === 'Deadline Passed') {
+      return <span className="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded-full">Deadline Passed</span>;
+    }
+    return <span className="px-2.5 py-1 text-xs font-bold bg-slate-200 text-slate-600 rounded-full">Closed</span>;
+  };
 
   return (
     <div className="admin-dashboard min-h-[90vh] flex flex-col md:flex-row bg-slate-100 min-w-0">
@@ -587,6 +732,18 @@ export const AdminDashboard: React.FC = () => {
           >
             <Clock className="w-5 h-5" />
             Late Requests
+          </button>
+
+          <button
+            onClick={() => setActiveTab('students')}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+              activeTab === 'students'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <UserCheck className="w-5 h-5" />
+            Registered Students
           </button>
 
           <button
@@ -851,9 +1008,7 @@ export const AdminDashboard: React.FC = () => {
                           </p>
                           <h3 className="font-bold text-slate-900 break-words">{ass.title}</h3>
                         </div>
-                        <span className={`shrink-0 px-2 py-1 text-[10px] font-bold rounded-full ${assignmentStatus(ass) === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                          {assignmentStatus(ass)}
-                        </span>
+                        {renderStatusBadge(assignmentStatus(ass))}
                       </div>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                         <div><span className="text-slate-500">Deadline</span><p className="font-semibold text-slate-700 break-words">{formatDate(ass.deadline)}</p></div>
@@ -863,7 +1018,7 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                       <div className="flex items-center justify-between gap-2 border-t border-slate-200 pt-2 text-xs">
                         <span className="text-slate-500">Status</span>
-                        <span className={`font-bold ${assignmentStatus(ass) === 'Active' ? 'text-emerald-700' : 'text-slate-600'}`}>{assignmentStatus(ass)}</span>
+                        {renderStatusBadge(assignmentStatus(ass))}
                       </div>
                       <p className="text-xs text-slate-600 break-words"><span className="text-slate-500">Files:</span> {ass.allowedFileTypes.join(', ').toUpperCase()}</p>
                       <div className="border-t border-slate-200 pt-2">
@@ -871,6 +1026,7 @@ export const AdminDashboard: React.FC = () => {
                         <div className="flex flex-wrap gap-2">
                         <button title="Download All as ZIP" onClick={() => handleDownloadZip(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg"><Download className="w-4 h-4" /> ZIP</button>
                         <button title="Export CSV" onClick={() => handleExportCsv(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-lg"><FileSpreadsheet className="w-4 h-4" /> CSV</button>
+                        <button title="View unsubmitted students" onClick={() => fetchDefaulters(ass)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg"><UserX className="w-4 h-4" /> Defaulters</button>
                         <button title="Edit assignment" onClick={() => {
                           setEditingAssignment(ass);
                           setAssignmentForm({ subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string), title: ass.title, description: ass.description || '', deadline: toLocalDateTimeInput(new Date(ass.deadline)), allowLateSubmission: ass.allowLateSubmission, allowedFileTypes: ass.allowedFileTypes.join(', '), maxFileSize: ass.maxFileSize, maxGroupSize: ass.maxGroupSize || 4, submissionType: ass.submissionType || 'Group', isActive: ass.isActive });
@@ -971,9 +1127,7 @@ export const AdminDashboard: React.FC = () => {
                         </td>
                         <td className="p-4 text-xs font-bold text-slate-700">{ass.maxFileSize} MB</td>
                         <td className="p-4">
-                          <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${assignmentStatus(ass) === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                            {assignmentStatus(ass)}
-                          </span>
+                          {renderStatusBadge(assignmentStatus(ass))}
                         </td>
                         <td className="p-4 text-right space-x-2">
                           <button
@@ -989,6 +1143,13 @@ export const AdminDashboard: React.FC = () => {
                             className="p-1.5 hover:bg-emerald-100 text-emerald-600 rounded-lg transition"
                           >
                             <FileSpreadsheet className="w-4 h-4" />
+                          </button>
+                          <button
+                            title="View unsubmitted students"
+                            onClick={() => fetchDefaulters(ass)}
+                            className="p-1.5 hover:bg-amber-100 text-amber-700 rounded-lg transition"
+                          >
+                            <UserX className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => {
@@ -1291,9 +1452,18 @@ export const AdminDashboard: React.FC = () => {
                           </span>
                           <h3 className="font-extrabold text-slate-900 text-base">{grp.groupName}</h3>
                         </div>
-                        <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded-full">
-                          {grp.members.length} / {grp.maxGroupSize || 4} Members
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded-full">
+                            {grp.members.length} / {grp.maxGroupSize || 4} Members
+                          </span>
+                          <button
+                            onClick={() => handleDeleteGroup(grp._id, grp.groupName)}
+                            className="p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition"
+                            title="Delete Group"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="space-y-1.5">
@@ -1463,6 +1633,25 @@ export const AdminDashboard: React.FC = () => {
           </div>
         )}
 
+        {activeTab === 'students' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div><h1 className="text-2xl font-bold text-slate-900">Registered Students</h1><p className="text-slate-500 text-sm">Manage student names, roll numbers and account access.</p></div>
+              <input value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} placeholder="Search name, roll or email" className="w-full sm:w-72 px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm" />
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead><tr className="bg-slate-50 text-xs uppercase text-slate-600"><th className="p-4">Name</th><th className="p-4">Roll No</th><th className="p-4">Email</th><th className="p-4">Joined</th><th className="p-4">Actions</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loadingStudents ? <tr><td colSpan={5} className="p-8 text-center text-slate-500">Loading students...</td></tr> : registeredStudents.length === 0 ? <tr><td colSpan={5} className="p-8 text-center text-slate-400">No registered students.</td></tr> : registeredStudents.map((studentRecord) => (
+                    <tr key={studentRecord._id}><td className="p-4 font-semibold">{studentRecord.name}</td><td className="p-4 font-mono">{studentRecord.rollNumber}</td><td className="p-4 break-all">{studentRecord.email}</td><td className="p-4 text-xs text-slate-500">{formatDate(studentRecord.createdAt)}</td><td className="p-4"><div className="flex flex-wrap gap-2"><button onClick={() => { setEditingStudent(studentRecord); setStudentEditForm({ name: studentRecord.name, rollNumber: studentRecord.rollNumber }); setStudentEditModalOpen(true); }} className="px-2.5 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg">Edit</button><button onClick={() => { setResetPassStudent(studentRecord); setResetPassModalOpen(true); }} className="px-2.5 py-1.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg">Reset Password</button><button onClick={() => handleDeleteStudent(studentRecord._id, studentRecord.name, studentRecord.rollNumber)} className="px-2.5 py-1.5 bg-red-50 text-red-700 text-xs font-bold rounded-lg">Delete</button></div></td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* 7. SETTINGS TAB — CLASS JOIN CODE MANAGEMENT */}
         {activeTab === 'settings' && (
           <div className="space-y-6">
@@ -1566,6 +1755,24 @@ export const AdminDashboard: React.FC = () => {
               )}
             </div>
           </div>
+        )}
+
+        {defaultersModalOpen && selectedDefaulterAssignment && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between gap-3"><div><h3 className="font-bold text-slate-900">Unsubmitted Students</h3><p className="text-xs text-slate-500">{selectedDefaulterAssignment.title}</p></div><button onClick={() => setDefaultersModalOpen(false)} className="text-slate-500 text-xl">&times;</button></div>
+              {loadingDefaulters ? <p className="py-8 text-center text-slate-500">Loading...</p> : defaultersList.length === 0 ? <p className="py-8 text-center text-emerald-700 font-semibold">No defaulters found.</p> : <div className="space-y-2">{defaultersList.map((studentRecord) => <div key={studentRecord._id} className="p-3 bg-slate-50 rounded-lg"><p className="font-semibold text-sm">{studentRecord.name}</p><p className="text-xs text-slate-600">{studentRecord.rollNumber} · {studentRecord.email}</p></div>)}</div>}
+              <button onClick={() => handleExportDefaultersCsv(selectedDefaulterAssignment._id, selectedDefaulterAssignment.title)} className="w-full py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-bold">Export CSV</button>
+            </div>
+          </div>
+        )}
+
+        {studentEditModalOpen && editingStudent && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4"><form onSubmit={handleSaveStudentEdit} className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4"><h3 className="font-bold text-slate-900">Edit Student</h3><input value={studentEditForm.name} onChange={(e) => setStudentEditForm({ ...studentEditForm, name: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="Name" required /><input value={studentEditForm.rollNumber} onChange={(e) => setStudentEditForm({ ...studentEditForm, rollNumber: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="Roll number" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setStudentEditModalOpen(false)} className="px-3 py-2 bg-slate-100 rounded-lg">Cancel</button><button className="px-3 py-2 bg-blue-600 text-white rounded-lg">Save</button></div></form></div>
+        )}
+
+        {resetPassModalOpen && resetPassStudent && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4"><form onSubmit={handleResetStudentPassword} className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4"><h3 className="font-bold text-slate-900">Reset Student Password</h3><input type="password" value={newStudentPassInput} onChange={(e) => setNewStudentPassInput(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="New password" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setResetPassModalOpen(false)} className="px-3 py-2 bg-slate-100 rounded-lg">Cancel</button><button className="px-3 py-2 bg-amber-600 text-white rounded-lg">Reset Password</button></div></form></div>
         )}
 
         {/* MODAL: ADD / EDIT SUBJECT */}

@@ -8,6 +8,7 @@ import {
   forgotPassword,
   resetPassword,
   getStudentProfile,
+  changePassword,
 } from '../controllers/studentAuthController.js';
 import { authenticateStudent } from '../middleware/auth.js';
 
@@ -21,5 +22,6 @@ router.post('/google', googleAuthStudent);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.get('/me', authenticateStudent, getStudentProfile);
+router.post('/change-password', authenticateStudent, changePassword);
 
 export default router;

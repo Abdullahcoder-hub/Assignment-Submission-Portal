@@ -40,7 +40,10 @@ const GroupSchema: Schema = new Schema(
   { timestamps: true }
 );
 
-// Prevent a student roll number from belonging to two groups for the same subject
-GroupSchema.index({ subjectId: 1, 'members.rollNumber': 1 }, { unique: true });
+// Prevent a student roll number from belonging to two groups for the same subject and assignment
+GroupSchema.index({ subjectId: 1, assignmentId: 1, 'members.rollNumber': 1 }, { unique: true });
+
+// Prevent duplicate group name/number for the same subject and assignment
+GroupSchema.index({ subjectId: 1, assignmentId: 1, groupName: 1 }, { unique: true });
 
 export default mongoose.model<IGroup>('Group', GroupSchema);

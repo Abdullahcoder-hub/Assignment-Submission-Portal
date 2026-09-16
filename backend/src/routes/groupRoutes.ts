@@ -6,6 +6,7 @@ import {
   getMyGroupForSubject,
   getGroups,
   exportGroupsCsv,
+  deleteGroup,
 } from '../controllers/groupController.js';
 import { authenticateStudent, authenticateAdmin } from '../middleware/auth.js';
 
@@ -20,5 +21,6 @@ router.get('/my-group/:subjectId', authenticateStudent, getMyGroupForSubject);
 // Admin / CR Group Routes
 router.get('/', authenticateAdmin, getGroups);
 router.get('/export-csv', authenticateAdmin, exportGroupsCsv);
+router.delete('/:id', authenticateAdmin, deleteGroup);
 
 export default router;

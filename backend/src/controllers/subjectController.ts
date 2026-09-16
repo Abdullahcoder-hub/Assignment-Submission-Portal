@@ -30,7 +30,11 @@ export const createSubject = async (req: AuthRequest, res: Response): Promise<vo
     const uppercaseCode = code.trim().toUpperCase();
     const existing = await Subject.findOne({ code: uppercaseCode });
     if (existing) {
-      res.status(400).json({ success: false, message: `Subject code '${uppercaseCode}' already exists.` });
+      const statusText = existing.isActive ? '' : ' (currently inactive)';
+      res.status(400).json({
+        success: false,
+        message: `Subject code '${uppercaseCode}' already exists${statusText}. You can manage or activate it from the Subjects list.`,
+      });
       return;
     }
 

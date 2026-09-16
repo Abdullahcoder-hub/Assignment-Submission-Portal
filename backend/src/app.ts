@@ -13,6 +13,7 @@ import assignmentRoutes from './routes/assignmentRoutes.js';
 import submissionRoutes from './routes/submissionRoutes.js';
 import groupRoutes from './routes/groupRoutes.js';
 import lateRequestRoutes from './routes/lateRequestRoutes.js';
+import adminStudentRoutes from './routes/adminStudentRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 dotenv.config();
@@ -59,6 +60,7 @@ app.use('/', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/auth/student', studentAuthRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
+app.use('/api/admin/students', adminStudentRoutes);
 app.use('/api/subjects', subjectRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/submissions', submissionRoutes);

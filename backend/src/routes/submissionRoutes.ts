@@ -6,6 +6,8 @@ import {
   downloadSingleSubmission,
   deleteSubmission,
   deleteStudentSubmission,
+  getDefaulters,
+  exportDefaultersCsv,
 } from '../controllers/submissionController.js';
 import { uploadMiddleware } from '../middleware/upload.js';
 import { authenticateAdmin, authenticateStudent } from '../middleware/auth.js';
@@ -20,6 +22,8 @@ router.delete('/student/:id', authenticateStudent, deleteStudentSubmission);
 router.get('/stats/dashboard', authenticateAdmin, getDashboardStats);
 router.get('/', authenticateAdmin, getSubmissions);
 router.get('/:id/download', authenticateAdmin, downloadSingleSubmission);
+router.get('/defaulters/:assignmentId', authenticateAdmin, getDefaulters);
+router.get('/defaulters/:assignmentId/export-csv', authenticateAdmin, exportDefaultersCsv);
 router.delete('/:id', authenticateAdmin, deleteSubmission);
 
 export default router;
