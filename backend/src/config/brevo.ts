@@ -23,6 +23,44 @@ const sendBrevoEmail = async (subject: string, htmlContent: string, toEmail: str
   }, { headers: { 'api-key': apiKey, 'content-type': 'application/json' } });
 };
 
+export const sendLateRequestEmail = async (params: {
+  toEmail: string;
+  toName: string;
+  studentName: string;
+  rollNumber: string;
+  subjectName: string;
+  assignmentTitle: string;
+  reason: string;
+  approveUrl?: string;
+  rejectUrl?: string;
+  decision?: 'Approved' | 'Rejected';
+}): Promise<{ success: boolean }> => {
+  const decisionText = params.decision
+    ? `Your late submission request has been <strong>${params.decision.toLowerCase()}</strong>.`
+    : 'A student has submitted a late submission request.';
+  const actionHtml = params.approveUrl && params.rejectUrl
+    ? `<p><a href="${params.approveUrl}" style="background:#16a34a;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">Approve</a> <a href="${params.rejectUrl}" style="background:#dc2626;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">Reject</a></p>`
+    : '<p>Please open the portal to submit again.</p>';
+  const htmlContent = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto"><h2>Late Submission Request</h2><p>Hello <strong>${params.toName}</strong>,</p><p>${decisionText}</p><p><strong>Student:</strong> ${params.studentName} (${params.rollNumber})<br><strong>Subject:</strong> ${params.subjectName}<br><strong>Assignment:</strong> ${params.assignmentTitle}<br><strong>Reason:</strong> ${params.reason}</p>${actionHtml}</div>`;
+
+  try {
+    if (!apiKey || apiKey === 'xkeysib-demo') {
+      console.log(`[Brevo Email Mock] Late request email to: ${params.toEmail}`);
+      return { success: true };
+    }
+    await sendBrevoEmail(
+      params.decision ? `Late Request ${params.decision} — ${params.assignmentTitle}` : `New Late Submission Request — ${params.assignmentTitle}`,
+      htmlContent,
+      params.toEmail,
+      params.toName
+    );
+    return { success: true };
+  } catch (error) {
+    console.error('[Brevo Late Request Email Error]:', error);
+    return { success: false };
+  }
+};
+
 export interface SendConfirmationEmailParams {
   toEmail: string;
   toName: string;
