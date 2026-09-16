@@ -305,8 +305,9 @@ export const StudentDashboard: React.FC = () => {
 
   // Group Registration Handlers
   useEffect(() => {
-    if (!groupSubjectId) {
+    if (!groupSubjectId || !groupAssignmentId) {
       setMyGroup(null);
+      setLoadingMyGroup(false);
       return;
     }
 
@@ -320,9 +321,7 @@ export const StudentDashboard: React.FC = () => {
       try {
         setLoadingMyGroup(true);
         setGroupMsg(null);
-        let groupUrl = `/groups/my-group/${groupSubjectId}`;
-        if (groupAssignmentId) groupUrl += `?assignmentId=${groupAssignmentId}`;
-        const res = await api.get(groupUrl);
+        const res = await api.get(`/groups/my-group/${groupSubjectId}?assignmentId=${groupAssignmentId}`);
         if (res.data.success) {
           setMyGroup(res.data.group);
         }
