@@ -11,6 +11,8 @@ import adminSettingsRoutes from './routes/adminSettingsRoutes.js';
 import subjectRoutes from './routes/subjectRoutes.js';
 import assignmentRoutes from './routes/assignmentRoutes.js';
 import submissionRoutes from './routes/submissionRoutes.js';
+import groupRoutes from './routes/groupRoutes.js';
+import lateRequestRoutes from './routes/lateRequestRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 dotenv.config();
@@ -60,6 +62,8 @@ app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/subjects', subjectRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/submissions', submissionRoutes);
+app.use('/api/groups', groupRoutes);
+app.use('/api/late-requests', lateRequestRoutes);
 
 // 404 Route Handler
 app.use((req, res) => {

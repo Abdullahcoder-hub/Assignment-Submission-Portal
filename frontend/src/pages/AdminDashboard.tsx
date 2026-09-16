@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { Subject, Assignment, Submission, DashboardStats } from '../types';
+import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest } from '../types';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard,
@@ -27,11 +27,18 @@ import {
   FileText,
   KeyRound,
   Settings,
+  Users,
+  Check,
+  X,
+  Crown,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
   const { logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'subjects' | 'assignments' | 'submissions' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<
+    'dashboard' | 'subjects' | 'assignments' | 'submissions' | 'groups' | 'late-requests' | 'settings'
+  >('dashboard');
 
   // Join Code state
   const [joinCode, setJoinCode] = useState<string>('');
@@ -62,6 +69,8 @@ export const AdminDashboard: React.FC = () => {
     allowLateSubmission: false,
     allowedFileTypes: 'pdf, doc, docx, ppt, pptx, zip',
     maxFileSize: 10,
+    maxGroupSize: 4,
+    submissionType: 'Group' as 'Individual' | 'Group',
     isActive: true,
   });
 
@@ -71,6 +80,19 @@ export const AdminDashboard: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [loadingSubmissions, setLoadingSubmissions] = useState<boolean>(false);
+
+  // Groups list state
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState<boolean>(false);
+  const [groupFilterSubject, setGroupFilterSubject] = useState<string>('');
+  const [groupSearch, setGroupSearch] = useState<string>('');
+
+  // Late Requests state
+  const [lateRequests, setLateRequests] = useState<LateRequest[]>([]);
+  const [loadingLateRequests, setLoadingLateRequests] = useState<boolean>(false);
+  const [lateFilterSubject, setLateFilterSubject] = useState<string>('');
+  const [lateFilterStatus, setLateFilterStatus] = useState<string>('');
+  const [lateSearch, setLateSearch] = useState<string>('');
 
   // Filters state
   const [filterSubjectId, setFilterSubjectId] = useState<string>('');
@@ -156,6 +178,55 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  // FETCH GROUPS
+  const fetchGroups = async () => {
+    try {
+      setLoadingGroups(true);
+      let query = '/groups?';
+      if (groupFilterSubject) query += `subjectId=${groupFilterSubject}&`;
+      if (groupSearch) query += `search=${encodeURIComponent(groupSearch.trim())}&`;
+      const res = await api.get(query);
+      if (res.data.success) {
+        setGroups(res.data.groups);
+      }
+    } catch (err) {
+      showToast('error', 'Failed to fetch groups list.');
+    } finally {
+      setLoadingGroups(false);
+    }
+  };
+
+  // FETCH LATE REQUESTS
+  const fetchLateRequests = async () => {
+    try {
+      setLoadingLateRequests(true);
+      let query = '/late-requests?';
+      if (lateFilterSubject) query += `subjectId=${lateFilterSubject}&`;
+      if (lateFilterStatus) query += `status=${lateFilterStatus}&`;
+      if (lateSearch) query += `search=${encodeURIComponent(lateSearch.trim())}&`;
+      const res = await api.get(query);
+      if (res.data.success) {
+        setLateRequests(res.data.requests);
+      }
+    } catch (err) {
+      showToast('error', 'Failed to fetch late submission requests.');
+    } finally {
+      setLoadingLateRequests(false);
+    }
+  };
+
+  const handleLateDecision = async (id: string, decision: 'Approved' | 'Rejected') => {
+    try {
+      const res = await api.patch(`/late-requests/${id}/decision`, { decision });
+      if (res.data.success) {
+        showToast('success', res.data.message);
+        fetchLateRequests();
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to update decision.');
+    }
+  };
+
   const [customJoinInput, setCustomJoinInput] = useState<string>('');
   const [isEditingCode, setIsEditingCode] = useState<boolean>(false);
 
@@ -229,8 +300,12 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'submissions') {
       fetchSubmissions(currentPage);
+    } else if (activeTab === 'groups') {
+      fetchGroups();
+    } else if (activeTab === 'late-requests') {
+      fetchLateRequests();
     }
-  }, [activeTab, currentPage, filterSubjectId, filterAssignmentId, filterStatus]);
+  }, [activeTab, currentPage, filterSubjectId, filterAssignmentId, filterStatus, groupFilterSubject, groupSearch, lateFilterSubject, lateFilterStatus, lateSearch]);
 
   // SUBJECT MODAL SUBMIT
   const handleSaveSubject = async (e: React.FormEvent) => {
@@ -282,6 +357,7 @@ export const AdminDashboard: React.FC = () => {
         ...assignmentForm,
         allowedFileTypes: allowedArray,
         maxFileSize: Number(assignmentForm.maxFileSize),
+        maxGroupSize: Number(assignmentForm.maxGroupSize),
       };
 
       if (editingAssignment) {
@@ -384,6 +460,25 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  // GROUP CSV EXPORT
+  const handleExportGroupsCsv = async () => {
+    try {
+      showToast('success', 'Exporting Groups CSV...');
+      let urlStr = '/groups/export-csv';
+      if (groupFilterSubject) urlStr += `?subjectId=${groupFilterSubject}`;
+      const response = await api.get(urlStr, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Registered_Groups.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      showToast('error', 'Failed to export Groups CSV.');
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'N/A';
     return new Date(dateStr).toLocaleString('en-US', {
@@ -452,6 +547,30 @@ export const AdminDashboard: React.FC = () => {
           >
             <Inbox className="w-5 h-5" />
             Submissions
+          </button>
+
+          <button
+            onClick={() => setActiveTab('groups')}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+              activeTab === 'groups'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <Users className="w-5 h-5" />
+            Group Registrations
+          </button>
+
+          <button
+            onClick={() => setActiveTab('late-requests')}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+              activeTab === 'late-requests'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <Clock className="w-5 h-5" />
+            Late Requests
           </button>
 
           <button
@@ -593,15 +712,9 @@ export const AdminDashboard: React.FC = () => {
                           </td>
                           <td className="p-3 text-slate-500 text-xs">{formatDate(sub.submittedAt)}</td>
                           <td className="p-3">
-                            {sub.isLate ? (
-                              <span className="px-2 py-0.5 text-xs font-bold bg-red-100 text-red-700 rounded-md">
-                                LATE
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 text-xs font-bold bg-emerald-100 text-emerald-700 rounded-md">
-                                ON TIME
-                              </span>
-                            )}
+                            <span className="px-2 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 rounded-md">
+                              {sub.status}
+                            </span>
                           </td>
                         </tr>
                       ))
@@ -721,6 +834,8 @@ export const AdminDashboard: React.FC = () => {
                     allowLateSubmission: false,
                     allowedFileTypes: 'pdf, doc, docx, ppt, pptx, zip',
                     maxFileSize: 10,
+                    maxGroupSize: 4,
+                    submissionType: 'Group',
                     isActive: true,
                   });
                   setAssignmentModalOpen(true);
@@ -738,6 +853,7 @@ export const AdminDashboard: React.FC = () => {
                     <th className="p-4">Subject</th>
                     <th className="p-4">Title</th>
                     <th className="p-4">Deadline</th>
+                    <th className="p-4">Submission Mode</th>
                     <th className="p-4">Late Allowed</th>
                     <th className="p-4">Allowed Files</th>
                     <th className="p-4">Max Size</th>
@@ -748,7 +864,7 @@ export const AdminDashboard: React.FC = () => {
                 <tbody className="divide-y divide-slate-100">
                   {assignments.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-8 text-slate-400">
+                      <td colSpan={9} className="text-center py-8 text-slate-400">
                         No assignments created yet. Click 'Create Assignment' to create one.
                       </td>
                     </tr>
@@ -760,6 +876,17 @@ export const AdminDashboard: React.FC = () => {
                         </td>
                         <td className="p-4 font-bold text-slate-900">{ass.title}</td>
                         <td className="p-4 text-xs font-semibold text-slate-700">{formatDate(ass.deadline)}</td>
+                        <td className="p-4 text-xs">
+                          {ass.submissionType === 'Individual' ? (
+                            <span className="px-2 py-0.5 font-bold bg-slate-100 text-slate-700 rounded-md">
+                              Individual Only
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 font-bold bg-purple-100 text-purple-800 rounded-md">
+                              Group (Max {ass.maxGroupSize || 4})
+                            </span>
+                          )}
+                        </td>
                         <td className="p-4 text-xs">
                           {ass.allowLateSubmission ? (
                             <span className="font-bold text-emerald-700">Yes</span>
@@ -808,6 +935,8 @@ export const AdminDashboard: React.FC = () => {
                                 allowLateSubmission: ass.allowLateSubmission,
                                 allowedFileTypes: ass.allowedFileTypes.join(', '),
                                 maxFileSize: ass.maxFileSize,
+                                maxGroupSize: ass.maxGroupSize || 4,
+                                submissionType: ass.submissionType || 'Group',
                                 isActive: ass.isActive,
                               });
                               setAssignmentModalOpen(true);
@@ -862,7 +991,6 @@ export const AdminDashboard: React.FC = () => {
 
             {/* Filter Bar */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-              {/* Search */}
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -875,7 +1003,6 @@ export const AdminDashboard: React.FC = () => {
                 />
               </div>
 
-              {/* Subject Filter */}
               <select
                 value={filterSubjectId}
                 onChange={(e) => {
@@ -893,7 +1020,6 @@ export const AdminDashboard: React.FC = () => {
                 ))}
               </select>
 
-              {/* Assignment Filter */}
               <select
                 value={filterAssignmentId}
                 onChange={(e) => {
@@ -912,7 +1038,6 @@ export const AdminDashboard: React.FC = () => {
                   ))}
               </select>
 
-              {/* Status Filter */}
               <select
                 value={filterStatus}
                 onChange={(e) => {
@@ -924,6 +1049,7 @@ export const AdminDashboard: React.FC = () => {
                 <option value="">All Statuses</option>
                 <option value="Submitted">On Time</option>
                 <option value="Late">Late</option>
+                <option value="Submitted Late — CR Approved">Submitted Late — CR Approved</option>
               </select>
             </div>
 
@@ -940,14 +1066,13 @@ export const AdminDashboard: React.FC = () => {
                     <th className="p-4">File Name</th>
                     <th className="p-4">Submitted At</th>
                     <th className="p-4">Status</th>
-                    <th className="p-4">Email</th>
                     <th className="p-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loadingSubmissions ? (
                     <tr>
-                      <td colSpan={10} className="text-center py-10">
+                      <td colSpan={9} className="text-center py-10">
                         <div className="flex items-center justify-center gap-2 text-slate-500">
                           <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
                           <span>Loading submissions...</span>
@@ -956,7 +1081,7 @@ export const AdminDashboard: React.FC = () => {
                     </tr>
                   ) : submissions.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="text-center py-10 text-slate-400">
+                      <td colSpan={9} className="text-center py-10 text-slate-400">
                         No submissions match the selected filters.
                       </td>
                     </tr>
@@ -977,22 +1102,9 @@ export const AdminDashboard: React.FC = () => {
                         </td>
                         <td className="p-4 text-xs text-slate-500">{formatDate(sub.submittedAt)}</td>
                         <td className="p-4">
-                          {sub.isLate ? (
-                            <span className="px-2 py-0.5 text-xs font-bold bg-red-100 text-red-700 rounded-md">
-                              LATE
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 text-xs font-bold bg-emerald-100 text-emerald-700 rounded-md">
-                              ON TIME
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-4 text-xs">
-                          {sub.emailStatus === 'Sent' ? (
-                            <span className="text-emerald-600 font-semibold">Sent</span>
-                          ) : (
-                            <span className="text-amber-600 font-semibold">Failed</span>
-                          )}
+                          <span className="px-2 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 rounded-md">
+                            {sub.status}
+                          </span>
                         </td>
                         <td className="p-4 text-right">
                           <button
@@ -1034,7 +1146,231 @@ export const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* 5. SETTINGS TAB — CLASS JOIN CODE MANAGEMENT */}
+        {/* 5. GROUP REGISTRATIONS TAB */}
+        {activeTab === 'groups' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Registered Student Groups</h1>
+                <p className="text-slate-500 text-sm">View subject-wise registered groups and export CSV.</p>
+              </div>
+
+              <button
+                onClick={handleExportGroupsCsv}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow transition"
+              >
+                <FileSpreadsheet className="w-4 h-4" /> Export Groups CSV
+              </button>
+            </div>
+
+            {/* Filter bar */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search group name or roll #"
+                  value={groupSearch}
+                  onChange={(e) => setGroupSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <select
+                value={groupFilterSubject}
+                onChange={(e) => setGroupFilterSubject(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                <option value="">All Subjects</option>
+                {subjects.map((sub) => (
+                  <option key={sub._id} value={sub._id}>
+                    {sub.name} ({sub.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Groups Grid / Cards */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6">
+              {loadingGroups ? (
+                <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> Loading groups...
+                </div>
+              ) : groups.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 text-sm">
+                  No student groups registered yet.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {groups.map((grp) => (
+                    <div key={grp._id} className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <div>
+                          <span className="text-xs font-bold text-blue-600 uppercase">
+                            {(grp.subjectId as any)?.name || 'Subject'}
+                          </span>
+                          <h3 className="font-extrabold text-slate-900 text-base">{grp.groupName}</h3>
+                        </div>
+                        <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded-full">
+                          {grp.members.length} / {grp.maxGroupSize || 4} Members
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Group Leader</p>
+                        <p className="text-sm font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                          <Crown className="w-4 h-4 text-amber-600" />
+                          {grp.leader?.name} ({grp.leader?.rollNumber})
+                        </p>
+
+                        <p className="text-xs font-bold uppercase tracking-wider text-slate-500 pt-1">Members</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {grp.members.map((m, mIdx) => (
+                            <span key={mIdx} className="px-2.5 py-1 bg-white border border-slate-200 text-slate-800 text-xs rounded-md font-medium">
+                              {m.name} ({m.rollNumber})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 6. LATE REQUESTS TAB */}
+        {activeTab === 'late-requests' && (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Late Submission Requests</h1>
+              <p className="text-slate-500 text-sm">Review and decide late submission requests submitted by students/groups.</p>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search student or roll #"
+                  value={lateSearch}
+                  onChange={(e) => setLateSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <select
+                value={lateFilterSubject}
+                onChange={(e) => setLateFilterSubject(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                <option value="">All Subjects</option>
+                {subjects.map((sub) => (
+                  <option key={sub._id} value={sub._id}>
+                    {sub.name} ({sub.code})
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={lateFilterStatus}
+                onChange={(e) => setLateFilterStatus(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+              >
+                <option value="">All Statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
+                    <th className="p-4">Student</th>
+                    <th className="p-4">Roll #</th>
+                    <th className="p-4">Subject</th>
+                    <th className="p-4">Assignment</th>
+                    <th className="p-4">Reason</th>
+                    <th className="p-4">Requested At</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loadingLateRequests ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-10">
+                        <div className="flex items-center justify-center gap-2 text-slate-500">
+                          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                          <span>Loading late submission requests...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : lateRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-10 text-slate-400">
+                        No late submission requests found.
+                      </td>
+                    </tr>
+                  ) : (
+                    lateRequests.map((req) => (
+                      <tr key={req._id} className="hover:bg-slate-50/80">
+                        <td className="p-4 font-bold text-slate-900">{req.studentName}</td>
+                        <td className="p-4 font-mono font-bold text-slate-700">{req.rollNumber}</td>
+                        <td className="p-4 text-xs font-semibold text-blue-700">
+                          {(req.subjectId as any)?.code || 'N/A'}
+                        </td>
+                        <td className="p-4 text-xs font-semibold text-slate-800">
+                          {(req.assignmentId as any)?.title || 'N/A'}
+                        </td>
+                        <td className="p-4 text-xs text-slate-600 max-w-xs truncate">{req.reason}</td>
+                        <td className="p-4 text-xs text-slate-500">{formatDate(req.requestedAt)}</td>
+                        <td className="p-4">
+                          {req.status === 'Approved' ? (
+                            <span className="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">
+                              Approved
+                            </span>
+                          ) : req.status === 'Rejected' ? (
+                            <span className="px-2.5 py-1 text-xs font-bold bg-red-100 text-red-800 rounded-full">
+                              Rejected
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded-full">
+                              Pending
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-4 text-right space-x-2">
+                          <button
+                            onClick={() => handleLateDecision(req._id, 'Approved')}
+                            disabled={req.status === 'Approved'}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-bold text-xs rounded-lg transition inline-flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" /> Allow Submission
+                          </button>
+                          <button
+                            onClick={() => handleLateDecision(req._id, 'Rejected')}
+                            disabled={req.status === 'Rejected'}
+                            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white font-bold text-xs rounded-lg transition inline-flex items-center gap-1"
+                          >
+                            <X className="w-3 h-3" /> Reject
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 7. SETTINGS TAB — CLASS JOIN CODE MANAGEMENT */}
         {activeTab === 'settings' && (
           <div className="space-y-6">
             <div>
@@ -1135,16 +1471,6 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
               )}
-
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 space-y-1">
-                <p className="font-bold">How Class Registration Works:</p>
-                <ul className="list-disc list-inside space-y-0.5 text-blue-800">
-                  <li>Students self-register using their Name, Roll Number, Email, and this Class Join Code.</li>
-                  <li>After registration, students receive a Brevo email verification link.</li>
-                  <li>Students logging in via Google for the first time will also be prompted for this Class Join Code and their Roll Number.</li>
-                  <li>You can regenerate or disable the Join Code at any time to block new signups.</li>
-                </ul>
-              </div>
             </div>
           </div>
         )}
@@ -1276,6 +1602,46 @@ export const AdminDashboard: React.FC = () => {
                     required
                     className="w-full px-3 py-2 border rounded-xl text-sm font-semibold"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Submission Mode</label>
+                    <select
+                      value={assignmentForm.submissionType}
+                      onChange={(e) =>
+                        setAssignmentForm({
+                          ...assignmentForm,
+                          submissionType: e.target.value as 'Individual' | 'Group',
+                        })
+                      }
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-white"
+                    >
+                      <option value="Group">Group Submission</option>
+                      <option value="Individual">Individual Submission Only</option>
+                    </select>
+                  </div>
+                  {assignmentForm.submissionType === 'Group' ? (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Max Group Limit
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={assignmentForm.maxGroupSize}
+                        onChange={(e) => setAssignmentForm({ ...assignmentForm, maxGroupSize: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border rounded-xl text-xs font-bold"
+                        placeholder="e.g. 4"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-0.5">Fewer members allowed, not more.</p>
+                    </div>
+                  ) : (
+                    <div className="flex items-center text-xs text-slate-500 pt-5">
+                      Single student submission only
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

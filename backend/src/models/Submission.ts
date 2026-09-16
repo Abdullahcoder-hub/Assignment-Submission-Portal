@@ -23,7 +23,7 @@ export interface ISubmission extends Document {
   // Submission Status
   submittedAt: Date;
   isLate: boolean;
-  status: 'Submitted' | 'Late';
+  status: 'Submitted' | 'Late' | 'Submitted Late — CR Approved';
   emailStatus: 'Sent' | 'Failed';
 
   createdAt: Date;
@@ -51,7 +51,7 @@ const SubmissionSchema: Schema = new Schema(
 
     submittedAt: { type: Date, required: true },
     isLate: { type: Boolean, default: false },
-    status: { type: String, enum: ['Submitted', 'Late'], default: 'Submitted' },
+    status: { type: String, enum: ['Submitted', 'Late', 'Submitted Late — CR Approved'], default: 'Submitted' },
     emailStatus: { type: String, enum: ['Sent', 'Failed'], default: 'Sent' },
   },
   { timestamps: true }

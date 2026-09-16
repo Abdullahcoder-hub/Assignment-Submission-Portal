@@ -17,6 +17,8 @@ export interface Assignment {
   allowLateSubmission: boolean;
   allowedFileTypes: string[];
   maxFileSize: number; // MB
+  maxGroupSize?: number;
+  submissionType?: 'Individual' | 'Group';
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -40,8 +42,43 @@ export interface Submission {
   fileType: string;
   submittedAt: string;
   isLate: boolean;
-  status: 'Submitted' | 'Late';
+  status: 'Submitted' | 'Late' | 'Submitted Late — CR Approved';
   emailStatus: 'Sent' | 'Failed';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GroupMember {
+  studentId: string;
+  name: string;
+  rollNumber: string;
+}
+
+export interface Group {
+  _id: string;
+  groupName: string;
+  subjectId: Subject | string;
+  assignmentId?: Assignment | string;
+  leader: GroupMember;
+  members: GroupMember[];
+  maxGroupSize: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LateRequest {
+  _id: string;
+  studentId: string;
+  groupId?: Group | string;
+  subjectId: Subject | string;
+  assignmentId: Assignment | string;
+  studentName: string;
+  rollNumber: string;
+  reason: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  requestedAt: string;
+  decidedAt?: string;
+  decidedBy?: string;
   createdAt: string;
   updatedAt: string;
 }

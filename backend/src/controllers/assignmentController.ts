@@ -7,6 +7,7 @@ import { AuthRequest } from '../middleware/auth.js';
 export const getAssignments = async (req: Request, res: Response): Promise<void> => {
   try {
     const { subjectId, includeInactive } = req.query;
+    const requestedSubmissionType = String(req.query.submissionType || '').trim();
     const filter: any = {};
 
     if (subjectId) {
@@ -20,8 +21,11 @@ export const getAssignments = async (req: Request, res: Response): Promise<void>
     const assignments = await Assignment.find(filter)
       .populate('subjectId', 'name code')
       .sort({ deadline: 1 });
+    const visibleAssignments = requestedSubmissionType === 'Group' || requestedSubmissionType === 'Individual'
+      ? assignments.filter((assignment) => assignment.submissionType === requestedSubmissionType)
+      : assignments;
 
-    res.status(200).json({ success: true, count: assignments.length, assignments });
+    res.status(200).json({ success: true, count: visibleAssignments.length, assignments: visibleAssignments });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch assignments.' });
   }
@@ -51,6 +55,8 @@ export const createAssignment = async (req: AuthRequest, res: Response): Promise
       allowLateSubmission,
       allowedFileTypes,
       maxFileSize,
+      maxGroupSize,
+      submissionType,
       isActive,
     } = req.body;
 
@@ -75,6 +81,8 @@ export const createAssignment = async (req: AuthRequest, res: Response): Promise
         ? allowedFileTypes.map((t: string) => t.replace('.', '').toLowerCase().trim())
         : ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'zip'],
       maxFileSize: Number(maxFileSize) > 0 ? Number(maxFileSize) : 10,
+      maxGroupSize: Number(maxGroupSize) > 0 ? Number(maxGroupSize) : 4,
+      submissionType: submissionType === 'Individual' ? 'Individual' : 'Group',
       isActive: isActive !== undefined ? Boolean(isActive) : true,
     });
 
@@ -100,6 +108,8 @@ export const updateAssignment = async (req: AuthRequest, res: Response): Promise
       allowLateSubmission,
       allowedFileTypes,
       maxFileSize,
+      maxGroupSize,
+      submissionType,
       isActive,
       subjectId,
     } = req.body;
@@ -127,6 +137,8 @@ export const updateAssignment = async (req: AuthRequest, res: Response): Promise
       assignment.allowedFileTypes = allowedFileTypes.map((t: string) => t.replace('.', '').toLowerCase().trim());
     }
     if (maxFileSize && Number(maxFileSize) > 0) assignment.maxFileSize = Number(maxFileSize);
+    if (maxGroupSize && Number(maxGroupSize) > 0) assignment.maxGroupSize = Number(maxGroupSize);
+    if (submissionType && ['Individual', 'Group'].includes(submissionType)) assignment.submissionType = submissionType;
     if (isActive !== undefined) assignment.isActive = Boolean(isActive);
 
     await assignment.save();

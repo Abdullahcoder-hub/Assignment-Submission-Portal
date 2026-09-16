@@ -5,6 +5,8 @@ import axios from 'axios';
 import Subject from '../models/Subject.js';
 import Assignment from '../models/Assignment.js';
 import Submission from '../models/Submission.js';
+import Group from '../models/Group.js';
+import LateRequest from '../models/LateRequest.js';
 import cloudinary, { uploadToCloudinary, deleteFromCloudinary, sanitizePathSegment } from '../config/cloudinary.js';
 import { sendSubmissionConfirmationEmail } from '../config/brevo.js';
 import { generateSubmissionId } from '../utils/submissionId.js';
@@ -73,10 +75,34 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
     // 4. Deadline Check
     const now = new Date();
     const isPastDeadline = now > new Date(assignment.deadline);
+    let submissionStatus: 'Submitted' | 'Late' | 'Submitted Late — CR Approved' = 'Submitted';
 
-    if (isPastDeadline && !assignment.allowLateSubmission) {
-      res.status(400).json({ success: false, message: 'Submission deadline has passed.' });
-      return;
+    if (isPastDeadline) {
+      if (assignment.allowLateSubmission) {
+        submissionStatus = 'Late';
+      } else {
+        // Check if student or group has an approved late request for this assignment
+        const group = await Group.findOne({ subjectId, 'members.studentId': studentId });
+        const filter: any = { assignmentId, status: 'Approved' };
+        if (group) {
+          filter.$or = [{ groupId: group._id }, { studentId }];
+        } else {
+          filter.studentId = studentId;
+        }
+
+        const approvedLateReq = await LateRequest.findOne(filter);
+        if (!approvedLateReq) {
+          res.status(400).json({
+            success: false,
+            isPastDeadline: true,
+            lateRequestRequired: true,
+            message: 'Submission deadline has passed. Please submit a Late Submission Request to your CR for approval.',
+          });
+          return;
+        }
+
+        submissionStatus = 'Submitted Late — CR Approved';
+      }
     }
 
     const isLate = isPastDeadline;
@@ -159,7 +185,7 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
         fileType: file.mimetype || 'application/octet-stream',
         submittedAt: submittedAtDate,
         isLate,
-        status: isLate ? 'Late' : 'Submitted',
+        status: submissionStatus,
         emailStatus: 'Sent',
       });
     } catch (dbErr: any) {
