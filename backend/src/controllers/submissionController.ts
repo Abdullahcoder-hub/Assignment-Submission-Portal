@@ -324,8 +324,8 @@ export const getSubmissions = async (req: AuthRequest, res: Response): Promise<v
  */
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const totalSubjects = await Subject.countDocuments();
-    const totalAssignments = await Assignment.countDocuments();
+    const totalSubjects = await Subject.countDocuments({ isActive: true });
+    const totalAssignments = await Assignment.countDocuments({ isActive: true });
     const totalSubmissions = await Submission.countDocuments();
 
     const startOfToday = moment().tz(timezone).startOf('day').toDate();

@@ -128,7 +128,7 @@ export const AdminDashboard: React.FC = () => {
   const fetchSubjects = async () => {
     try {
       setLoadingSubjects(true);
-      const res = await api.get('/subjects?includeInactive=true');
+      const res = await api.get('/subjects');
       if (res.data.success) {
         setSubjects(res.data.subjects);
       }
@@ -143,7 +143,7 @@ export const AdminDashboard: React.FC = () => {
   const fetchAssignments = async () => {
     try {
       setLoadingAssignments(true);
-      const res = await api.get('/assignments?includeInactive=true');
+      const res = await api.get('/assignments');
       if (res.data.success) {
         setAssignments(res.data.assignments);
       }
@@ -290,6 +290,10 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const refreshAdminData = async () => {
+    await Promise.all([fetchDashboardStats(), fetchSubjects(), fetchAssignments()]);
+  };
+
   useEffect(() => {
     fetchDashboardStats();
     fetchSubjects();
@@ -315,14 +319,14 @@ export const AdminDashboard: React.FC = () => {
         const res = await api.put(`/subjects/${editingSubject._id}`, subjectForm);
         if (res.data.success) {
           showToast('success', 'Subject updated successfully.');
-          fetchSubjects();
+          await refreshAdminData();
           setSubjectModalOpen(false);
         }
       } else {
         const res = await api.post('/subjects', subjectForm);
         if (res.data.success) {
           showToast('success', 'Subject created successfully.');
-          fetchSubjects();
+          await refreshAdminData();
           setSubjectModalOpen(false);
         }
       }
@@ -332,12 +336,15 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleDeleteSubject = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete/deactivate this subject?')) return;
+    if (!window.confirm('Delete this subject permanently, including its assignments and submissions?')) return;
     try {
       const res = await api.delete(`/subjects/${id}`);
       if (res.data.success) {
         showToast('success', res.data.message);
-        fetchSubjects();
+        setFilterSubjectId('');
+        setLateFilterSubject('');
+        setGroupFilterSubject('');
+        await refreshAdminData();
       }
     } catch (err: any) {
       showToast('error', err.response?.data?.message || 'Failed to delete subject.');
@@ -364,14 +371,14 @@ export const AdminDashboard: React.FC = () => {
         const res = await api.put(`/assignments/${editingAssignment._id}`, payload);
         if (res.data.success) {
           showToast('success', 'Assignment updated successfully.');
-          fetchAssignments();
+          await refreshAdminData();
           setAssignmentModalOpen(false);
         }
       } else {
         const res = await api.post('/assignments', payload);
         if (res.data.success) {
           showToast('success', 'Assignment created successfully.');
-          fetchAssignments();
+          await refreshAdminData();
           setAssignmentModalOpen(false);
         }
       }
@@ -381,12 +388,13 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleDeleteAssignment = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete/deactivate this assignment?')) return;
+    if (!window.confirm('Delete this assignment permanently, including its submissions? This action cannot be undone.')) return;
     try {
       const res = await api.delete(`/assignments/${id}`);
       if (res.data.success) {
         showToast('success', res.data.message);
-        fetchAssignments();
+        setFilterAssignmentId('');
+        await refreshAdminData();
       }
     } catch (err: any) {
       showToast('error', err.response?.data?.message || 'Failed to delete assignment.');
@@ -490,23 +498,14 @@ export const AdminDashboard: React.FC = () => {
       hour12: true,
     });
   };
+
+  const toLocalDateTimeInput = (date: Date) => {
+    const offset = date.getTimezoneOffset();
+    return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
+  };
   
   const assignmentStatus = (assignment: Assignment) =>
     assignment.isActive && new Date(assignment.deadline) >= new Date() ? 'Active' : 'Closed';
-  const activeAssignments = assignments.filter((assignment) => assignment.isActive);
-  const deletedAssignments = assignments.filter((assignment) => !assignment.isActive);
-
-  const handleRestoreAssignment = async (id: string) => {
-    try {
-      const res = await api.put(`/assignments/${id}`, { isActive: true });
-      if (res.data.success) {
-        showToast('success', 'Assignment restored successfully.');
-        fetchAssignments();
-      }
-    } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to restore assignment.');
-    }
-  };
 
   return (
     <div className="admin-dashboard min-h-[90vh] flex flex-col md:flex-row bg-slate-100 min-w-0">
@@ -773,7 +772,7 @@ export const AdminDashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
               <table className="w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
@@ -840,10 +839,10 @@ export const AdminDashboard: React.FC = () => {
               </table>
 
               <div className="assignment-cards sm:hidden divide-y divide-slate-100">
-                {activeAssignments.length === 0 ? (
+                {assignments.length === 0 ? (
                   <div className="p-6 text-center text-sm text-slate-400">No assignments created yet.</div>
                 ) : (
-                  activeAssignments.map((ass) => (
+                  assignments.map((ass) => (
                     <article key={ass._id} className="p-4 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -874,7 +873,7 @@ export const AdminDashboard: React.FC = () => {
                         <button title="Export CSV" onClick={() => handleExportCsv(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-lg"><FileSpreadsheet className="w-4 h-4" /> CSV</button>
                         <button title="Edit assignment" onClick={() => {
                           setEditingAssignment(ass);
-                          setAssignmentForm({ subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string), title: ass.title, description: ass.description || '', deadline: new Date(ass.deadline).toISOString().slice(0, 16), allowLateSubmission: ass.allowLateSubmission, allowedFileTypes: ass.allowedFileTypes.join(', '), maxFileSize: ass.maxFileSize, maxGroupSize: ass.maxGroupSize || 4, submissionType: ass.submissionType || 'Group', isActive: ass.isActive });
+                          setAssignmentForm({ subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string), title: ass.title, description: ass.description || '', deadline: toLocalDateTimeInput(new Date(ass.deadline)), allowLateSubmission: ass.allowLateSubmission, allowedFileTypes: ass.allowedFileTypes.join(', '), maxFileSize: ass.maxFileSize, maxGroupSize: ass.maxGroupSize || 4, submissionType: ass.submissionType || 'Group', isActive: ass.isActive });
                           setAssignmentModalOpen(true);
                         }} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg"><Edit2 className="w-4 h-4" /> Edit</button>
                         <button title="Delete assignment" onClick={() => handleDeleteAssignment(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg"><Trash2 className="w-4 h-4" /> Delete</button>
@@ -903,7 +902,7 @@ export const AdminDashboard: React.FC = () => {
                     subjectId: subjects[0]?._id || '',
                     title: '',
                     description: '',
-                    deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+                    deadline: toLocalDateTimeInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
                     allowLateSubmission: false,
                     allowedFileTypes: 'pdf, doc, docx, ppt, pptx, zip',
                     maxFileSize: 10,
@@ -919,7 +918,7 @@ export const AdminDashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
               <table className="assignment-table hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
@@ -935,14 +934,14 @@ export const AdminDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {activeAssignments.length === 0 ? (
+                  {assignments.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="text-center py-8 text-slate-400">
                         No assignments created yet. Click 'Create Assignment' to create one.
                       </td>
                     </tr>
                   ) : (
-                    activeAssignments.map((ass) => (
+                    assignments.map((ass) => (
                       <tr key={ass._id} className="hover:bg-slate-50/80">
                         <td className="p-4 font-bold text-blue-700">
                           {(ass.subjectId as any)?.name || 'N/A'} ({(ass.subjectId as any)?.code || ''})
@@ -998,7 +997,7 @@ export const AdminDashboard: React.FC = () => {
                                 subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string),
                                 title: ass.title,
                                 description: ass.description || '',
-                                deadline: new Date(ass.deadline).toISOString().slice(0, 16),
+                                deadline: toLocalDateTimeInput(new Date(ass.deadline)),
                                 allowLateSubmission: ass.allowLateSubmission,
                                 allowedFileTypes: ass.allowedFileTypes.join(', '),
                                 maxFileSize: ass.maxFileSize,
@@ -1025,18 +1024,6 @@ export const AdminDashboard: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'assignments' && deletedAssignments.length > 0 && (
-          <div className="mt-6 bg-slate-50 rounded-2xl border border-slate-200 p-4 sm:p-6 space-y-3">
-            <h2 className="font-bold text-slate-700">Deleted Assignments ({deletedAssignments.length})</h2>
-            {deletedAssignments.map((ass) => (
-              <div key={ass._id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl p-3">
-                <div className="min-w-0"><p className="font-bold text-slate-800 break-words">{ass.title}</p><p className="text-xs text-slate-500 break-words">{(ass.subjectId as any)?.name || 'Subject'} · {formatDate(ass.deadline)}</p></div>
-                <button onClick={() => handleRestoreAssignment(ass._id)} className="w-full sm:w-auto px-3 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg">Restore</button>
-              </div>
-            ))}
           </div>
         )}
 
@@ -1133,7 +1120,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Submissions Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
               <table className="hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
@@ -1381,7 +1368,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
               <table className="hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">

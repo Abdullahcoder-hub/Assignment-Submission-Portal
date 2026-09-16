@@ -26,10 +26,12 @@ body {
     min-width: 640px;
   }
 
-  .admin-dashboard table,
-  .student-dashboard table {
-    display: block;
-    width: 100%;
-    overflow-x: auto;
+  .admin-dashboard .assignment-table {
+    display: table;
+    min-width: 980px;
+  }
+
+  .admin-dashboard .assignment-cards {
+    display: none;
   }
 }

@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import Assignment from '../models/Assignment.js';
 import Subject from '../models/Subject.js';
 import Submission from '../models/Submission.js';
+import Group from '../models/Group.js';
+import LateRequest from '../models/LateRequest.js';
 import { AuthRequest } from '../middleware/auth.js';
 
 export const getAssignments = async (req: Request, res: Response): Promise<void> => {
@@ -165,9 +167,13 @@ export const deleteAssignment = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    assignment.isActive = false;
-    await assignment.save();
-    res.status(200).json({ success: true, message: 'Assignment moved to Deleted assignments.' , assignment });
+    await Promise.all([
+      Submission.deleteMany({ assignmentId: id }),
+      Group.deleteMany({ assignmentId: id }),
+      LateRequest.deleteMany({ assignmentId: id }),
+      Assignment.findByIdAndDelete(id),
+    ]);
+    res.status(200).json({ success: true, message: 'Assignment and related submissions deleted permanently.' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to delete assignment.' });
   }

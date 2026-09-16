@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import Subject from '../models/Subject.js';
 import Assignment from '../models/Assignment.js';
 import Submission from '../models/Submission.js';
+import Group from '../models/Group.js';
+import LateRequest from '../models/LateRequest.js';
 import { AuthRequest } from '../middleware/auth.js';
 
 export const getSubjects = async (req: Request, res: Response): Promise<void> => {
@@ -87,24 +89,16 @@ export const deleteSubject = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Check if there are assignments or submissions tied to this subject
-    const assignmentCount = await Assignment.countDocuments({ subjectId: id });
-    const submissionCount = await Submission.countDocuments({ subjectId: id });
-
-    if (assignmentCount > 0 || submissionCount > 0) {
-      // Prefer deactivating instead of orphan data deletion
-      subject.isActive = false;
-      await subject.save();
-      res.status(200).json({
-        success: true,
-        message: `Subject deactivated safely instead of permanently deleted because it has ${assignmentCount} assignment(s) and ${submissionCount} submission(s).`,
-        subject,
-      });
-      return;
-    }
-
-    await Subject.findByIdAndDelete(id);
-    res.status(200).json({ success: true, message: 'Subject deleted successfully.' });
+    const assignments = await Assignment.find({ subjectId: id }).select('_id');
+    const assignmentIds = assignments.map((assignment) => assignment._id);
+    await Promise.all([
+      Submission.deleteMany({ $or: [{ subjectId: id }, { assignmentId: { $in: assignmentIds } }] }),
+      Group.deleteMany({ subjectId: id }),
+      LateRequest.deleteMany({ $or: [{ subjectId: id }, { assignmentId: { $in: assignmentIds } }] }),
+      Assignment.deleteMany({ subjectId: id }),
+      Subject.findByIdAndDelete(id),
+    ]);
+    res.status(200).json({ success: true, message: 'Subject and all related records deleted permanently.' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to delete subject.' });
   }
