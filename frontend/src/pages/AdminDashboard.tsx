@@ -89,6 +89,7 @@ export const AdminDashboard: React.FC = () => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loadingGroups, setLoadingGroups] = useState<boolean>(false);
   const [groupFilterSubject, setGroupFilterSubject] = useState<string>('');
+  const [groupFilterAssignment, setGroupFilterAssignment] = useState<string>('');
   const [groupSearch, setGroupSearch] = useState<string>('');
 
   // Late Requests state
@@ -205,6 +206,7 @@ export const AdminDashboard: React.FC = () => {
       setLoadingGroups(true);
       let query = '/groups?';
       if (groupFilterSubject) query += `subjectId=${groupFilterSubject}&`;
+      if (groupFilterAssignment) query += `assignmentId=${groupFilterAssignment}&`;
       if (groupSearch) query += `search=${encodeURIComponent(groupSearch.trim())}&`;
       const res = await api.get(query);
       if (res.data.success) {
@@ -441,7 +443,7 @@ export const AdminDashboard: React.FC = () => {
     } else if (activeTab === 'students') {
       fetchStudents();
     }
-  }, [activeTab, currentPage, filterSubjectId, filterAssignmentId, filterStatus, groupFilterSubject, groupSearch, lateFilterSubject, lateFilterStatus, lateSearch, studentSearch]);
+  }, [activeTab, currentPage, filterSubjectId, filterAssignmentId, filterStatus, groupFilterSubject, groupFilterAssignment, groupSearch, lateFilterSubject, lateFilterStatus, lateSearch, studentSearch]);
 
   // SUBJECT MODAL SUBMIT
   const handleSaveSubject = async (e: React.FormEvent) => {
@@ -476,6 +478,7 @@ export const AdminDashboard: React.FC = () => {
         setFilterSubjectId('');
         setLateFilterSubject('');
         setGroupFilterSubject('');
+        setGroupFilterAssignment('');
         await refreshAdminData();
       }
     } catch (err: any) {
@@ -605,7 +608,10 @@ export const AdminDashboard: React.FC = () => {
     try {
       showToast('success', 'Exporting Groups CSV...');
       let urlStr = '/groups/export-csv';
-      if (groupFilterSubject) urlStr += `?subjectId=${groupFilterSubject}`;
+      const params = new URLSearchParams();
+      if (groupFilterSubject) params.set('subjectId', groupFilterSubject);
+      if (groupFilterAssignment) params.set('assignmentId', groupFilterAssignment);
+      if (params.toString()) urlStr += `?${params.toString()}`;
       const response = await api.get(urlStr, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -1405,7 +1411,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Filter bar */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -1419,7 +1425,10 @@ export const AdminDashboard: React.FC = () => {
 
               <select
                 value={groupFilterSubject}
-                onChange={(e) => setGroupFilterSubject(e.target.value)}
+                onChange={(e) => {
+                  setGroupFilterSubject(e.target.value);
+                  setGroupFilterAssignment('');
+                }}
                 className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
               >
                 <option value="">All Subjects</option>
@@ -1428,6 +1437,29 @@ export const AdminDashboard: React.FC = () => {
                     {sub.name} ({sub.code})
                   </option>
                 ))}
+              </select>
+
+              <select
+                value={groupFilterAssignment}
+                onChange={(e) => setGroupFilterAssignment(e.target.value)}
+                disabled={!groupFilterSubject}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <option value="">
+                  {groupFilterSubject ? 'All Active Assignments' : 'Select Subject First'}
+                </option>
+                {assignments
+                  .filter((assignment) => {
+                    const assignmentSubjectId = typeof assignment.subjectId === 'string'
+                      ? assignment.subjectId
+                      : assignment.subjectId._id;
+                    return assignmentSubjectId === groupFilterSubject && assignment.isActive;
+                  })
+                  .map((assignment) => (
+                    <option key={assignment._id} value={assignment._id}>
+                      {assignment.title}
+                    </option>
+                  ))}
               </select>
             </div>
 
