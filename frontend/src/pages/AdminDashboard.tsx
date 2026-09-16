@@ -747,7 +747,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="assignment-table hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
                     <th className="p-4">Code</th>
@@ -811,6 +811,45 @@ export const AdminDashboard: React.FC = () => {
                   )}
                 </tbody>
               </table>
+
+              <div className="assignment-cards sm:hidden divide-y divide-slate-100">
+                {assignments.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-slate-400">No assignments created yet.</div>
+                ) : (
+                  assignments.map((ass) => (
+                    <article key={ass._id} className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-blue-700 break-words">
+                            {(ass.subjectId as any)?.name || 'N/A'} ({(ass.subjectId as any)?.code || ''})
+                          </p>
+                          <h3 className="font-bold text-slate-900 break-words">{ass.title}</h3>
+                        </div>
+                        <span className={`shrink-0 px-2 py-1 text-[10px] font-bold rounded-full ${ass.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                          {ass.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                        <div><span className="text-slate-500">Deadline</span><p className="font-semibold text-slate-700 break-words">{formatDate(ass.deadline)}</p></div>
+                        <div><span className="text-slate-500">Mode</span><p className="font-semibold text-slate-700">{ass.submissionType === 'Individual' ? 'Individual' : `Group (${ass.maxGroupSize || 4} max)`}</p></div>
+                        <div><span className="text-slate-500">Late allowed</span><p className={`font-bold ${ass.allowLateSubmission ? 'text-emerald-700' : 'text-red-700'}`}>{ass.allowLateSubmission ? 'Yes' : 'No'}</p></div>
+                        <div><span className="text-slate-500">Max file</span><p className="font-semibold text-slate-700">{ass.maxFileSize} MB</p></div>
+                      </div>
+                      <p className="text-xs text-slate-600 break-words"><span className="text-slate-500">Files:</span> {ass.allowedFileTypes.join(', ').toUpperCase()}</p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <button title="Download All as ZIP" onClick={() => handleDownloadZip(ass._id)} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Download className="w-4 h-4" /></button>
+                        <button title="Export CSV" onClick={() => handleExportCsv(ass._id)} className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><FileSpreadsheet className="w-4 h-4" /></button>
+                        <button title="Edit assignment" onClick={() => {
+                          setEditingAssignment(ass);
+                          setAssignmentForm({ subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string), title: ass.title, description: ass.description || '', deadline: new Date(ass.deadline).toISOString().slice(0, 16), allowLateSubmission: ass.allowLateSubmission, allowedFileTypes: ass.allowedFileTypes.join(', '), maxFileSize: ass.maxFileSize, maxGroupSize: ass.maxGroupSize || 4, submissionType: ass.submissionType || 'Group', isActive: ass.isActive });
+                          setAssignmentModalOpen(true);
+                        }} className="p-2 bg-slate-100 text-slate-600 rounded-lg"><Edit2 className="w-4 h-4" /></button>
+                        <button title="Delete assignment" onClick={() => handleDeleteAssignment(ass._id)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         )}
