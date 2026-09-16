@@ -165,20 +165,9 @@ export const deleteAssignment = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const submissionCount = await Submission.countDocuments({ assignmentId: id });
-    if (submissionCount > 0) {
-      assignment.isActive = false;
-      await assignment.save();
-      res.status(200).json({
-        success: true,
-        message: `Assignment deactivated safely instead of permanently deleted because it has ${submissionCount} submission(s).`,
-        assignment,
-      });
-      return;
-    }
-
-    await Assignment.findByIdAndDelete(id);
-    res.status(200).json({ success: true, message: 'Assignment deleted successfully.' });
+    assignment.isActive = false;
+    await assignment.save();
+    res.status(200).json({ success: true, message: 'Assignment moved to Deleted assignments.' , assignment });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to delete assignment.' });
   }

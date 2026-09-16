@@ -490,6 +490,23 @@ export const AdminDashboard: React.FC = () => {
       hour12: true,
     });
   };
+  
+  const assignmentStatus = (assignment: Assignment) =>
+    assignment.isActive && new Date(assignment.deadline) >= new Date() ? 'Active' : 'Closed';
+  const activeAssignments = assignments.filter((assignment) => assignment.isActive);
+  const deletedAssignments = assignments.filter((assignment) => !assignment.isActive);
+
+  const handleRestoreAssignment = async (id: string) => {
+    try {
+      const res = await api.put(`/assignments/${id}`, { isActive: true });
+      if (res.data.success) {
+        showToast('success', 'Assignment restored successfully.');
+        fetchAssignments();
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to restore assignment.');
+    }
+  };
 
   return (
     <div className="admin-dashboard min-h-[90vh] flex flex-col md:flex-row bg-slate-100 min-w-0">
@@ -681,7 +698,7 @@ export const AdminDashboard: React.FC = () => {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse">
+                <table className="hidden sm:table w-full text-left text-sm border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
                       <th className="p-3">Student</th>
@@ -721,6 +738,16 @@ export const AdminDashboard: React.FC = () => {
                     )}
                   </tbody>
                 </table>
+                <div className="sm:hidden divide-y divide-slate-100">
+                  {recentSubmissions.length === 0 ? <p className="py-6 text-center text-sm text-slate-400">No recent submissions recorded yet.</p> : recentSubmissions.map((sub) => (
+                    <div key={sub._id} className="p-3 space-y-1.5">
+                      <div className="flex justify-between gap-2"><p className="font-bold text-slate-900 break-words">{sub.studentName}</p><span className="shrink-0 px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded-md">{sub.status}</span></div>
+                      <p className="text-xs text-slate-600 break-words">{sub.rollNumber} · {(sub.subjectId as any)?.name || 'Subject'}</p>
+                      <p className="text-xs font-semibold text-slate-700 break-words">{(sub.assignmentId as any)?.title || 'Assignment'}</p>
+                      <p className="text-[11px] text-slate-500">{formatDate(sub.submittedAt)}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -747,7 +774,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <table className="assignment-table hidden sm:table w-full text-left text-sm border-collapse">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
                     <th className="p-4">Code</th>
@@ -813,10 +840,10 @@ export const AdminDashboard: React.FC = () => {
               </table>
 
               <div className="assignment-cards sm:hidden divide-y divide-slate-100">
-                {assignments.length === 0 ? (
+                {activeAssignments.length === 0 ? (
                   <div className="p-6 text-center text-sm text-slate-400">No assignments created yet.</div>
                 ) : (
-                  assignments.map((ass) => (
+                  activeAssignments.map((ass) => (
                     <article key={ass._id} className="p-4 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -825,8 +852,8 @@ export const AdminDashboard: React.FC = () => {
                           </p>
                           <h3 className="font-bold text-slate-900 break-words">{ass.title}</h3>
                         </div>
-                        <span className={`shrink-0 px-2 py-1 text-[10px] font-bold rounded-full ${ass.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                          {ass.isActive ? 'Active' : 'Inactive'}
+                        <span className={`shrink-0 px-2 py-1 text-[10px] font-bold rounded-full ${assignmentStatus(ass) === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                          {assignmentStatus(ass)}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
@@ -835,16 +862,23 @@ export const AdminDashboard: React.FC = () => {
                         <div><span className="text-slate-500">Late allowed</span><p className={`font-bold ${ass.allowLateSubmission ? 'text-emerald-700' : 'text-red-700'}`}>{ass.allowLateSubmission ? 'Yes' : 'No'}</p></div>
                         <div><span className="text-slate-500">Max file</span><p className="font-semibold text-slate-700">{ass.maxFileSize} MB</p></div>
                       </div>
+                      <div className="flex items-center justify-between gap-2 border-t border-slate-200 pt-2 text-xs">
+                        <span className="text-slate-500">Status</span>
+                        <span className={`font-bold ${assignmentStatus(ass) === 'Active' ? 'text-emerald-700' : 'text-slate-600'}`}>{assignmentStatus(ass)}</span>
+                      </div>
                       <p className="text-xs text-slate-600 break-words"><span className="text-slate-500">Files:</span> {ass.allowedFileTypes.join(', ').toUpperCase()}</p>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <button title="Download All as ZIP" onClick={() => handleDownloadZip(ass._id)} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Download className="w-4 h-4" /></button>
-                        <button title="Export CSV" onClick={() => handleExportCsv(ass._id)} className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><FileSpreadsheet className="w-4 h-4" /></button>
+                      <div className="border-t border-slate-200 pt-2">
+                        <p className="text-xs text-slate-500 mb-2">Actions</p>
+                        <div className="flex flex-wrap gap-2">
+                        <button title="Download All as ZIP" onClick={() => handleDownloadZip(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg"><Download className="w-4 h-4" /> ZIP</button>
+                        <button title="Export CSV" onClick={() => handleExportCsv(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-lg"><FileSpreadsheet className="w-4 h-4" /> CSV</button>
                         <button title="Edit assignment" onClick={() => {
                           setEditingAssignment(ass);
                           setAssignmentForm({ subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string), title: ass.title, description: ass.description || '', deadline: new Date(ass.deadline).toISOString().slice(0, 16), allowLateSubmission: ass.allowLateSubmission, allowedFileTypes: ass.allowedFileTypes.join(', '), maxFileSize: ass.maxFileSize, maxGroupSize: ass.maxGroupSize || 4, submissionType: ass.submissionType || 'Group', isActive: ass.isActive });
                           setAssignmentModalOpen(true);
-                        }} className="p-2 bg-slate-100 text-slate-600 rounded-lg"><Edit2 className="w-4 h-4" /></button>
-                        <button title="Delete assignment" onClick={() => handleDeleteAssignment(ass._id)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                        }} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg"><Edit2 className="w-4 h-4" /> Edit</button>
+                        <button title="Delete assignment" onClick={() => handleDeleteAssignment(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg"><Trash2 className="w-4 h-4" /> Delete</button>
+                        </div>
                       </div>
                     </article>
                   ))
@@ -886,7 +920,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="assignment-table hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
                     <th className="p-4">Subject</th>
@@ -901,14 +935,14 @@ export const AdminDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {assignments.length === 0 ? (
+                  {activeAssignments.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="text-center py-8 text-slate-400">
                         No assignments created yet. Click 'Create Assignment' to create one.
                       </td>
                     </tr>
                   ) : (
-                    assignments.map((ass) => (
+                    activeAssignments.map((ass) => (
                       <tr key={ass._id} className="hover:bg-slate-50/80">
                         <td className="p-4 font-bold text-blue-700">
                           {(ass.subjectId as any)?.name || 'N/A'} ({(ass.subjectId as any)?.code || ''})
@@ -938,15 +972,9 @@ export const AdminDashboard: React.FC = () => {
                         </td>
                         <td className="p-4 text-xs font-bold text-slate-700">{ass.maxFileSize} MB</td>
                         <td className="p-4">
-                          {ass.isActive ? (
-                            <span className="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-full">
-                              Active
-                            </span>
-                          ) : (
-                            <span className="px-2.5 py-1 text-xs font-bold bg-slate-200 text-slate-600 rounded-full">
-                              Inactive
-                            </span>
-                          )}
+                          <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${assignmentStatus(ass) === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                            {assignmentStatus(ass)}
+                          </span>
                         </td>
                         <td className="p-4 text-right space-x-2">
                           <button
@@ -997,6 +1025,18 @@ export const AdminDashboard: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'assignments' && deletedAssignments.length > 0 && (
+          <div className="mt-6 bg-slate-50 rounded-2xl border border-slate-200 p-4 sm:p-6 space-y-3">
+            <h2 className="font-bold text-slate-700">Deleted Assignments ({deletedAssignments.length})</h2>
+            {deletedAssignments.map((ass) => (
+              <div key={ass._id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl p-3">
+                <div className="min-w-0"><p className="font-bold text-slate-800 break-words">{ass.title}</p><p className="text-xs text-slate-500 break-words">{(ass.subjectId as any)?.name || 'Subject'} · {formatDate(ass.deadline)}</p></div>
+                <button onClick={() => handleRestoreAssignment(ass._id)} className="w-full sm:w-auto px-3 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg">Restore</button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -1094,7 +1134,7 @@ export const AdminDashboard: React.FC = () => {
 
             {/* Submissions Table */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
                     <th className="p-4">Submission ID</th>
@@ -1158,6 +1198,20 @@ export const AdminDashboard: React.FC = () => {
                   )}
                 </tbody>
               </table>
+
+              <div className="sm:hidden divide-y divide-slate-100">
+                {loadingSubmissions ? <div className="p-8 text-center text-sm text-slate-500">Loading submissions...</div> : submissions.length === 0 ? <div className="p-8 text-center text-sm text-slate-400">No submissions match the selected filters.</div> : submissions.map((sub) => (
+                  <article key={sub._id} className="p-4 space-y-2">
+                    <div className="flex justify-between gap-2"><p className="font-mono text-xs font-bold text-slate-700 break-all">{sub.submissionId}</p><span className="shrink-0 px-2 py-1 text-[10px] font-bold bg-slate-100 text-slate-700 rounded-md">{sub.status}</span></div>
+                    <p className="font-bold text-slate-900 break-words">{sub.studentName}</p>
+                    <p className="text-xs font-mono text-slate-600 break-all">Roll: {sub.rollNumber}</p>
+                    <p className="text-xs text-slate-700 break-words">{(sub.subjectId as any)?.name || 'Subject'} · {(sub.assignmentId as any)?.title || 'Assignment'}</p>
+                    <p className="text-xs text-blue-600 break-words">File: {sub.originalFileName}</p>
+                    <p className="text-[11px] text-slate-500">Submitted: {formatDate(sub.submittedAt)}</p>
+                    <button onClick={() => handleDownloadSingle(sub._id, sub.originalFileName, sub.cloudinarySecureUrl)} className="w-full inline-flex justify-center items-center gap-1 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg"><Download className="w-3.5 h-3.5" /> Download</button>
+                  </article>
+                ))}
+              </div>
 
               {/* Pagination Controls */}
               <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
@@ -1263,6 +1317,7 @@ export const AdminDashboard: React.FC = () => {
                         </p>
 
                         <p className="text-xs font-bold uppercase tracking-wider text-slate-500 pt-1">Members</p>
+                        <p className="text-xs text-slate-600 break-words">Assignment: <span className="font-semibold">{(grp.assignmentId as any)?.title || 'N/A'}</span></p>
                         <div className="flex flex-wrap gap-1.5">
                           {grp.members.map((m, mIdx) => (
                             <span key={mIdx} className="px-2.5 py-1 bg-white border border-slate-200 text-slate-800 text-xs rounded-md font-medium">
@@ -1327,7 +1382,7 @@ export const AdminDashboard: React.FC = () => {
 
             {/* Table */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
                     <th className="p-4">Student</th>
@@ -1405,6 +1460,18 @@ export const AdminDashboard: React.FC = () => {
                   )}
                 </tbody>
               </table>
+              <div className="sm:hidden divide-y divide-slate-100">
+                {loadingLateRequests ? <div className="p-8 text-center text-sm text-slate-500">Loading late submission requests...</div> : lateRequests.length === 0 ? <div className="p-8 text-center text-sm text-slate-400">No late submission requests found.</div> : lateRequests.map((req) => (
+                  <article key={req._id} className="p-4 space-y-2">
+                    <div className="flex justify-between gap-2"><p className="font-bold text-slate-900 break-words">{req.studentName}</p><span className={`shrink-0 px-2 py-1 text-[10px] font-bold rounded-full ${req.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' : req.status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{req.status}</span></div>
+                    <p className="text-xs font-mono text-slate-600 break-all">Roll: {req.rollNumber}</p>
+                    <p className="text-xs text-slate-700 break-words">{(req.subjectId as any)?.name || 'Subject'} · {(req.assignmentId as any)?.title || 'Assignment'}</p>
+                    <p className="text-xs text-slate-600 break-words">Reason: {req.reason || 'No reason provided'}</p>
+                    <p className="text-[11px] text-slate-500">Requested: {formatDate(req.requestedAt)}</p>
+                    <div className="grid grid-cols-2 gap-2 pt-1"><button onClick={() => handleLateDecision(req._id, 'Approved')} disabled={req.status === 'Approved'} className="py-2 bg-emerald-600 disabled:bg-emerald-300 text-white text-xs font-bold rounded-lg">Allow Submission</button><button onClick={() => handleLateDecision(req._id, 'Rejected')} disabled={req.status === 'Rejected'} className="py-2 bg-red-600 disabled:bg-red-300 text-white text-xs font-bold rounded-lg">Reject</button></div>
+                  </article>
+                ))}
+              </div>
             </div>
           </div>
         )}

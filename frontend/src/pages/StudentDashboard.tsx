@@ -1195,7 +1195,7 @@ export const StudentDashboard: React.FC = () => {
             </span>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-left text-sm border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
@@ -1267,6 +1267,18 @@ export const StudentDashboard: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="sm:hidden divide-y divide-slate-100">
+            {loadingHistory ? <div className="p-8 text-center text-sm text-slate-500">Loading your submission history...</div> : mySubmissions.length === 0 ? <div className="p-8 text-center text-sm text-slate-400">You have not submitted any assignments yet.</div> : mySubmissions.map((sub) => (
+              <article key={sub._id} className="p-4 space-y-2">
+                <div className="flex justify-between gap-2"><p className="font-mono text-xs font-bold text-slate-700 break-all">{sub.submissionId}</p><span className="shrink-0 px-2 py-1 text-[10px] font-bold bg-slate-100 text-slate-700 rounded-full">{sub.status}</span></div>
+                <p className="font-bold text-slate-900 break-words">{(sub.subjectId as any)?.name || 'Subject'}</p>
+                <p className="text-sm font-semibold text-slate-800 break-words">{(sub.assignmentId as any)?.title || 'Assignment'}</p>
+                <p className="text-xs text-blue-600 break-words">File: {sub.originalFileName}</p>
+                <p className="text-[11px] text-slate-500">Submitted: {formatDate(sub.submittedAt)}</p>
+                <button type="button" onClick={() => handleDeleteSubmission(sub._id)} disabled={deletingId === sub._id} className="w-full py-2 bg-red-50 text-red-700 text-xs font-bold rounded-lg border border-red-200">{deletingId === sub._id ? 'Deleting...' : 'Delete & Re-upload'}</button>
+              </article>
+            ))}
           </div>
         </div>
       )}
