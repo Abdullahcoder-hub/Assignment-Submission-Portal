@@ -492,7 +492,7 @@ export const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[90vh] flex flex-col md:flex-row bg-slate-100">
+    <div className="admin-dashboard min-h-[90vh] flex flex-col md:flex-row bg-slate-100 min-w-0">
       {/* SIDEBAR */}
       <aside className="w-full md:w-64 bg-slate-900 text-slate-300 shrink-0 border-r border-slate-800">
         <div className="p-6 border-b border-slate-800">
@@ -588,7 +588,7 @@ export const AdminDashboard: React.FC = () => {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 p-6 sm:p-8 max-w-7xl">
+      <main className="flex-1 min-w-0 p-6 sm:p-8 max-w-7xl">
         {/* Toast Notification */}
         {toastMessage && (
           <div
@@ -1604,7 +1604,7 @@ export const AdminDashboard: React.FC = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Submission Mode</label>
                     <select
@@ -1644,7 +1644,7 @@ export const AdminDashboard: React.FC = () => {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Allowed File Types</label>
                     <input

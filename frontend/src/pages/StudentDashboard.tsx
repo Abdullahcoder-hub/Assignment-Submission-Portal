@@ -495,7 +495,7 @@ export const StudentDashboard: React.FC = () => {
   const canSubmitNow = !isLateBlocked || (lateReqStatus && lateReqStatus.status === 'Approved');
 
   return (
-    <div className="max-w-6xl mx-auto py-8 px-4 space-y-8">
+    <div className="student-dashboard max-w-6xl mx-auto py-8 px-4 space-y-8 min-w-0">
       {/* PROFILE SUMMARY HEADER */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 border border-slate-800">
         <div className="flex items-center gap-4">
@@ -509,17 +509,17 @@ export const StudentDashboard: React.FC = () => {
                 Verified Student
               </span>
             </div>
-            <p className="text-sm text-slate-400 mt-0.5">
-              Roll Number: <span className="font-mono font-bold text-white">{student?.rollNumber}</span> &bull; Email:{' '}
-              <span className="text-slate-300">{student?.email}</span>
+            <p className="text-sm text-slate-400 mt-0.5 break-words">
+              Roll Number: <span className="font-mono font-bold text-white break-all">{student?.rollNumber}</span> &bull; Email:{' '}
+              <span className="text-slate-300 break-all">{student?.email}</span>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-xl border border-slate-700 w-full sm:w-auto">
+        <div className="grid grid-cols-1 gap-1.5 bg-slate-800 p-1.5 rounded-xl border border-slate-700 w-full sm:flex sm:items-center sm:gap-2 sm:w-auto">
           <button
             onClick={() => setActiveTab('submit')}
-            className={`flex-1 sm:flex-none px-4 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 ${
+            className={`w-full sm:flex-none px-4 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 ${
               activeTab === 'submit' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
             }`}
           >
