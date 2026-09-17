@@ -19,6 +19,8 @@ export interface Assignment {
   maxFileSize: number; // MB
   maxGroupSize?: number;
   submissionType?: 'Individual' | 'Group';
+  groupDeadline?: string;
+  allowLateGroupRegistration?: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

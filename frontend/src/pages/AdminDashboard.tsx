@@ -40,9 +40,25 @@ import {
 
 export const AdminDashboard: React.FC = () => {
   const { logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'subjects' | 'assignments' | 'submissions' | 'groups' | 'late-requests' | 'students' | 'settings'
-  >('dashboard');
+  const validTabs = ['dashboard', 'subjects', 'assignments', 'submissions', 'groups', 'late-requests', 'students', 'settings'] as const;
+  type TabType = typeof validTabs[number];
+
+  const [activeTab, setActiveTabState] = useState<TabType>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabFromUrl = params.get('tab') as TabType;
+    if (validTabs.includes(tabFromUrl)) return tabFromUrl;
+    const savedTab = localStorage.getItem('admin_active_tab') as TabType;
+    if (validTabs.includes(savedTab)) return savedTab;
+    return 'dashboard';
+  });
+
+  const setActiveTab = (tab: TabType) => {
+    setActiveTabState(tab);
+    localStorage.setItem('admin_active_tab', tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState(null, '', url.toString());
+  };
 
   // Join Code state
   const [joinCode, setJoinCode] = useState<string>('');
@@ -70,7 +86,9 @@ export const AdminDashboard: React.FC = () => {
     title: '',
     description: '',
     deadline: '',
+    groupDeadline: '',
     allowLateSubmission: false,
+    allowLateGroupRegistration: false,
     allowedFileTypes: 'pdf, doc, docx, ppt, pptx, zip',
     maxFileSize: 10,
     maxGroupSize: 4,
@@ -1035,7 +1053,20 @@ export const AdminDashboard: React.FC = () => {
                         <button title="View unsubmitted students" onClick={() => fetchDefaulters(ass)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg"><UserX className="w-4 h-4" /> Defaulters</button>
                         <button title="Edit assignment" onClick={() => {
                           setEditingAssignment(ass);
-                          setAssignmentForm({ subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string), title: ass.title, description: ass.description || '', deadline: toLocalDateTimeInput(new Date(ass.deadline)), allowLateSubmission: ass.allowLateSubmission, allowedFileTypes: ass.allowedFileTypes.join(', '), maxFileSize: ass.maxFileSize, maxGroupSize: ass.maxGroupSize || 4, submissionType: ass.submissionType || 'Group', isActive: ass.isActive });
+                          setAssignmentForm({
+                            subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string),
+                            title: ass.title,
+                            description: ass.description || '',
+                            deadline: toLocalDateTimeInput(new Date(ass.deadline)),
+                            groupDeadline: ass.groupDeadline ? toLocalDateTimeInput(new Date(ass.groupDeadline)) : '',
+                            allowLateSubmission: ass.allowLateSubmission,
+                            allowLateGroupRegistration: ass.allowLateGroupRegistration || false,
+                            allowedFileTypes: ass.allowedFileTypes.join(', '),
+                            maxFileSize: ass.maxFileSize,
+                            maxGroupSize: ass.maxGroupSize || 4,
+                            submissionType: ass.submissionType || 'Group',
+                            isActive: ass.isActive,
+                          });
                           setAssignmentModalOpen(true);
                         }} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg"><Edit2 className="w-4 h-4" /> Edit</button>
                         <button title="Delete assignment" onClick={() => handleDeleteAssignment(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg"><Trash2 className="w-4 h-4" /> Delete</button>
@@ -1065,7 +1096,9 @@ export const AdminDashboard: React.FC = () => {
                     title: '',
                     description: '',
                     deadline: toLocalDateTimeInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+                    groupDeadline: toLocalDateTimeInput(new Date(Date.now() + 4 * 24 * 60 * 60 * 1000)),
                     allowLateSubmission: false,
+                    allowLateGroupRegistration: false,
                     allowedFileTypes: 'pdf, doc, docx, ppt, pptx, zip',
                     maxFileSize: 10,
                     maxGroupSize: 4,
@@ -1165,7 +1198,9 @@ export const AdminDashboard: React.FC = () => {
                                 title: ass.title,
                                 description: ass.description || '',
                                 deadline: toLocalDateTimeInput(new Date(ass.deadline)),
+                                groupDeadline: ass.groupDeadline ? toLocalDateTimeInput(new Date(ass.groupDeadline)) : '',
                                 allowLateSubmission: ass.allowLateSubmission,
+                                allowLateGroupRegistration: ass.allowLateGroupRegistration || false,
                                 allowedFileTypes: ass.allowedFileTypes.join(', '),
                                 maxFileSize: ass.maxFileSize,
                                 maxGroupSize: ass.maxGroupSize || 4,
@@ -1975,6 +2010,39 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {assignmentForm.submissionType === 'Group' && (
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-purple-900 mb-1">
+                        Group Registration Deadline
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={assignmentForm.groupDeadline}
+                        onChange={(e) => setAssignmentForm({ ...assignmentForm, groupDeadline: e.target.value })}
+                        className="w-full px-3 py-2 border border-purple-300 rounded-xl text-xs font-semibold bg-white"
+                      />
+                      <p className="text-[10px] text-purple-700 mt-0.5">
+                        Students must form groups before this time (defaults to assignment deadline if empty).
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="allowLateGroup"
+                        checked={assignmentForm.allowLateGroupRegistration}
+                        onChange={(e) =>
+                          setAssignmentForm({ ...assignmentForm, allowLateGroupRegistration: e.target.checked })
+                        }
+                        className="rounded text-purple-600"
+                      />
+                      <label htmlFor="allowLateGroup" className="text-xs font-bold text-purple-900">
+                        Allow Late Group Registration after Group Deadline
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>

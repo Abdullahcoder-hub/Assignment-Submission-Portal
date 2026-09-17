@@ -27,13 +27,32 @@ import {
   Crown,
   KeyRound,
   Shield,
+  Edit2,
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
   const student = user as StudentUser;
 
-  const [activeTab, setActiveTab] = useState<'submit' | 'groups' | 'history' | 'security'>('submit');
+  const validTabs = ['submit', 'groups', 'history', 'security'] as const;
+  type TabType = typeof validTabs[number];
+
+  const [activeTab, setActiveTabState] = useState<TabType>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabFromUrl = params.get('tab') as TabType;
+    if (validTabs.includes(tabFromUrl)) return tabFromUrl;
+    const savedTab = localStorage.getItem('student_active_tab') as TabType;
+    if (validTabs.includes(savedTab)) return savedTab;
+    return 'submit';
+  });
+
+  const setActiveTab = (tab: TabType) => {
+    setActiveTabState(tab);
+    localStorage.setItem('student_active_tab', tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState(null, '', url.toString());
+  };
 
   // Subjects & Assignments
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -80,6 +99,13 @@ export const StudentDashboard: React.FC = () => {
   const [loadingPrevGroups, setLoadingPrevGroups] = useState<boolean>(false);
   const [groupSubmitting, setGroupSubmitting] = useState<boolean>(false);
   const [groupMsg, setGroupMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Group Edit Modal State
+  const [groupEditModalOpen, setGroupEditModalOpen] = useState<boolean>(false);
+  const [editGroupName, setEditGroupName] = useState<string>('');
+  const [editMembers, setEditMembers] = useState<{ name: string; rollNumber: string }[]>([]);
+  const [editLeaderIndex, setEditLeaderIndex] = useState<number>(0);
+  const [editingGroupSaving, setEditingGroupSaving] = useState<boolean>(false);
 
   // Change Password State
   const [currentPassword, setCurrentPassword] = useState<string>('');
@@ -329,12 +355,27 @@ export const StudentDashboard: React.FC = () => {
         const res = await api.get(`/groups/my-group/${groupSubjectId}?assignmentId=${groupAssignmentId}`);
         if (res.data.success) {
           setMyGroup(res.data.group);
+          if (!res.data.group) {
+            fetchNextGroupNumber(groupSubjectId, groupAssignmentId);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch group info:', err);
       } finally {
         setLoadingMyGroup(false);
         setLoadingPrevGroups(false);
+      }
+    };
+
+    const fetchNextGroupNumber = async (subId: string, assId: string) => {
+      try {
+        const res = await api.get(`/groups/next-number?subjectId=${subId}&assignmentId=${assId}`);
+        if (res.data.success && res.data.suggestedGroupName) {
+          setGroupName(res.data.suggestedGroupName);
+        }
+      } catch (err) {
+        // Fallback default
+        setGroupName('Group 1');
       }
     };
 
@@ -475,6 +516,60 @@ export const StudentDashboard: React.FC = () => {
     }
   };
 
+  const handleOpenEditGroup = () => {
+    if (!myGroup) return;
+    setEditGroupName(myGroup.groupName);
+    setEditMembers(myGroup.members.map((m) => ({ name: m.name, rollNumber: m.rollNumber })));
+    const leaderIdx = myGroup.members.findIndex(
+      (m) => m.rollNumber.toLowerCase() === myGroup.leader.rollNumber.toLowerCase()
+    );
+    setEditLeaderIndex(leaderIdx >= 0 ? leaderIdx : 0);
+    setGroupEditModalOpen(true);
+  };
+
+  const handleSaveGroupEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!myGroup) return;
+    setGroupMsg(null);
+
+    const validMembers = editMembers.filter((m) => m.rollNumber.trim() !== '');
+    if (validMembers.length === 0) {
+      setGroupMsg({ type: 'error', text: 'Group must have at least 1 member.' });
+      return;
+    }
+
+    const seen = new Set<string>();
+    for (const m of validMembers) {
+      const r = m.rollNumber.trim().toUpperCase();
+      if (seen.has(r)) {
+        setGroupMsg({ type: 'error', text: `Roll number '${r}' cannot be used more than once.` });
+        return;
+      }
+      seen.add(r);
+    }
+
+    const leaderRoll = validMembers[editLeaderIndex]?.rollNumber || validMembers[0]?.rollNumber;
+
+    try {
+      setEditingGroupSaving(true);
+      const res = await api.put(`/groups/${myGroup._id}`, {
+        groupName: editGroupName.trim(),
+        leaderRollNumber: leaderRoll,
+        members: validMembers,
+      });
+
+      if (res.data.success) {
+        setMyGroup(res.data.group);
+        setGroupMsg({ type: 'success', text: 'Group members updated successfully!' });
+        setGroupEditModalOpen(false);
+      }
+    } catch (err: any) {
+      setGroupMsg({ type: 'error', text: err.response?.data?.message || 'Failed to update group.' });
+    } finally {
+      setEditingGroupSaving(false);
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0]);
@@ -587,7 +682,28 @@ export const StudentDashboard: React.FC = () => {
   const canSubmitNow = !isLateBlocked || (lateReqStatus && lateReqStatus.status === 'Approved');
 
   return (
-    <div className="student-dashboard w-full max-w-6xl mx-auto py-6 sm:py-8 px-3 sm:px-4 space-y-6 sm:space-y-8 min-w-0">
+    <div className="student-dashboard w-full max-w-6xl mx-auto py-6 sm:py-8 px-3 sm:px-4 space-y-6 sm:space-y-8 min-w-0 relative">
+      {/* FLOATING PROMINENT ERROR NOTIFICATION (NEVER REQUIRE SCROLLING) */}
+      {(errorMsg || (groupMsg && groupMsg.type === 'error') || (passMsg && passMsg.type === 'error')) && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 max-w-xl w-[92%] bg-red-600 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-red-400">
+          <div className="flex items-center gap-2.5 text-xs sm:text-sm font-bold">
+            <AlertCircle className="w-5 h-5 text-white shrink-0" />
+            <span>{errorMsg || groupMsg?.text || passMsg?.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setErrorMsg(null);
+              if (groupMsg?.type === 'error') setGroupMsg(null);
+              if (passMsg?.type === 'error') setPassMsg(null);
+            }}
+            className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-lg transition shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* PROFILE SUMMARY HEADER */}
       <div className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-xl flex items-center justify-between gap-4 border border-slate-800">
         <div className="flex items-center gap-4 min-w-0">
@@ -1023,6 +1139,32 @@ export const StudentDashboard: React.FC = () => {
               </div>
             )}
 
+            {/* Group Registration Deadline Status Banner */}
+            {selectedGroupAssignment && (
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-500">Group Formation Deadline</span>
+                  <p className="text-sm font-bold text-slate-800">
+                    {formatDate(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                      getDeadlineCountdown(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).color
+                    }`}
+                  >
+                    {getDeadlineCountdown(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).text}
+                  </span>
+                  {selectedGroupAssignment.allowLateGroupRegistration && (
+                    <span className="px-2.5 py-1 text-[11px] font-bold bg-purple-100 text-purple-800 rounded-full border border-purple-200">
+                      Late Registration Allowed
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {groupMsg && (
               <div
                 className={`p-4 rounded-xl border text-sm flex items-center gap-2 ${
@@ -1045,7 +1187,7 @@ export const StudentDashboard: React.FC = () => {
 
             {groupSubjectId && !loadingMyGroup && myGroup && (
               <div className="bg-emerald-50/60 border border-emerald-300 rounded-2xl p-6 space-y-4">
-                <div className="flex items-center justify-between border-b border-emerald-200 pb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-emerald-200 pb-3 gap-3">
                   <div>
                     <span className="text-xs text-emerald-700 uppercase font-bold tracking-wider">Registered Group</span>
                     <h3 className="text-xl font-extrabold text-slate-900">{myGroup.groupName}</h3>
@@ -1053,9 +1195,18 @@ export const StudentDashboard: React.FC = () => {
                       {selectedGroupSubject?.name} ({selectedGroupSubject?.code}) / {selectedGroupAssignment?.title}
                     </p>
                   </div>
-                  <span className="px-3 py-1 bg-emerald-600 text-white font-bold text-xs rounded-full">
-                    {myGroup.members.length} Member(s)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-emerald-600 text-white font-bold text-xs rounded-full">
+                      {myGroup.members.length} Member(s)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleOpenEditGroup}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" /> Edit Group Members
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -1092,6 +1243,17 @@ export const StudentDashboard: React.FC = () => {
             {/* If Student NOT in group for this subject, show Registration Options */}
             {groupSubjectId && !loadingMyGroup && !myGroup && (
               <div className="space-y-6">
+                {selectedGroupAssignment &&
+                  new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
+                  !selectedGroupAssignment.allowLateGroupRegistration && (
+                    <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-amber-900 text-xs font-bold flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                      <span>
+                        Group registration deadline has passed. Group creation is locked. Please contact your CR for approval to register late.
+                      </span>
+                    </div>
+                  )}
+
                 {/* Mode Selector Toggle */}
                 <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200">
                   <button
@@ -1118,14 +1280,19 @@ export const StudentDashboard: React.FC = () => {
                 {groupMode === 'create' && (
                   <form onSubmit={handleCreateGroup} className="space-y-6 bg-slate-50/70 p-6 rounded-2xl border border-slate-200">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                        Group Name <span className="text-red-500">*</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Group Name <span className="text-red-500">*</span>
+                        </label>
+                        <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                          Auto-Assigned Next Group Number
+                        </span>
+                      </div>
                       <input
                         type="text"
                         value={groupName}
                         onChange={(e) => setGroupName(e.target.value)}
-                        placeholder="e.g., Team Alpha"
+                        placeholder="e.g., Group 1"
                         className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold text-slate-800"
                       />
                     </div>
@@ -1231,10 +1398,19 @@ export const StudentDashboard: React.FC = () => {
 
                     <button
                       type="submit"
-                      disabled={groupSubmitting}
-                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2"
+                      disabled={
+                        groupSubmitting ||
+                        (selectedGroupAssignment &&
+                          new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
+                          !selectedGroupAssignment.allowLateGroupRegistration)
+                      }
+                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2"
                     >
-                      {groupSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                      {groupSubmitting ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <UserPlus className="w-4 h-4" />
+                      )}
                       Register Group for Subject
                     </button>
                   </form>
@@ -1274,8 +1450,13 @@ export const StudentDashboard: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleContinueGroup(prev)}
-                            disabled={groupSubmitting}
-                            className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center justify-center gap-2 shrink-0"
+                            disabled={
+                              groupSubmitting ||
+                              (selectedGroupAssignment &&
+                                new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
+                                !selectedGroupAssignment.allowLateGroupRegistration)
+                            }
+                            className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white text-xs font-bold rounded-xl shadow transition flex items-center justify-center gap-2 shrink-0"
                           >
                             {groupSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat className="w-4 h-4" />}
                             Continue Group in Selected Subject
@@ -1479,6 +1660,130 @@ export const StudentDashboard: React.FC = () => {
               )}
             </button>
           </form>
+        </div>
+      )}
+
+      {/* EDIT GROUP MEMBERS MODAL */}
+      {groupEditModalOpen && myGroup && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 my-8">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Edit Group Members</h3>
+                <p className="text-xs text-slate-500">Update member names, roll numbers, or group leader.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGroupEditModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGroupEdit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Group Name</label>
+                <input
+                  type="text"
+                  value={editGroupName}
+                  onChange={(e) => setEditGroupName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl font-bold text-sm"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">
+                    Members (Max {selectedGroupAssignment?.maxGroupSize || myGroup.maxGroupSize || 4})
+                  </label>
+                  {editMembers.length < (selectedGroupAssignment?.maxGroupSize || myGroup.maxGroupSize || 4) && (
+                    <button
+                      type="button"
+                      onClick={() => setEditMembers([...editMembers, { name: '', rollNumber: '' }])}
+                      className="text-xs text-blue-600 font-bold hover:underline"
+                    >
+                      + Add Member
+                    </button>
+                  )}
+                </div>
+
+                {editMembers.map((m, idx) => (
+                  <div key={idx} className="p-3 bg-slate-50 border rounded-xl space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-2">
+                    <input
+                      type="text"
+                      value={m.name}
+                      onChange={(e) => {
+                        const updated = [...editMembers];
+                        updated[idx].name = e.target.value;
+                        setEditMembers(updated);
+                      }}
+                      placeholder={`Member ${idx + 1} Name`}
+                      className="flex-1 px-3 py-1.5 border rounded-lg text-xs font-semibold"
+                      required
+                    />
+                    <input
+                      type="text"
+                      value={m.rollNumber}
+                      onChange={(e) => {
+                        const updated = [...editMembers];
+                        updated[idx].rollNumber = e.target.value;
+                        setEditMembers(updated);
+                      }}
+                      placeholder={`Roll Number`}
+                      className="flex-1 px-3 py-1.5 border rounded-lg text-xs font-mono font-semibold"
+                      required
+                    />
+                    <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="edit-leader"
+                          checked={editLeaderIndex === idx}
+                          onChange={() => setEditLeaderIndex(idx)}
+                        />
+                        <span className="text-xs font-bold text-amber-700 flex items-center gap-0.5">
+                          <Crown className="w-3 h-3" /> Leader
+                        </span>
+                      </label>
+                      {editMembers.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = editMembers.filter((_, i) => i !== idx);
+                            setEditMembers(updated);
+                            if (editLeaderIndex >= updated.length) setEditLeaderIndex(0);
+                          }}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setGroupEditModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editingGroupSaving}
+                  className="px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow flex items-center gap-1.5"
+                >
+                  {editingGroupSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

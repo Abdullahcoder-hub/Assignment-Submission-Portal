@@ -10,6 +10,8 @@ export interface IAssignment extends Document {
   maxFileSize: number; // in Megabytes (MB)
   maxGroupSize: number;
   submissionType: 'Individual' | 'Group';
+  groupDeadline?: Date;
+  allowLateGroupRegistration?: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -22,6 +24,8 @@ const AssignmentSchema: Schema = new Schema(
     description: { type: String, default: '' },
     deadline: { type: Date, required: true },
     allowLateSubmission: { type: Boolean, default: false },
+    groupDeadline: { type: Date },
+    allowLateGroupRegistration: { type: Boolean, default: false },
     allowedFileTypes: {
       type: [String],
       default: ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'zip'],

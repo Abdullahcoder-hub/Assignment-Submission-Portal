@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import mongoose from 'mongoose';
 import Group from '../models/Group.js';
 import Subject from '../models/Subject.js';
 import Assignment from '../models/Assignment.js';
@@ -49,6 +50,18 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       });
       return;
     }
+
+    // Group registration deadline check
+    const groupDeadline = assignment.groupDeadline || assignment.deadline;
+    const isPastGroupDeadline = new Date() > new Date(groupDeadline);
+    if (isPastGroupDeadline && !assignment.allowLateGroupRegistration) {
+      res.status(400).json({
+        success: false,
+        message: 'Group registration deadline for this assignment has passed. Please contact CR to allow late group registration.',
+      });
+      return;
+    }
+
     const maxLimit = assignment.maxGroupSize || 4;
 
     // Parse member roll numbers & names
@@ -240,6 +253,17 @@ export const continueGroup = async (req: AuthRequest, res: Response): Promise<vo
       res.status(400).json({
         success: false,
         message: 'Group registration is not allowed for this assignment because the CR set it to Individual Submission.',
+      });
+      return;
+    }
+
+    // Group registration deadline check
+    const groupDeadline = assignment.groupDeadline || assignment.deadline;
+    const isPastGroupDeadline = new Date() > new Date(groupDeadline);
+    if (isPastGroupDeadline && !assignment.allowLateGroupRegistration) {
+      res.status(400).json({
+        success: false,
+        message: 'Group registration deadline for this assignment has passed. Please contact CR to allow late group registration.',
       });
       return;
     }
@@ -457,5 +481,193 @@ export const exportGroupsCsv = async (req: AuthRequest, res: Response): Promise<
   } catch (error) {
     console.error('[Export Group CSV Error]:', error);
     res.status(500).json({ success: false, message: 'Failed to export group CSV.' });
+  }
+};
+
+/**
+ * 8. GET NEXT AVAILABLE GROUP NUMBER FOR SUBJECT & ASSIGNMENT
+ */
+export const getNextGroupNumber = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { subjectId, assignmentId } = req.query;
+    if (!subjectId || !assignmentId) {
+      res.status(400).json({ success: false, message: 'subjectId and assignmentId are required.' });
+      return;
+    }
+
+    const groups = await Group.find({ subjectId, assignmentId });
+    let maxNum = 0;
+    for (const g of groups) {
+      const match = g.groupName.match(/(?:Group\s*|Team\s*|#\s*)?(\d+)/i);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    const nextNum = (maxNum > 0 ? maxNum : groups.length) + 1;
+    res.status(200).json({
+      success: true,
+      nextGroupNumber: nextNum,
+      suggestedGroupName: `Group ${nextNum}`,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to calculate next group number.' });
+  }
+};
+
+/**
+ * 9. UPDATE GROUP (By Student Member/Leader or CR)
+ */
+export const updateGroup = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { groupName, leaderRollNumber, memberRollNumbers, members } = req.body;
+
+    const group = await Group.findById(id);
+    if (!group) {
+      res.status(404).json({ success: false, message: 'Group not found.' });
+      return;
+    }
+
+    // Check authorization: caller must be student member of group or admin
+    if (req.student) {
+      const isMember = group.members.some(
+        (m) =>
+          (m.studentId && m.studentId.toString() === req.student!.id) ||
+          m.rollNumber.toLowerCase() === req.student!.rollNumber.toLowerCase()
+      );
+      if (!isMember) {
+        res.status(403).json({ success: false, message: 'You are not authorized to edit this group.' });
+        return;
+      }
+
+      // Check group registration deadline
+      const assignment = await Assignment.findById(group.assignmentId);
+      if (assignment) {
+        const groupDeadline = assignment.groupDeadline || assignment.deadline;
+        const isPast = new Date() > new Date(groupDeadline);
+        if (isPast && !assignment.allowLateGroupRegistration) {
+          res.status(400).json({
+            success: false,
+            message: 'Group registration deadline has passed. Contact CR to edit group members.',
+          });
+          return;
+        }
+      }
+    }
+
+    const assignment = await Assignment.findById(group.assignmentId);
+    const maxLimit = assignment?.maxGroupSize || group.maxGroupSize || 4;
+
+    // Parse member roll numbers & names
+    const memberNameMap: Record<string, string> = {};
+    const rawRolls: string[] = [];
+
+    const inputMembers = Array.isArray(members) ? members : Array.isArray(memberRollNumbers) ? memberRollNumbers : [];
+    inputMembers.forEach((item: any) => {
+      if (typeof item === 'string' && item.trim()) {
+        rawRolls.push(item.trim());
+      } else if (typeof item === 'object' && item?.rollNumber && item.rollNumber.trim()) {
+        const roll = item.rollNumber.trim();
+        rawRolls.push(roll);
+        if (item.name && item.name.trim()) {
+          memberNameMap[roll.toUpperCase()] = item.name.trim();
+        }
+      }
+    });
+
+    const cleanLeaderRoll = (leaderRollNumber || group.leader.rollNumber || '').trim();
+    if (cleanLeaderRoll && !rawRolls.some((r) => r.toLowerCase() === cleanLeaderRoll.toLowerCase())) {
+      rawRolls.push(cleanLeaderRoll);
+    }
+
+    const normalizedRolls = rawRolls.map((roll) => roll.toUpperCase());
+    const duplicateRoll = normalizedRolls.find((roll, index) => normalizedRolls.indexOf(roll) !== index);
+    if (duplicateRoll) {
+      res.status(400).json({
+        success: false,
+        message: `Roll number "${duplicateRoll}" cannot be used more than once in the same group.`,
+      });
+      return;
+    }
+
+    const uniqueRolls = Array.from(new Set(normalizedRolls));
+    if (uniqueRolls.length > maxLimit) {
+      res.status(400).json({
+        success: false,
+        message: `Group size (${uniqueRolls.length}) exceeds maximum limit of ${maxLimit} members.`,
+      });
+      return;
+    }
+    if (uniqueRolls.length < 1) {
+      res.status(400).json({ success: false, message: 'Group must have at least 1 member.' });
+      return;
+    }
+
+    // Check if any roll number is already in ANOTHER group for this assignment
+    const conflictingGroup = await Group.findOne({
+      _id: { $ne: group._id },
+      subjectId: group.subjectId,
+      assignmentId: group.assignmentId,
+      'members.rollNumber': { $in: uniqueRolls.map((r) => new RegExp(`^${r}$`, 'i')) },
+    });
+
+    if (conflictingGroup) {
+      const conflictingRolls = conflictingGroup.members.map((m) => m.rollNumber.toUpperCase());
+      const conflict = uniqueRolls.find((r) => conflictingRolls.includes(r));
+      res.status(400).json({
+        success: false,
+        message: `Roll number "${conflict}" is already registered in another group ("${conflictingGroup.groupName}").`,
+      });
+      return;
+    }
+
+    // Find student records
+    const students = await Student.find({
+      rollNumber: { $in: uniqueRolls.map((r) => new RegExp(`^${r}$`, 'i')) },
+    });
+
+    const membersDocs: any[] = uniqueRolls.map((roll) => {
+      const matched = students.find((s) => s.rollNumber.toLowerCase() === roll.toLowerCase());
+      const customName = memberNameMap[roll];
+      let name = customName || matched?.name || roll;
+      if (req.student && roll.toLowerCase() === req.student.rollNumber.toLowerCase()) {
+        name = req.student.name;
+      }
+      return {
+        studentId: matched
+          ? (matched._id as any)
+          : req.student && roll.toLowerCase() === req.student.rollNumber.toLowerCase()
+          ? (new mongoose.Types.ObjectId(req.student.id) as any)
+          : undefined,
+        name,
+        rollNumber: matched ? matched.rollNumber : roll,
+        email: matched
+          ? matched.email
+          : req.student && roll.toLowerCase() === req.student.rollNumber.toLowerCase()
+          ? req.student.email
+          : '',
+      };
+    });
+
+    const leaderDoc: any =
+      membersDocs.find((m) => m.rollNumber.toLowerCase() === cleanLeaderRoll.toLowerCase()) || membersDocs[0];
+
+    if (groupName && groupName.trim()) {
+      group.groupName = groupName.trim();
+    }
+    group.leader = leaderDoc;
+    group.members = membersDocs;
+
+    await group.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Group updated successfully.',
+      group,
+    });
+  } catch (error: any) {
+    console.error('[Update Group Error]:', error);
+    res.status(500).json({ success: false, message: 'Failed to update group.' });
   }
 };

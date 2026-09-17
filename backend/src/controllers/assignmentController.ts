@@ -59,6 +59,8 @@ export const createAssignment = async (req: AuthRequest, res: Response): Promise
       maxFileSize,
       maxGroupSize,
       submissionType,
+      groupDeadline,
+      allowLateGroupRegistration,
       isActive,
     } = req.body;
 
@@ -79,6 +81,8 @@ export const createAssignment = async (req: AuthRequest, res: Response): Promise
       description: description ? description.trim() : '',
       deadline: new Date(deadline),
       allowLateSubmission: Boolean(allowLateSubmission),
+      groupDeadline: groupDeadline ? new Date(groupDeadline) : undefined,
+      allowLateGroupRegistration: Boolean(allowLateGroupRegistration),
       allowedFileTypes: Array.isArray(allowedFileTypes) && allowedFileTypes.length > 0
         ? allowedFileTypes.map((t: string) => t.replace('.', '').toLowerCase().trim())
         : ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'zip'],
@@ -108,6 +112,8 @@ export const updateAssignment = async (req: AuthRequest, res: Response): Promise
       description,
       deadline,
       allowLateSubmission,
+      groupDeadline,
+      allowLateGroupRegistration,
       allowedFileTypes,
       maxFileSize,
       maxGroupSize,
@@ -135,6 +141,8 @@ export const updateAssignment = async (req: AuthRequest, res: Response): Promise
     if (description !== undefined) assignment.description = description.trim();
     if (deadline) assignment.deadline = new Date(deadline);
     if (allowLateSubmission !== undefined) assignment.allowLateSubmission = Boolean(allowLateSubmission);
+    if (groupDeadline !== undefined) assignment.groupDeadline = groupDeadline ? new Date(groupDeadline) : undefined;
+    if (allowLateGroupRegistration !== undefined) assignment.allowLateGroupRegistration = Boolean(allowLateGroupRegistration);
     if (Array.isArray(allowedFileTypes) && allowedFileTypes.length > 0) {
       assignment.allowedFileTypes = allowedFileTypes.map((t: string) => t.replace('.', '').toLowerCase().trim());
     }

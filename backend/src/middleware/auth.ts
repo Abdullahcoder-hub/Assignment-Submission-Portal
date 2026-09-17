@@ -104,3 +104,42 @@ export const authenticateStudent = async (req: AuthRequest, res: Response, next:
     res.status(401).json({ success: false, message: 'Invalid or expired student authentication token.' });
   }
 };
+
+export const authenticateStudentOrAdmin = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ success: false, message: 'Authentication token required.' });
+      return;
+    }
+
+    const token = authHeader.split(' ')[1];
+    const secret = process.env.JWT_SECRET || 'default_secret_key_change_in_production_12345';
+    const decoded = jwt.verify(token, secret) as { id: string; email: string; role: 'ADMIN' | 'STUDENT' };
+
+    if (decoded.role === 'ADMIN') {
+      const admin = await Admin.findById(decoded.id);
+      if (admin) {
+        req.admin = { id: admin._id.toString(), email: admin.email, role: 'ADMIN' };
+        next();
+        return;
+      }
+    } else if (decoded.role === 'STUDENT') {
+      const student = await Student.findById(decoded.id);
+      if (student) {
+        req.student = {
+          id: student._id.toString(),
+          name: student.name,
+          email: student.email,
+          rollNumber: student.rollNumber,
+          role: 'STUDENT',
+        };
+        next();
+        return;
+      }
+    }
+    res.status(401).json({ success: false, message: 'Account not found or invalid token.' });
+  } catch (error: any) {
+    res.status(401).json({ success: false, message: 'Invalid or expired authentication token.' });
+  }
+};
