@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, ShieldCheck, GraduationCap, UserCheck, User, LayoutDashboard } from 'lucide-react';
+import { LogOut, ShieldCheck, GraduationCap, UserCheck, User } from 'lucide-react';
 import { StudentUser, AdminUser } from '../types';
 
 export const Navbar: React.FC = () => {
@@ -33,14 +33,6 @@ export const Navbar: React.FC = () => {
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           {isAuthenticated ? (
             <div className="flex items-center gap-1.5 sm:gap-3">
-              <Link
-                to={dashboardPath}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg shadow-md shadow-blue-500/25 border border-white/20 transition"
-              >
-                <LayoutDashboard className="w-3.5 h-3.5" />
-                <span>Dashboard</span>
-              </Link>
-
               {role === 'ADMIN' ? (
                 <Link
                   to="/admin/dashboard"
