@@ -73,12 +73,31 @@ export const StudentDashboard: React.FC = () => {
   });
   const [loadingAssignments, setLoadingAssignments] = useState<boolean>(false);
 
-  // Student's Own Submissions History
-  const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+  // Student's Own Submissions History with instant cache rehydration
+  const [mySubmissions, setMySubmissions] = useState<Submission[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('portal_cached_my_submissions');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loadingHistory, setLoadingHistory] = useState<boolean>(() => {
+    try {
+      return !sessionStorage.getItem('portal_cached_my_submissions');
+    } catch {
+      return false;
+    }
+  });
 
   // Form State
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem('portal_selected_subject_id') || '';
+    } catch {
+      return '';
+    }
+  });
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
@@ -231,10 +250,13 @@ export const StudentDashboard: React.FC = () => {
 
     const fetchProfilePromise = async () => {
       try {
-        setLoadingHistory(true);
+        setLoadingHistory((prev) => !sessionStorage.getItem('portal_cached_my_submissions'));
         const res = await api.get('/auth/student/me');
         if (res.data.success) {
           setMySubmissions(res.data.submissions);
+          try {
+            sessionStorage.setItem('portal_cached_my_submissions', JSON.stringify(res.data.submissions));
+          } catch {}
         }
       } catch (err) {
         console.error('Failed to load profile submissions:', err);
@@ -248,10 +270,13 @@ export const StudentDashboard: React.FC = () => {
 
   const refreshSubmissionHistory = async () => {
     try {
-      setLoadingHistory(true);
-      const resProfile = await api.get('/auth/student/me');
-      if (resProfile.data.success) {
-        setMySubmissions(resProfile.data.submissions);
+      setLoadingHistory((prev) => !sessionStorage.getItem('portal_cached_my_submissions'));
+      const res = await api.get('/auth/student/me');
+      if (res.data.success) {
+        setMySubmissions(res.data.submissions);
+        try {
+          sessionStorage.setItem('portal_cached_my_submissions', JSON.stringify(res.data.submissions));
+        } catch {}
       }
     } catch (err) {
       setErrorMsg('Failed to refresh submission history.');
@@ -270,7 +295,7 @@ export const StudentDashboard: React.FC = () => {
     }
   }, [activeTab, receipt]);
 
-  // Fetch assignments when subject changes
+  // Fetch assignments when subject changes with instant cache rehydration
   useEffect(() => {
     if (!selectedSubjectId) {
       setAssignments([]);
@@ -280,15 +305,31 @@ export const StudentDashboard: React.FC = () => {
       return;
     }
 
+    try {
+      const cached = sessionStorage.getItem(`portal_cached_assigns_${selectedSubjectId}`);
+      if (cached) {
+        setAssignments(JSON.parse(cached));
+      }
+    } catch {}
+
     const fetchAssignments = async () => {
       try {
-        setLoadingAssignments(true);
+        setLoadingAssignments(() => {
+          try {
+            return !sessionStorage.getItem(`portal_cached_assigns_${selectedSubjectId}`);
+          } catch {
+            return true;
+          }
+        });
         const res = await api.get(`/assignments?subjectId=${selectedSubjectId}`);
         if (res.data.success) {
           setAssignments(res.data.assignments);
+          try {
+            sessionStorage.setItem(`portal_cached_assigns_${selectedSubjectId}`, JSON.stringify(res.data.assignments));
+          } catch {}
         }
       } catch (err) {
-        setErrorMsg('Failed to load assignments.');
+        console.error('Failed to load assignments:', err);
       } finally {
         setLoadingAssignments(false);
       }

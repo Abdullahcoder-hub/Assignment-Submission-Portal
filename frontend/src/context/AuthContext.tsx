@@ -32,16 +32,14 @@ const getCachedUser = (): AdminUser | StudentUser | null => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const cachedUser = getCachedUser();
+  const storedToken = localStorage.getItem('portalToken');
+  const storedRole = (localStorage.getItem('userRole') as UserRole) || null;
+  const cachedUser = getCachedUser() || (storedToken && storedRole ? ({ id: '', email: '', name: '', role: storedRole } as any) : null);
+
   const [user, setUser] = useState<AdminUser | StudentUser | null>(cachedUser);
-  const [role, setRole] = useState<UserRole | null>((localStorage.getItem('userRole') as UserRole) || null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('portalToken'));
-  const [isLoading, setIsLoading] = useState<boolean>(() => {
-    const storedToken = localStorage.getItem('portalToken');
-    const storedRole = localStorage.getItem('userRole');
-    // If we have token and cached user, don't block page render (instant load)
-    return Boolean(storedToken && storedRole && !cachedUser);
-  });
+  const [role, setRole] = useState<UserRole | null>(storedRole);
+  const [token, setToken] = useState<string | null>(storedToken);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     const verifyToken = async () => {

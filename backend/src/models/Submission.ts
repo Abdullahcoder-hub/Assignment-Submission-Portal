@@ -59,5 +59,7 @@ const SubmissionSchema: Schema = new Schema(
 
 // Prevent duplicate submissions for the same assignment and roll number
 SubmissionSchema.index({ assignmentId: 1, rollNumber: 1 }, { unique: true });
+SubmissionSchema.index({ studentId: 1, submittedAt: -1 });
+SubmissionSchema.index({ subjectId: 1, assignmentId: 1, status: 1 });
 
 export default mongoose.model<ISubmission>('Submission', SubmissionSchema);

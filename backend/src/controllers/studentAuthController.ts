@@ -179,7 +179,7 @@ export const loginStudent = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const student = await Student.findOne({ email: email.trim().toLowerCase() });
+    const student = await Student.findOne({ email: email.trim().toLowerCase() }).lean();
     if (!student || !student.passwordHash) {
       res.status(401).json({ success: false, message: 'Incorrect email or password.' });
       return;

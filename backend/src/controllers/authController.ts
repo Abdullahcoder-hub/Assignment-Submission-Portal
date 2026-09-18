@@ -13,7 +13,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const admin = await Admin.findOne({ email: email.toLowerCase().trim() });
+    const admin = await Admin.findOne({ email: email.toLowerCase().trim() }).lean();
     if (!admin) {
       res.status(401).json({ success: false, message: 'Incorrect email or password.' });
       return;

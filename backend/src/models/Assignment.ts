@@ -38,4 +38,7 @@ const AssignmentSchema: Schema = new Schema(
   { timestamps: true }
 );
 
+AssignmentSchema.index({ subjectId: 1, isActive: 1 });
+AssignmentSchema.index({ isActive: 1, deadline: 1 });
+
 export default mongoose.model<IAssignment>('Assignment', AssignmentSchema);

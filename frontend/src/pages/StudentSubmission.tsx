@@ -74,7 +74,7 @@ export const StudentSubmission: React.FC = () => {
     fetchSubjects();
   }, []);
 
-  // Fetch active assignments when subject changes
+  // Fetch active assignments when subject changes with instant cache rehydration
   useEffect(() => {
     if (!selectedSubjectId) {
       setAssignments([]);
@@ -83,12 +83,28 @@ export const StudentSubmission: React.FC = () => {
       return;
     }
 
+    try {
+      const cached = sessionStorage.getItem(`portal_cached_assigns_${selectedSubjectId}`);
+      if (cached) {
+        setAssignments(JSON.parse(cached));
+      }
+    } catch {}
+
     const fetchAssignments = async () => {
       try {
-        setLoadingAssignments(true);
+        setLoadingAssignments(() => {
+          try {
+            return !sessionStorage.getItem(`portal_cached_assigns_${selectedSubjectId}`);
+          } catch {
+            return true;
+          }
+        });
         const res = await api.get(`/assignments?subjectId=${selectedSubjectId}`);
         if (res.data.success) {
           setAssignments(res.data.assignments);
+          try {
+            sessionStorage.setItem(`portal_cached_assigns_${selectedSubjectId}`, JSON.stringify(res.data.assignments));
+          } catch {}
         }
       } catch (err) {
         setErrorMsg('Failed to load assignments for selected subject.');

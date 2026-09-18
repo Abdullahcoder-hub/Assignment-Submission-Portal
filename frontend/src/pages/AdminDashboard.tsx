@@ -64,10 +64,30 @@ export const AdminDashboard: React.FC = () => {
   const [joinCode, setJoinCode] = useState<string>('');
   const [isJoinCodeActive, setIsJoinCodeActive] = useState<boolean>(true);
 
-  // Stats state
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentSubmissions, setRecentSubmissions] = useState<Submission[]>([]);
-  const [loadingStats, setLoadingStats] = useState<boolean>(false);
+  // Stats state with instant cache rehydration
+  const [stats, setStats] = useState<DashboardStats | null>(() => {
+    try {
+      const cached = sessionStorage.getItem('admin_cached_stats');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [recentSubmissions, setRecentSubmissions] = useState<Submission[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('admin_cached_recent_subs');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loadingStats, setLoadingStats] = useState<boolean>(() => {
+    try {
+      return !sessionStorage.getItem('admin_cached_stats');
+    } catch {
+      return false;
+    }
+  });
 
   // Subjects state with instant cache rehydration
   const [subjects, setSubjects] = useState<Subject[]>(() => {
@@ -89,9 +109,22 @@ export const AdminDashboard: React.FC = () => {
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [subjectForm, setSubjectForm] = useState({ name: '', code: '', description: '', isActive: true });
 
-  // Assignments state
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [loadingAssignments, setLoadingAssignments] = useState<boolean>(false);
+  // Assignments state with instant cache rehydration
+  const [assignments, setAssignments] = useState<Assignment[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('admin_cached_assignments');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loadingAssignments, setLoadingAssignments] = useState<boolean>(() => {
+    try {
+      return !sessionStorage.getItem('admin_cached_assignments');
+    } catch {
+      return false;
+    }
+  });
   const [assignmentModalOpen, setAssignmentModalOpen] = useState<boolean>(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
   const [assignmentForm, setAssignmentForm] = useState({
@@ -109,12 +142,25 @@ export const AdminDashboard: React.FC = () => {
     isActive: true,
   });
 
-  // Submissions list state
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  // Submissions list state with instant cache rehydration
+  const [submissions, setSubmissions] = useState<Submission[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('admin_cached_submissions');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [totalSubmissionsCount, setTotalSubmissionsCount] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const [loadingSubmissions, setLoadingSubmissions] = useState<boolean>(false);
+  const [loadingSubmissions, setLoadingSubmissions] = useState<boolean>(() => {
+    try {
+      return !sessionStorage.getItem('admin_cached_submissions');
+    } catch {
+      return false;
+    }
+  });
 
   // Groups list state
   const [groups, setGroups] = useState<Group[]>([]);
@@ -164,11 +210,15 @@ export const AdminDashboard: React.FC = () => {
   // FETCH DASHBOARD STATS
   const fetchDashboardStats = async () => {
     try {
-      setLoadingStats(true);
+      setLoadingStats((prev) => !sessionStorage.getItem('admin_cached_stats'));
       const res = await api.get('/submissions/stats/dashboard');
       if (res.data.success) {
         setStats(res.data.stats);
         setRecentSubmissions(res.data.recentSubmissions);
+        try {
+          sessionStorage.setItem('admin_cached_stats', JSON.stringify(res.data.stats));
+          sessionStorage.setItem('admin_cached_recent_subs', JSON.stringify(res.data.recentSubmissions));
+        } catch {}
       }
     } catch (err) {
       showToast('error', 'Failed to load dashboard statistics.');
@@ -180,7 +230,7 @@ export const AdminDashboard: React.FC = () => {
   // FETCH SUBJECTS
   const fetchSubjects = async () => {
     try {
-      setLoadingSubjects(true);
+      setLoadingSubjects((prev) => !sessionStorage.getItem('admin_cached_subjects'));
       const res = await api.get('/subjects?includeInactive=true');
       if (res.data.success) {
         setSubjects(res.data.subjects);
@@ -198,10 +248,13 @@ export const AdminDashboard: React.FC = () => {
   // FETCH ASSIGNMENTS
   const fetchAssignments = async () => {
     try {
-      setLoadingAssignments(true);
+      setLoadingAssignments((prev) => !sessionStorage.getItem('admin_cached_assignments'));
       const res = await api.get('/assignments');
       if (res.data.success) {
         setAssignments(res.data.assignments);
+        try {
+          sessionStorage.setItem('admin_cached_assignments', JSON.stringify(res.data.assignments));
+        } catch {}
       }
     } catch (err) {
       showToast('error', 'Failed to fetch assignments list.');
@@ -213,7 +266,7 @@ export const AdminDashboard: React.FC = () => {
   // FETCH SUBMISSIONS
   const fetchSubmissions = async (page: number = 1) => {
     try {
-      setLoadingSubmissions(true);
+      setLoadingSubmissions((prev) => !sessionStorage.getItem('admin_cached_submissions'));
       let query = `/submissions?page=${page}&limit=10`;
       if (filterSubjectId) query += `&subjectId=${filterSubjectId}`;
       if (filterAssignmentId) query += `&assignmentId=${filterAssignmentId}`;
@@ -226,6 +279,11 @@ export const AdminDashboard: React.FC = () => {
         setTotalSubmissionsCount(res.data.total);
         setCurrentPage(res.data.page);
         setTotalPages(res.data.pages);
+        if (page === 1 && !filterSubjectId && !filterAssignmentId && !filterStatus && !searchQuery) {
+          try {
+            sessionStorage.setItem('admin_cached_submissions', JSON.stringify(res.data.submissions));
+          } catch {}
+        }
       }
     } catch (err) {
       showToast('error', 'Failed to fetch submissions.');
