@@ -705,14 +705,15 @@ export const StudentDashboard: React.FC = () => {
       )}
 
       {/* PROFILE SUMMARY HEADER */}
-      <div className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-xl flex items-center justify-between gap-4 border border-slate-800">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="p-3.5 bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded-2xl shrink-0">
+      <div className="glass-panel-dark text-white rounded-3xl p-5 sm:p-6 shadow-2xl flex items-center justify-between gap-4 border border-white/10 relative overflow-hidden backdrop-blur-xl">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -z-0" />
+        <div className="flex items-center gap-4 min-w-0 relative z-10">
+          <div className="p-3.5 bg-gradient-to-tr from-blue-600/30 to-indigo-600/30 border border-blue-400/30 text-blue-400 rounded-2xl shrink-0 shadow-inner">
             <User className="w-8 h-8 sm:w-10 sm:h-10" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg sm:text-2xl font-extrabold truncate">{student?.name}</h1>
+              <h1 className="text-lg sm:text-2xl font-extrabold truncate tracking-tight">{student?.name}</h1>
               <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold rounded-full shrink-0">
                 Verified Student
               </span>
@@ -726,11 +727,11 @@ export const StudentDashboard: React.FC = () => {
       </div>
 
       {/* DASHBOARD TAB NAVIGATION BAR */}
-      <div className="bg-slate-900 p-1.5 rounded-2xl border border-slate-800 shadow-lg grid grid-cols-1 sm:grid-cols-4 gap-1.5">
+      <div className="glass-panel-dark p-1.5 rounded-2xl border border-white/10 shadow-xl grid grid-cols-1 sm:grid-cols-4 gap-1.5 backdrop-blur-xl">
         <button
           onClick={() => setActiveTab('submit')}
           className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
-            activeTab === 'submit' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            activeTab === 'submit' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
           <Upload className="w-4 h-4" /> Submit Assignment
@@ -738,7 +739,7 @@ export const StudentDashboard: React.FC = () => {
         <button
           onClick={() => setActiveTab('groups')}
           className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
-            activeTab === 'groups' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            activeTab === 'groups' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
           <Users className="w-4 h-4" /> Group Registration
@@ -746,7 +747,7 @@ export const StudentDashboard: React.FC = () => {
         <button
           onClick={() => setActiveTab('history')}
           className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
-            activeTab === 'history' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            activeTab === 'history' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
           <History className="w-4 h-4" /> My Submissions ({mySubmissions.length})
@@ -754,7 +755,7 @@ export const StudentDashboard: React.FC = () => {
         <button
           onClick={() => setActiveTab('security')}
           className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
-            activeTab === 'security' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            activeTab === 'security' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
           <KeyRound className="w-4 h-4" /> Change Password
@@ -763,7 +764,7 @@ export const StudentDashboard: React.FC = () => {
 
       {/* SUBMISSION RECEIPT VIEW */}
       {receipt && (
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="glass-panel rounded-3xl shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden">
           <div className="bg-emerald-600 p-6 text-white text-center">
             <CheckCircle2 className="w-10 h-10 mx-auto mb-2" />
             <h2 className="text-2xl font-bold">✓ Assignment Submitted Successfully</h2>
@@ -814,8 +815,8 @@ export const StudentDashboard: React.FC = () => {
 
       {/* TAB 1: SUBMIT ASSIGNMENT FORM */}
       {!receipt && activeTab === 'submit' && (
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-          <div className="bg-slate-800 p-6 text-white border-b border-slate-700">
+        <div className="glass-panel rounded-3xl shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden">
+          <div className="bg-slate-900/90 backdrop-blur-md p-6 text-white border-b border-white/10">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <Upload className="w-5 h-5 text-blue-400" /> New Assignment Submission
             </h2>
@@ -1085,8 +1086,8 @@ export const StudentDashboard: React.FC = () => {
 
       {/* TAB 2: SUBJECT-WISE GROUP REGISTRATION */}
       {!receipt && activeTab === 'groups' && (
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-          <div className="bg-slate-800 p-6 text-white border-b border-slate-700">
+        <div className="glass-panel rounded-3xl shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden">
+          <div className="bg-slate-900/90 backdrop-blur-md p-6 text-white border-b border-white/10">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <Users className="w-5 h-5 text-blue-400" /> Subject-wise Group Registration
             </h2>
@@ -1474,8 +1475,8 @@ export const StudentDashboard: React.FC = () => {
 
       {/* TAB 3: MY SUBMISSION HISTORY */}
       {!receipt && activeTab === 'history' && (
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-          <div className="bg-slate-800 p-6 text-white border-b border-slate-700 flex items-center justify-between">
+        <div className="glass-panel rounded-3xl shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden">
+          <div className="bg-slate-900/90 backdrop-blur-md p-6 text-white border-b border-white/10 flex items-center justify-between">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <History className="w-5 h-5 text-blue-400" /> My Submission History
             </h2>
@@ -1574,8 +1575,8 @@ export const StudentDashboard: React.FC = () => {
 
       {/* TAB 4: ACCOUNT SECURITY & CHANGE PASSWORD */}
       {!receipt && activeTab === 'security' && (
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden max-w-2xl mx-auto">
-          <div className="bg-slate-800 p-6 text-white border-b border-slate-700">
+        <div className="glass-panel rounded-3xl shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden max-w-2xl mx-auto">
+          <div className="bg-slate-900/90 backdrop-blur-md p-6 text-white border-b border-white/10">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <KeyRound className="w-5 h-5 text-blue-400" /> Account Security & Change Password
             </h2>
@@ -1665,8 +1666,8 @@ export const StudentDashboard: React.FC = () => {
 
       {/* EDIT GROUP MEMBERS MODAL */}
       {groupEditModalOpen && myGroup && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 my-8">
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-panel rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200/80 dark:border-white/10 space-y-4 my-8">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Edit Group Members</h3>

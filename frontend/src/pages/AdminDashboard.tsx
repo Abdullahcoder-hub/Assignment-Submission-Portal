@@ -677,11 +677,11 @@ export const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="admin-dashboard min-h-[90vh] flex flex-col md:flex-row bg-slate-100 min-w-0">
+    <div className="admin-dashboard min-h-[90vh] flex flex-col md:flex-row bg-transparent min-w-0">
       {/* SIDEBAR */}
-      <aside className="w-full md:w-64 bg-slate-900 text-slate-300 shrink-0 border-r border-slate-800">
-        <div className="p-6 border-b border-slate-800">
-          <h2 className="text-xs uppercase tracking-wider text-slate-500 font-bold">CR Admin Portal</h2>
+      <aside className="w-full md:w-64 glass-panel-dark text-slate-300 shrink-0 border-r border-white/10 backdrop-blur-xl">
+        <div className="p-6 border-b border-white/10">
+          <h2 className="text-xs uppercase tracking-wider text-blue-400 font-bold">CR Admin Portal</h2>
           <p className="text-sm font-semibold text-white mt-1">Management Suite</p>
         </div>
 
@@ -690,8 +690,8 @@ export const AdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('dashboard')}
             className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
               activeTab === 'dashboard'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                : 'hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
             <LayoutDashboard className="w-5 h-5" />
@@ -702,8 +702,8 @@ export const AdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('subjects')}
             className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
               activeTab === 'subjects'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                : 'hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
             <BookOpen className="w-5 h-5" />
@@ -714,8 +714,8 @@ export const AdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('assignments')}
             className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
               activeTab === 'assignments'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                : 'hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
             <FileCheck className="w-5 h-5" />
@@ -726,8 +726,8 @@ export const AdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('submissions')}
             className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
               activeTab === 'submissions'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                : 'hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
             <Inbox className="w-5 h-5" />
@@ -738,8 +738,8 @@ export const AdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('groups')}
             className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
               activeTab === 'groups'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                : 'hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
             <Users className="w-5 h-5" />
@@ -750,8 +750,8 @@ export const AdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('late-requests')}
             className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
               activeTab === 'late-requests'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                : 'hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
             <Clock className="w-5 h-5" />
@@ -762,8 +762,8 @@ export const AdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('students')}
             className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
               activeTab === 'students'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                : 'hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
             <UserCheck className="w-5 h-5" />
@@ -774,8 +774,8 @@ export const AdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
               activeTab === 'settings'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                : 'hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
             <KeyRound className="w-5 h-5" />
@@ -789,10 +789,10 @@ export const AdminDashboard: React.FC = () => {
         {/* Toast Notification */}
         {toastMessage && (
           <div
-            className={`mb-6 p-4 rounded-xl text-sm font-medium flex items-center gap-3 border shadow-sm ${
+            className={`mb-6 p-4 rounded-2xl text-sm font-medium flex items-center gap-3 border shadow-lg backdrop-blur-md ${
               toastMessage.type === 'success'
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                : 'bg-red-50 text-red-800 border-red-200'
+                ? 'bg-emerald-500/10 text-emerald-800 border-emerald-500/30'
+                : 'bg-red-500/10 text-red-800 border-red-500/30'
             }`}
           >
             {toastMessage.type === 'success' ? (
@@ -808,65 +808,104 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard Overview</h1>
               <p className="text-slate-500 text-sm">Real-time statistics for class assignment submissions.</p>
             </div>
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase text-slate-500">Subjects</span>
-                  <BookOpen className="w-5 h-5 text-blue-600" />
+              <button
+                type="button"
+                onClick={() => setActiveTab('subjects')}
+                className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-blue-300 transition group"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-blue-600 transition">Subjects</span>
+                  <div className="p-2 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white rounded-xl text-blue-600 transition shadow-sm">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
                 </div>
                 <div className="text-3xl font-extrabold text-slate-900 mt-2">
                   {stats ? stats.totalSubjects : 0}
                 </div>
-              </div>
+              </button>
 
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase text-slate-500">Assignments</span>
-                  <FileCheck className="w-5 h-5 text-indigo-600" />
+              <button
+                type="button"
+                onClick={() => setActiveTab('assignments')}
+                className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-indigo-300 transition group"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-indigo-600 transition">Assignments</span>
+                  <div className="p-2 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white rounded-xl text-indigo-600 transition shadow-sm">
+                    <FileCheck className="w-5 h-5" />
+                  </div>
                 </div>
                 <div className="text-3xl font-extrabold text-slate-900 mt-2">
                   {stats ? stats.totalAssignments : 0}
                 </div>
-              </div>
+              </button>
 
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase text-slate-500">Total Submissions</span>
-                  <Inbox className="w-5 h-5 text-emerald-600" />
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterStatus('');
+                  setActiveTab('submissions');
+                }}
+                className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-emerald-300 transition group"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-emerald-600 transition">Total Submissions</span>
+                  <div className="p-2 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white rounded-xl text-emerald-600 transition shadow-sm">
+                    <Inbox className="w-5 h-5" />
+                  </div>
                 </div>
                 <div className="text-3xl font-extrabold text-slate-900 mt-2">
                   {stats ? stats.totalSubmissions : 0}
                 </div>
-              </div>
+              </button>
 
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase text-slate-500">Today</span>
-                  <Calendar className="w-5 h-5 text-amber-600" />
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterStatus('');
+                  setActiveTab('submissions');
+                }}
+                className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-amber-300 transition group"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-amber-600 transition">Today</span>
+                  <div className="p-2 bg-amber-50 group-hover:bg-amber-600 group-hover:text-white rounded-xl text-amber-600 transition shadow-sm">
+                    <Calendar className="w-5 h-5" />
+                  </div>
                 </div>
                 <div className="text-3xl font-extrabold text-slate-900 mt-2">
                   {stats ? stats.todaysSubmissions : 0}
                 </div>
-              </div>
+              </button>
 
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase text-slate-500">Late Submissions</span>
-                  <Clock className="w-5 h-5 text-red-600" />
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterStatus('Late');
+                  setActiveTab('submissions');
+                }}
+                className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-red-300 transition group"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-red-600 transition">Late Submissions</span>
+                  <div className="p-2 bg-red-50 group-hover:bg-red-600 group-hover:text-white rounded-xl text-red-600 transition shadow-sm">
+                    <Clock className="w-5 h-5" />
+                  </div>
                 </div>
                 <div className="text-3xl font-extrabold text-slate-900 mt-2">
                   {stats ? stats.lateSubmissions : 0}
                 </div>
-              </div>
+              </button>
             </div>
 
             {/* Recent Submissions Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+            <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold text-slate-900">Recent Submissions</h3>
                 <button
@@ -953,7 +992,7 @@ export const AdminDashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+            <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-x-auto">
               <table className="w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
@@ -1113,7 +1152,7 @@ export const AdminDashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+            <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-x-auto">
               <table className="assignment-table hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
@@ -1258,7 +1297,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Filter Bar */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="glass-panel p-4 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -1322,7 +1361,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Submissions Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+            <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-x-auto">
               <table className="hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
@@ -1446,7 +1485,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Filter bar */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="glass-panel p-4 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -1499,7 +1538,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Groups Grid / Cards */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6">
+            <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-hidden p-6">
               {loadingGroups ? (
                 <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
                   <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> Loading groups...
@@ -1511,7 +1550,7 @@ export const AdminDashboard: React.FC = () => {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {groups.map((grp) => (
-                    <div key={grp._id} className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                    <div key={grp._id} className="p-5 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                         <div>
                           <span className="text-xs font-bold text-blue-600 uppercase">
@@ -1567,7 +1606,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Filter Bar */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="glass-panel p-4 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -1605,7 +1644,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+            <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-x-auto">
               <table className="hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
@@ -1704,9 +1743,9 @@ export const AdminDashboard: React.FC = () => {
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div><h1 className="text-2xl font-bold text-slate-900">Registered Students</h1><p className="text-slate-500 text-sm">Manage student names, roll numbers and account access.</p></div>
-              <input value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} placeholder="Search name, roll or email" className="w-full sm:w-72 px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm" />
+              <input value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} placeholder="Search name, roll or email" className="w-full sm:w-72 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm" />
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+            <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-x-auto">
               <table className="w-full min-w-[760px] text-left text-sm">
                 <thead><tr className="bg-slate-50 text-xs uppercase text-slate-600"><th className="p-4">Name</th><th className="p-4">Roll No</th><th className="p-4">Email</th><th className="p-4">Joined</th><th className="p-4">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1729,7 +1768,7 @@ export const AdminDashboard: React.FC = () => {
               </p>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6 max-w-2xl">
+            <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl p-6 sm:p-8 space-y-6 max-w-2xl">
               <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                 <div>
                   <h3 className="text-lg font-bold text-slate-900">Active Class Join Code</h3>
@@ -1825,27 +1864,27 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {defaultersModalOpen && selectedDefaulterAssignment && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-5 shadow-2xl space-y-4">
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="glass-panel rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 shadow-2xl border border-slate-200/80 dark:border-white/10 space-y-4">
               <div className="flex items-center justify-between gap-3"><div><h3 className="font-bold text-slate-900">Unsubmitted Students</h3><p className="text-xs text-slate-500">{selectedDefaulterAssignment.title}</p></div><button onClick={() => setDefaultersModalOpen(false)} className="text-slate-500 text-xl">&times;</button></div>
-              {loadingDefaulters ? <p className="py-8 text-center text-slate-500">Loading...</p> : defaultersList.length === 0 ? <p className="py-8 text-center text-emerald-700 font-semibold">No defaulters found.</p> : <div className="space-y-2">{defaultersList.map((studentRecord) => <div key={studentRecord._id} className="p-3 bg-slate-50 rounded-lg"><p className="font-semibold text-sm">{studentRecord.name}</p><p className="text-xs text-slate-600">{studentRecord.rollNumber} · {studentRecord.email}</p></div>)}</div>}
-              <button onClick={() => handleExportDefaultersCsv(selectedDefaulterAssignment._id, selectedDefaulterAssignment.title)} className="w-full py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-bold">Export CSV</button>
+              {loadingDefaulters ? <p className="py-8 text-center text-slate-500">Loading...</p> : defaultersList.length === 0 ? <p className="py-8 text-center text-emerald-700 font-semibold">No defaulters found.</p> : <div className="space-y-2">{defaultersList.map((studentRecord) => <div key={studentRecord._id} className="p-3 bg-slate-50/80 rounded-xl"><p className="font-semibold text-sm">{studentRecord.name}</p><p className="text-xs text-slate-600">{studentRecord.rollNumber} · {studentRecord.email}</p></div>)}</div>}
+              <button onClick={() => handleExportDefaultersCsv(selectedDefaulterAssignment._id, selectedDefaulterAssignment.title)} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow">Export CSV</button>
             </div>
           </div>
         )}
 
         {studentEditModalOpen && editingStudent && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4"><form onSubmit={handleSaveStudentEdit} className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4"><h3 className="font-bold text-slate-900">Edit Student</h3><input value={studentEditForm.name} onChange={(e) => setStudentEditForm({ ...studentEditForm, name: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="Name" required /><input value={studentEditForm.rollNumber} onChange={(e) => setStudentEditForm({ ...studentEditForm, rollNumber: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="Roll number" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setStudentEditModalOpen(false)} className="px-3 py-2 bg-slate-100 rounded-lg">Cancel</button><button className="px-3 py-2 bg-blue-600 text-white rounded-lg">Save</button></div></form></div>
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"><form onSubmit={handleSaveStudentEdit} className="glass-panel rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200/80 dark:border-white/10 shadow-2xl"><h3 className="font-bold text-slate-900">Edit Student</h3><input value={studentEditForm.name} onChange={(e) => setStudentEditForm({ ...studentEditForm, name: e.target.value })} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="Name" required /><input value={studentEditForm.rollNumber} onChange={(e) => setStudentEditForm({ ...studentEditForm, rollNumber: e.target.value })} className="w-full px-3 py-2 border rounded-xl text-sm font-mono" placeholder="Roll number" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setStudentEditModalOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold">Cancel</button><button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow">Save</button></div></form></div>
         )}
 
         {resetPassModalOpen && resetPassStudent && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4"><form onSubmit={handleResetStudentPassword} className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4"><h3 className="font-bold text-slate-900">Reset Student Password</h3><input type="password" value={newStudentPassInput} onChange={(e) => setNewStudentPassInput(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="New password" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setResetPassModalOpen(false)} className="px-3 py-2 bg-slate-100 rounded-lg">Cancel</button><button className="px-3 py-2 bg-amber-600 text-white rounded-lg">Reset Password</button></div></form></div>
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"><form onSubmit={handleResetStudentPassword} className="glass-panel rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200/80 dark:border-white/10 shadow-2xl"><h3 className="font-bold text-slate-900">Reset Student Password</h3><input type="password" value={newStudentPassInput} onChange={(e) => setNewStudentPassInput(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="New password" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setResetPassModalOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold">Cancel</button><button className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow">Reset Password</button></div></form></div>
         )}
 
         {/* MODAL: ADD / EDIT SUBJECT */}
         {subjectModalOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="glass-panel rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/80 dark:border-white/10 space-y-4">
               <h3 className="text-lg font-bold text-slate-900">
                 {editingSubject ? 'Edit Subject' : 'Add New Subject'}
               </h3>
@@ -1903,7 +1942,7 @@ export const AdminDashboard: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+                    className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow"
                   >
                     Save Subject
                   </button>
@@ -1915,8 +1954,8 @@ export const AdminDashboard: React.FC = () => {
 
         {/* MODAL: ADD / EDIT ASSIGNMENT */}
         {assignmentModalOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 my-8">
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className="glass-panel rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200/80 dark:border-white/10 space-y-4 my-8">
               <h3 className="text-lg font-bold text-slate-900">
                 {editingAssignment ? 'Edit Assignment' : 'Create Assignment'}
               </h3>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, ShieldCheck, GraduationCap, UserCheck, User } from 'lucide-react';
+import { LogOut, ShieldCheck, GraduationCap, UserCheck, User, LayoutDashboard } from 'lucide-react';
 import { StudentUser, AdminUser } from '../types';
 
 export const Navbar: React.FC = () => {
@@ -15,12 +15,13 @@ export const Navbar: React.FC = () => {
   };
 
   const isAdminRoute = location.pathname.startsWith('/admin');
+  const dashboardPath = role === 'ADMIN' ? '/admin/dashboard' : '/student/dashboard';
 
   return (
-    <header className="bg-slate-900 text-white shadow-md border-b border-slate-800 sticky top-0 z-40">
+    <header className="bg-slate-950/80 backdrop-blur-xl text-white shadow-lg border-b border-white/10 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-16 py-2 flex items-center justify-between gap-2">
-        <Link to={role === 'STUDENT' ? '/student/dashboard' : '/'} className="flex min-w-0 items-center gap-2 sm:gap-3 hover:opacity-90 transition">
-          <div className="bg-blue-600 p-2 rounded-lg text-white">
+        <Link to={isAuthenticated ? dashboardPath : '/'} className="flex min-w-0 items-center gap-2 sm:gap-3 hover:opacity-90 transition">
+          <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-xl text-white shadow-md shadow-blue-500/20 border border-white/20">
             <GraduationCap className="w-6 h-6" />
           </div>
           <div>
@@ -29,18 +30,29 @@ export const Navbar: React.FC = () => {
           </div>
         </Link>
 
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-4">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           {isAuthenticated ? (
             <div className="flex items-center gap-1.5 sm:gap-3">
+              <Link
+                to={dashboardPath}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg shadow-md shadow-blue-500/25 border border-white/20 transition"
+              >
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                <span>Dashboard</span>
+              </Link>
+
               {role === 'ADMIN' ? (
-                <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 text-slate-200 text-xs font-semibold rounded-full border border-slate-700">
+                <Link
+                  to="/admin/dashboard"
+                  className="hidden md:inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800/80 hover:bg-slate-800 text-slate-200 text-xs font-semibold rounded-full border border-slate-700 transition"
+                >
                   <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-                  CR / Admin: {(user as AdminUser)?.name}
-                </span>
+                  CR: {(user as AdminUser)?.name}
+                </Link>
               ) : (
                 <Link
                   to="/student/dashboard"
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-blue-900/60 hover:bg-blue-900/80 text-blue-200 text-xs font-semibold rounded-full border border-blue-700/50 transition"
+                  className="hidden md:inline-flex items-center gap-1.5 px-3 py-1 bg-blue-900/50 hover:bg-blue-900/80 text-blue-200 text-xs font-semibold rounded-full border border-blue-700/50 transition"
                 >
                   <UserCheck className="w-3.5 h-3.5 text-blue-400" />
                   {(user as StudentUser)?.name} (Roll #{(user as StudentUser)?.rollNumber})
