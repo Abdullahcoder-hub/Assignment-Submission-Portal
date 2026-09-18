@@ -22,11 +22,26 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const getCachedUser = (): AdminUser | StudentUser | null => {
+  try {
+    const item = localStorage.getItem('portalUser');
+    return item ? JSON.parse(item) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AdminUser | StudentUser | null>(null);
+  const cachedUser = getCachedUser();
+  const [user, setUser] = useState<AdminUser | StudentUser | null>(cachedUser);
   const [role, setRole] = useState<UserRole | null>((localStorage.getItem('userRole') as UserRole) || null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('portalToken'));
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const storedToken = localStorage.getItem('portalToken');
+    const storedRole = localStorage.getItem('userRole');
+    // If we have token and cached user, don't block page render (instant load)
+    return Boolean(storedToken && storedRole && !cachedUser);
+  });
 
   useEffect(() => {
     const verifyToken = async () => {
@@ -45,6 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(res.data.admin);
             setRole('ADMIN');
             setToken(storedToken);
+            localStorage.setItem('portalUser', JSON.stringify(res.data.admin));
           } else {
             logout();
           }
@@ -54,12 +70,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(res.data.student);
             setRole('STUDENT');
             setToken(storedToken);
+            localStorage.setItem('portalUser', JSON.stringify(res.data.student));
           } else {
             logout();
           }
         }
-      } catch (error) {
-        logout();
+      } catch (error: any) {
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          logout();
+        }
       } finally {
         setIsLoading(false);
       }
@@ -73,6 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await api.get('/auth/student/me');
       if (res.data.success) {
         setUser(res.data.student);
+        localStorage.setItem('portalUser', JSON.stringify(res.data.student));
       }
     } catch (err) {
       console.error('Failed to refresh profile:', err);
@@ -87,6 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const adminData = res.data.admin;
         localStorage.setItem('portalToken', jwtToken);
         localStorage.setItem('userRole', 'ADMIN');
+        localStorage.setItem('portalUser', JSON.stringify(adminData));
         setToken(jwtToken);
         setRole('ADMIN');
         setUser(adminData);
@@ -107,6 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const studentData = res.data.student;
         localStorage.setItem('portalToken', jwtToken);
         localStorage.setItem('userRole', 'STUDENT');
+        localStorage.setItem('portalUser', JSON.stringify(studentData));
         setToken(jwtToken);
         setRole('STUDENT');
         setUser(studentData);
@@ -141,6 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const studentData = res.data.student;
         localStorage.setItem('portalToken', jwtToken);
         localStorage.setItem('userRole', 'STUDENT');
+        localStorage.setItem('portalUser', JSON.stringify(studentData));
         setToken(jwtToken);
         setRole('STUDENT');
         setUser(studentData);
@@ -161,6 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     localStorage.removeItem('portalToken');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('portalUser');
     setToken(null);
     setRole(null);
     setUser(null);

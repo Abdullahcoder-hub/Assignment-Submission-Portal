@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 
@@ -19,6 +20,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 dotenv.config();
 
 const app = express();
+
+// High-speed response compression for mobile 4G/3G
+app.use(compression());
 
 // Security Headers
 app.use(helmet());

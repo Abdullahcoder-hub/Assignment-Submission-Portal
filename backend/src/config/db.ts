@@ -13,7 +13,11 @@ export const connectDB = async (): Promise<void> => {
     }
 
     const conn = await mongoose.connect(connStr, {
-      serverSelectionTimeoutMS: 15000,
+      serverSelectionTimeoutMS: 10000,
+      maxPoolSize: 50,
+      minPoolSize: 5,
+      socketTimeoutMS: 30000,
+      connectTimeoutMS: 10000,
     });
     console.log(`[MongoDB] Connected: ${conn.connection.host}`);
 

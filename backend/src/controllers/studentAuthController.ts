@@ -428,27 +428,30 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const student = await Student.findById(req.student.id).select('-passwordHash');
+    const student = await Student.findById(req.student.id)
+      .select('name email rollNumber isEmailVerified role')
+      .lean();
     if (!student) {
       res.status(404).json({ success: false, message: 'Student profile not found.' });
       return;
     }
 
     // Fetch ONLY this student's submissions
-    const mySubmissions = await Submission.find({ studentId: student._id })
+    const mySubmissions = await Submission.find({ studentId: (student as any)._id })
       .populate('subjectId', 'name code')
       .populate('assignmentId', 'title deadline')
-      .sort({ submittedAt: -1 });
+      .sort({ submittedAt: -1 })
+      .lean();
 
     res.status(200).json({
       success: true,
       student: {
-        id: student._id,
-        name: student.name,
-        email: student.email,
-        rollNumber: student.rollNumber,
-        isEmailVerified: student.isEmailVerified,
-        role: student.role,
+        id: (student as any)._id,
+        name: (student as any).name,
+        email: (student as any).email,
+        rollNumber: (student as any).rollNumber,
+        isEmailVerified: (student as any).isEmailVerified,
+        role: (student as any).role,
       },
       submissions: mySubmissions,
     });

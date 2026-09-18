@@ -402,7 +402,7 @@ const fetchFileBuffer = async (fileUrls: string[]): Promise<Buffer> => {
 export const downloadSingleSubmission = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const submission = await Submission.findById(id);
+    const submission = await Submission.findById(id).lean();
 
     if (!submission) {
       res.status(404).json({ success: false, message: 'Submission record not found.' });
@@ -414,25 +414,39 @@ export const downloadSingleSubmission = async (req: AuthRequest, res: Response):
       return;
     }
 
-    try {
-      const buffer = await fetchFileBuffer([submission.cloudinarySecureUrl, getCloudinaryDownloadUrl(submission)]);
-      const cleanFileName = submission.originalFileName.replace(/["\r\n]/g, '_');
+    const downloadUrls = [submission.cloudinarySecureUrl, getCloudinaryDownloadUrl(submission)].filter(Boolean);
+    const cleanFileName = submission.originalFileName.replace(/["\r\n]/g, '_');
 
-      res.setHeader('Content-Type', submission.fileType || 'application/octet-stream');
-      res.setHeader('Content-Length', buffer.length);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${cleanFileName}"; filename*=UTF-8''${encodeURIComponent(submission.originalFileName)}`
-      );
+    for (const url of downloadUrls) {
+      try {
+        const streamResponse = await axios.get(url, {
+          responseType: 'stream',
+          timeout: 30000,
+          validateStatus: (status) => status >= 200 && status < 300,
+        });
 
-      res.status(200).send(buffer);
-    } catch (fetchErr) {
-      console.error('[Download Single Cloudinary Failure]:', fetchErr);
-      res.status(502).json({ success: false, message: 'Unable to fetch the submission file from Cloudinary.' });
+        res.setHeader('Content-Type', submission.fileType || 'application/octet-stream');
+        if (submission.fileSize) {
+          res.setHeader('Content-Length', submission.fileSize);
+        }
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${cleanFileName}"; filename*=UTF-8''${encodeURIComponent(submission.originalFileName)}`
+        );
+
+        streamResponse.data.pipe(res);
+        return;
+      } catch (streamErr) {
+        console.warn(`[Stream Download Attempt Failed for URL: ${url}]:`, streamErr);
+      }
     }
+
+    res.status(502).json({ success: false, message: 'Unable to fetch the submission file from Cloudinary.' });
   } catch (error) {
     console.error('[Download Single Error]:', error);
-    res.status(500).json({ success: false, message: 'Failed to download submission file.' });
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Failed to download submission file.' });
+    }
   }
 };
 

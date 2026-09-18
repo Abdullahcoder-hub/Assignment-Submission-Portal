@@ -55,7 +55,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    const admin = await Admin.findById(req.admin.id).select('-passwordHash');
+    const admin = await Admin.findById(req.admin.id).select('name email role').lean();
     if (!admin) {
       res.status(404).json({ success: false, message: 'Admin profile not found.' });
       return;
@@ -64,10 +64,10 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(200).json({
       success: true,
       admin: {
-        id: admin._id,
-        name: admin.name,
-        email: admin.email,
-        role: admin.role,
+        id: (admin as any)._id,
+        name: (admin as any).name,
+        email: (admin as any).email,
+        role: (admin as any).role,
       },
     });
   } catch (error) {
