@@ -11,7 +11,7 @@ export const getSubjects = async (req: Request, res: Response): Promise<void> =>
     const { includeInactive } = req.query;
     const filter = includeInactive === 'true' ? {} : { isActive: true };
 
-    const subjects = await Subject.find(filter).sort({ name: 1 });
+    const subjects = await Subject.find(filter).sort({ name: 1 }).lean();
     res.status(200).json({ success: true, count: subjects.length, subjects });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch subjects.' });

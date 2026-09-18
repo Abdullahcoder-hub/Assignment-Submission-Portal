@@ -15,9 +15,22 @@ import {
 } from 'lucide-react';
 
 export const StudentSubmission: React.FC = () => {
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('portal_cached_subjects');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(true);
+  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(() => {
+    try {
+      return !sessionStorage.getItem('portal_cached_subjects');
+    } catch {
+      return true;
+    }
+  });
   const [loadingAssignments, setLoadingAssignments] = useState<boolean>(false);
 
   // Form State
@@ -47,6 +60,9 @@ export const StudentSubmission: React.FC = () => {
         const res = await api.get('/subjects');
         if (res.data.success) {
           setSubjects(res.data.subjects);
+          try {
+            sessionStorage.setItem('portal_cached_subjects', JSON.stringify(res.data.subjects));
+          } catch {}
         }
       } catch (err) {
         setErrorMsg('Failed to load subjects. Please refresh the page.');

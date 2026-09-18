@@ -54,10 +54,23 @@ export const StudentDashboard: React.FC = () => {
     window.history.replaceState(null, '', url.toString());
   };
 
-  // Subjects & Assignments
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  // Subjects & Assignments with instant cache rehydration
+  const [subjects, setSubjects] = useState<Subject[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('portal_cached_subjects');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(true);
+  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(() => {
+    try {
+      return !sessionStorage.getItem('portal_cached_subjects');
+    } catch {
+      return true;
+    }
+  });
   const [loadingAssignments, setLoadingAssignments] = useState<boolean>(false);
 
   // Student's Own Submissions History
@@ -85,7 +98,14 @@ export const StudentDashboard: React.FC = () => {
   // Group Registration State
   const [groupSubjectId, setGroupSubjectId] = useState<string>('');
   const [groupAssignmentId, setGroupAssignmentId] = useState<string>('');
-  const [groupAssignments, setGroupAssignments] = useState<Assignment[]>([]);
+  const [groupAssignments, setGroupAssignments] = useState<Assignment[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('portal_cached_group_assignments');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [myGroup, setMyGroup] = useState<Group | null>(null);
   const [loadingMyGroup, setLoadingMyGroup] = useState<boolean>(false);
 
@@ -103,7 +123,9 @@ export const StudentDashboard: React.FC = () => {
   // Group Edit Modal State
   const [groupEditModalOpen, setGroupEditModalOpen] = useState<boolean>(false);
   const [editGroupName, setEditGroupName] = useState<string>('');
-  const [editMembers, setEditMembers] = useState<{ name: string; rollNumber: string }[]>([]);
+  const [editMembers, setEditMembers] = useState<{ name: string; rollNumber: string }[]>([
+    { name: '', rollNumber: '' },
+  ]);
   const [editLeaderIndex, setEditLeaderIndex] = useState<number>(0);
   const [editingGroupSaving, setEditingGroupSaving] = useState<boolean>(false);
 
@@ -173,33 +195,55 @@ export const StudentDashboard: React.FC = () => {
     };
   };
 
-  // Fetch Subjects & Profile Data
+  // Fetch Subjects & Profile Data concurrently
   const fetchStudentData = async () => {
-    try {
-      setLoadingSubjects(true);
-      const resSubjects = await api.get('/subjects');
-      if (resSubjects.data.success) {
-        setSubjects(resSubjects.data.subjects);
+    const fetchSubjectsPromise = async () => {
+      try {
+        setLoadingSubjects(true);
+        const res = await api.get('/subjects');
+        if (res.data.success) {
+          setSubjects(res.data.subjects);
+          try {
+            sessionStorage.setItem('portal_cached_subjects', JSON.stringify(res.data.subjects));
+          } catch {}
+        }
+      } catch (err) {
+        console.error('Failed to load subjects:', err);
+      } finally {
+        setLoadingSubjects(false);
       }
+    };
 
-      const resGroupAssignments = await api.get('/assignments');
-      if (resGroupAssignments.data.success) {
-        setGroupAssignments(
-          resGroupAssignments.data.assignments.filter((assignment: Assignment) => assignment.submissionType === 'Group')
-        );
+    const fetchAssignmentsPromise = async () => {
+      try {
+        const res = await api.get('/assignments');
+        if (res.data.success) {
+          const groupList = res.data.assignments.filter((assignment: Assignment) => assignment.submissionType === 'Group');
+          setGroupAssignments(groupList);
+          try {
+            sessionStorage.setItem('portal_cached_group_assignments', JSON.stringify(groupList));
+          } catch {}
+        }
+      } catch (err) {
+        console.error('Failed to load group assignments:', err);
       }
+    };
 
-      setLoadingHistory(true);
-      const resProfile = await api.get('/auth/student/me');
-      if (resProfile.data.success) {
-        setMySubmissions(resProfile.data.submissions);
+    const fetchProfilePromise = async () => {
+      try {
+        setLoadingHistory(true);
+        const res = await api.get('/auth/student/me');
+        if (res.data.success) {
+          setMySubmissions(res.data.submissions);
+        }
+      } catch (err) {
+        console.error('Failed to load profile submissions:', err);
+      } finally {
+        setLoadingHistory(false);
       }
-    } catch (err) {
-      setErrorMsg('Failed to load student dashboard data.');
-    } finally {
-      setLoadingSubjects(false);
-      setLoadingHistory(false);
-    }
+    };
+
+    await Promise.allSettled([fetchSubjectsPromise(), fetchAssignmentsPromise(), fetchProfilePromise()]);
   };
 
   const refreshSubmissionHistory = async () => {

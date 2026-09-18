@@ -69,9 +69,22 @@ export const AdminDashboard: React.FC = () => {
   const [recentSubmissions, setRecentSubmissions] = useState<Submission[]>([]);
   const [loadingStats, setLoadingStats] = useState<boolean>(false);
 
-  // Subjects state
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
+  // Subjects state with instant cache rehydration
+  const [subjects, setSubjects] = useState<Subject[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('admin_cached_subjects');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(() => {
+    try {
+      return !sessionStorage.getItem('admin_cached_subjects');
+    } catch {
+      return false;
+    }
+  });
   const [subjectModalOpen, setSubjectModalOpen] = useState<boolean>(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [subjectForm, setSubjectForm] = useState({ name: '', code: '', description: '', isActive: true });
@@ -171,6 +184,9 @@ export const AdminDashboard: React.FC = () => {
       const res = await api.get('/subjects?includeInactive=true');
       if (res.data.success) {
         setSubjects(res.data.subjects);
+        try {
+          sessionStorage.setItem('admin_cached_subjects', JSON.stringify(res.data.subjects));
+        } catch {}
       }
     } catch (err) {
       showToast('error', 'Failed to fetch subjects list.');

@@ -22,7 +22,8 @@ export const getAssignments = async (req: Request, res: Response): Promise<void>
 
     const assignments = await Assignment.find(filter)
       .populate('subjectId', 'name code')
-      .sort({ deadline: 1 });
+      .sort({ deadline: 1 })
+      .lean();
     const visibleAssignments = requestedSubmissionType === 'Group' || requestedSubmissionType === 'Individual'
       ? assignments.filter((assignment) => assignment.submissionType === requestedSubmissionType)
       : assignments;
