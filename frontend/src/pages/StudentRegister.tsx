@@ -25,6 +25,8 @@ export const StudentRegister: React.FC = () => {
     loading: boolean;
     checkedRoll: string;
     exists?: boolean;
+    isAvailable?: boolean;
+    error?: boolean;
     message?: string;
   } | null>(null);
 
@@ -41,22 +43,28 @@ export const StudentRegister: React.FC = () => {
           loading: false,
           checkedRoll: roll,
           exists: true,
+          isAvailable: false,
           message: res.data.message || `Roll number ${roll} is already registered.`,
         });
-      } else {
+      } else if (res.data?.available) {
         setRollCheckState({
           loading: false,
           checkedRoll: roll,
           exists: false,
+          isAvailable: true,
           message: res.data.message || `Roll number ${roll} is available.`,
         });
+      } else {
+        setRollCheckState(null);
       }
     } catch (err: any) {
       setRollCheckState({
         loading: false,
         checkedRoll: roll,
-        exists: err.response?.data?.exists || false,
-        message: err.response?.data?.message || 'Failed to check roll number.',
+        exists: false,
+        isAvailable: false,
+        error: true,
+        message: err.response?.data?.message || 'Server check temporarily unavailable.',
       });
     }
   };
@@ -207,8 +215,10 @@ export const StudentRegister: React.FC = () => {
                   className={`w-full px-4 py-2.5 bg-slate-50 border rounded-xl text-sm font-mono tracking-wider transition ${
                     rollCheckState?.exists
                       ? 'border-red-500 bg-red-50/40 text-red-900 focus:ring-2 focus:ring-red-400'
-                      : rollCheckState && !rollCheckState.loading && !rollCheckState.exists
+                      : rollCheckState?.isAvailable
                       ? 'border-emerald-500 bg-emerald-50/40 text-emerald-900 focus:ring-2 focus:ring-emerald-400'
+                      : rollCheckState?.error
+                      ? 'border-amber-400 focus:ring-2 focus:ring-amber-400'
                       : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
                   }`}
                 />
@@ -222,7 +232,7 @@ export const StudentRegister: React.FC = () => {
                     <AlertCircle className="w-4 h-4 text-red-500" />
                   </div>
                 )}
-                {rollCheckState && !rollCheckState.loading && !rollCheckState.exists && (
+                {rollCheckState && !rollCheckState.loading && rollCheckState.isAvailable && (
                   <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   </div>
@@ -241,9 +251,14 @@ export const StudentRegister: React.FC = () => {
                   <span>{rollCheckState.message}</span>
                 </div>
               )}
-              {rollCheckState && !rollCheckState.loading && !rollCheckState.exists && (
+              {rollCheckState && !rollCheckState.loading && rollCheckState.isAvailable && (
                 <p className="text-[11px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" /> {rollCheckState.message}
+                </p>
+              )}
+              {rollCheckState && !rollCheckState.loading && rollCheckState.error && (
+                <p className="text-[11px] text-amber-600 mt-1 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" /> {rollCheckState.message}
                 </p>
               )}
               {!rollCheckState && rollNumber.length > 0 && rollNumber.length < 7 && (
