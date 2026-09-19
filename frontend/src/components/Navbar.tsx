@@ -14,13 +14,21 @@ export const Navbar: React.FC = () => {
     navigate('/student/login');
   };
 
+  const isAuthRoute = [
+    '/student/login',
+    '/admin/login',
+    '/register',
+    '/verify-email',
+    '/forgot-password',
+    '/reset-password',
+  ].includes(location.pathname);
   const isAdminRoute = location.pathname.startsWith('/admin');
   const dashboardPath = role === 'ADMIN' ? '/admin/dashboard' : '/student/dashboard';
 
   return (
     <header className="bg-slate-950/80 backdrop-blur-xl text-white shadow-lg border-b border-white/10 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-16 py-2 flex items-center justify-between gap-2">
-        <Link to={isAuthenticated ? dashboardPath : '/'} className="flex min-w-0 items-center gap-2 sm:gap-3 hover:opacity-90 transition">
+        <Link to={isAuthenticated && !isAuthRoute ? dashboardPath : '/'} className="flex min-w-0 items-center gap-2 sm:gap-3 hover:opacity-90 transition">
           <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-xl text-white shadow-md shadow-blue-500/20 border border-white/20">
             <GraduationCap className="w-6 h-6" />
           </div>
@@ -31,7 +39,7 @@ export const Navbar: React.FC = () => {
         </Link>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-          {isAuthenticated ? (
+          {isAuthenticated && !isAuthRoute ? (
             <div className="flex items-center gap-1.5 sm:gap-3">
               {role === 'ADMIN' ? (
                 <Link

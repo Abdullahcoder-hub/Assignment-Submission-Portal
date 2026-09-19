@@ -4,6 +4,7 @@ import Student from '../models/Student.js';
 import Submission from '../models/Submission.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { validatePasswordStrength } from '../utils/passwordValidator.js';
+import { validateRollNumber } from '../utils/rollValidator.js';
 
 /**
  * 1. LIST ALL REGISTERED STUDENTS (WITH SEARCH & PAGINATION)
@@ -52,6 +53,11 @@ export const updateStudent = async (req: AuthRequest, res: Response): Promise<vo
 
     if (rollNumber && rollNumber.trim() !== student.rollNumber) {
       const cleanRoll = rollNumber.trim();
+      const rollValidation = validateRollNumber(cleanRoll);
+      if (!rollValidation.isValid) {
+        res.status(400).json({ success: false, message: rollValidation.message });
+        return;
+      }
       const existingRoll = await Student.findOne({ rollNumber: cleanRoll, _id: { $ne: id } });
       if (existingRoll) {
         res.status(400).json({ success: false, message: `Roll number '${cleanRoll}' is already in use by another student.` });

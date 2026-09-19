@@ -32,6 +32,12 @@ export const StudentRegister: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    const cleanRoll = rollNumber.trim();
+    if (!/^\d{7}$/.test(cleanRoll)) {
+      setErrorMsg('Roll number must be exactly 7 digits (e.g. 2260000).');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setErrorMsg('Passwords do not match.');
       return;
@@ -45,12 +51,12 @@ export const StudentRegister: React.FC = () => {
     setIsSubmitting(true);
 
     const res = await studentRegister({
-      name,
-      rollNumber,
-      email,
+      name: name.trim(),
+      rollNumber: cleanRoll,
+      email: email.trim(),
       password,
       confirmPassword,
-      joinCode,
+      joinCode: joinCode.trim(),
     });
 
     setIsSubmitting(false);
@@ -130,14 +136,17 @@ export const StudentRegister: React.FC = () => {
 
             {/* Roll Number */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Roll Number</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Roll Number <span className="text-slate-400 font-normal">(7 digits, e.g. 2260000)</span>
+              </label>
               <input
                 type="text"
-                placeholder="e.g. 21"
+                maxLength={7}
+                placeholder="e.g. 2260000"
                 value={rollNumber}
-                onChange={(e) => setRollNumber(e.target.value)}
+                onChange={(e) => setRollNumber(e.target.value.replace(/\D/g, ''))}
                 required
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono tracking-wider"
               />
             </div>
 

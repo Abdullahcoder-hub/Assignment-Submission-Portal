@@ -163,8 +163,8 @@ export const StudentSubmission: React.FC = () => {
       return false;
     }
 
-    if (!rollNumber.trim()) {
-      setErrorMsg('Please enter your roll number.');
+    if (!rollNumber.trim() || !/^\d{7}$/.test(rollNumber.trim())) {
+      setErrorMsg('Roll number must be exactly 7 digits (e.g. 2260000).');
       return false;
     }
 
@@ -488,15 +488,16 @@ export const StudentSubmission: React.FC = () => {
           {/* Roll Number */}
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">
-              Roll Number <span className="text-red-500">*</span>
+              Roll Number <span className="text-slate-400 font-normal text-xs">(7 digits, e.g. 2260000)</span> <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
-              placeholder="e.g. 21"
+              maxLength={7}
+              placeholder="e.g. 2260000"
               value={rollNumber}
-              onChange={(e) => setRollNumber(e.target.value)}
+              onChange={(e) => setRollNumber(e.target.value.replace(/\D/g, ''))}
               disabled={isSubmitting}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-slate-800 font-mono"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-slate-800 font-mono tracking-wider"
             />
           </div>
 

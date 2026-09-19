@@ -539,16 +539,24 @@ export const StudentDashboard: React.FC = () => {
 
     const seenRolls = new Set<string>();
     for (const member of membersPayload) {
-      const roll = member.rollNumber.trim().toUpperCase();
+      const roll = member.rollNumber ? member.rollNumber.trim() : '';
       if (roll) {
-        if (seenRolls.has(roll)) {
+        if (!/^\d{7}$/.test(roll)) {
           setGroupMsg({
             type: 'error',
-            text: `Roll number '${member.rollNumber.trim()}' cannot be used more than once in the same group.`,
+            text: `Roll number '${roll}' is invalid. Roll number must be exactly 7 digits (e.g. 2260000).`,
           });
           return;
         }
-        seenRolls.add(roll);
+        const upperRoll = roll.toUpperCase();
+        if (seenRolls.has(upperRoll)) {
+          setGroupMsg({
+            type: 'error',
+            text: `Roll number '${roll}' cannot be used more than once in the same group.`,
+          });
+          return;
+        }
+        seenRolls.add(upperRoll);
       }
     }
 
@@ -625,12 +633,17 @@ export const StudentDashboard: React.FC = () => {
 
     const seen = new Set<string>();
     for (const m of validMembers) {
-      const r = m.rollNumber.trim().toUpperCase();
-      if (seen.has(r)) {
+      const r = m.rollNumber.trim();
+      if (!/^\d{7}$/.test(r)) {
+        setGroupMsg({ type: 'error', text: `Roll number '${r}' is invalid. Roll number must be exactly 7 digits (e.g. 2260000).` });
+        return;
+      }
+      const upperR = r.toUpperCase();
+      if (seen.has(upperR)) {
         setGroupMsg({ type: 'error', text: `Roll number '${r}' cannot be used more than once.` });
         return;
       }
-      seen.add(r);
+      seen.add(upperR);
     }
 
     const leaderRoll = validMembers[editLeaderIndex]?.rollNumber || validMembers[0]?.rollNumber;
@@ -1440,18 +1453,19 @@ export const StudentDashboard: React.FC = () => {
 
                           <div className="flex-1">
                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 sm:hidden">
-                              Roll Number
+                              Roll Number (7 digits)
                             </label>
                             <input
                               type="text"
+                              maxLength={7}
                               value={m.rollNumber}
                               onChange={(e) => {
                                 const updated = [...extraMembers];
-                                updated[idx].rollNumber = e.target.value;
+                                updated[idx].rollNumber = e.target.value.replace(/\D/g, '');
                                 setExtraMembers(updated);
                               }}
-                              placeholder={`Member ${idx + 2} Roll Number (e.g., 2021-CS-101)`}
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-semibold"
+                              placeholder={`Member ${idx + 2} Roll (e.g., 2260000)`}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-semibold tracking-wider"
                             />
                           </div>
 
@@ -1811,14 +1825,15 @@ export const StudentDashboard: React.FC = () => {
                     />
                     <input
                       type="text"
+                      maxLength={7}
                       value={m.rollNumber}
                       onChange={(e) => {
                         const updated = [...editMembers];
-                        updated[idx].rollNumber = e.target.value;
+                        updated[idx].rollNumber = e.target.value.replace(/\D/g, '');
                         setEditMembers(updated);
                       }}
-                      placeholder={`Roll Number`}
-                      className="flex-1 px-3 py-1.5 border rounded-lg text-xs font-mono font-semibold"
+                      placeholder="Roll (e.g. 2260000)"
+                      className="flex-1 px-3 py-1.5 border rounded-lg text-xs font-mono font-semibold tracking-wider"
                       required
                     />
                     <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">

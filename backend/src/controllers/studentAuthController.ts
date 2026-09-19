@@ -7,6 +7,7 @@ import Student from '../models/Student.js';
 import Submission from '../models/Submission.js';
 import { verifyClassJoinCode } from '../utils/joinCode.js';
 import { validatePasswordStrength } from '../utils/passwordValidator.js';
+import { validateRollNumber } from '../utils/rollValidator.js';
 import { sendStudentVerificationEmail, sendPasswordResetEmail } from '../config/brevo.js';
 import { AuthRequest } from '../middleware/auth.js';
 
@@ -23,6 +24,13 @@ export const registerStudent = async (req: Request, res: Response): Promise<void
 
     if (!name || !rollNumber || !email || !password || !joinCode) {
       res.status(400).json({ success: false, message: 'Please fill in all required fields.' });
+      return;
+    }
+
+    const cleanRoll = rollNumber.trim();
+    const rollValidation = validateRollNumber(cleanRoll);
+    if (!rollValidation.isValid) {
+      res.status(400).json({ success: false, message: rollValidation.message });
       return;
     }
 
@@ -46,7 +54,6 @@ export const registerStudent = async (req: Request, res: Response): Promise<void
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const cleanRoll = rollNumber.trim();
 
     // Check existing email or roll number
     const existingEmail = await Student.findOne({ email: cleanEmail });
@@ -278,13 +285,20 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
         return;
       }
 
+      const cleanRoll = rollNumber.trim();
+      const rollValidation = validateRollNumber(cleanRoll);
+      if (!rollValidation.isValid) {
+        res.status(400).json({ success: false, message: rollValidation.message });
+        return;
+      }
+
       const isValidCode = await verifyClassJoinCode(joinCode);
       if (!isValidCode) {
         res.status(400).json({ success: false, message: 'Invalid or inactive Class Join Code.' });
         return;
       }
 
-      const existingRoll = await Student.findOne({ rollNumber: rollNumber.trim() });
+      const existingRoll = await Student.findOne({ rollNumber: cleanRoll });
       if (existingRoll) {
         res.status(400).json({ success: false, message: 'An account with this roll number already exists.' });
         return;
@@ -293,7 +307,7 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
       student = await Student.create({
         name,
         email,
-        rollNumber: rollNumber.trim(),
+        rollNumber: cleanRoll,
         googleId,
         isEmailVerified: true, // Google OAuth automatically verifies email
       });

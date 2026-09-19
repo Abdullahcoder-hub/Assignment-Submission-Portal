@@ -5,6 +5,7 @@ import Subject from '../models/Subject.js';
 import Assignment from '../models/Assignment.js';
 import Student from '../models/Student.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { validateRollNumber } from '../utils/rollValidator.js';
 
 /**
  * 1. CREATE NEW GROUP (Subject-wise)
@@ -69,17 +70,36 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
     const rawRolls: string[] = [];
 
     const inputMembers = Array.isArray(members) ? members : Array.isArray(memberRollNumbers) ? memberRollNumbers : [];
-    inputMembers.forEach((item: any) => {
+    for (const item of inputMembers) {
       if (typeof item === 'string' && item.trim()) {
-        rawRolls.push(item.trim());
+        const roll = item.trim();
+        const rollVal = validateRollNumber(roll);
+        if (!rollVal.isValid) {
+          res.status(400).json({ success: false, message: `Member roll number "${roll}" is invalid. Roll number must be exactly 7 digits (e.g. 2260000).` });
+          return;
+        }
+        rawRolls.push(roll);
       } else if (typeof item === 'object' && item?.rollNumber && item.rollNumber.trim()) {
         const roll = item.rollNumber.trim();
+        const rollVal = validateRollNumber(roll);
+        if (!rollVal.isValid) {
+          res.status(400).json({ success: false, message: `Member roll number "${roll}" is invalid. Roll number must be exactly 7 digits (e.g. 2260000).` });
+          return;
+        }
         rawRolls.push(roll);
         if (item.name && item.name.trim()) {
           memberNameMap[roll.toUpperCase()] = item.name.trim();
         }
       }
-    });
+    }
+
+    // Clean up leader roll number
+    const cleanLeaderRoll = leaderRollNumber.trim();
+    const leaderRollVal = validateRollNumber(cleanLeaderRoll);
+    if (!leaderRollVal.isValid) {
+      res.status(400).json({ success: false, message: `Leader roll number "${cleanLeaderRoll}" is invalid. Roll number must be exactly 7 digits (e.g. 2260000).` });
+      return;
+    }
 
     // Check if group name / number already exists for this subject assignment
     const existingName = await Group.findOne({
@@ -105,9 +125,6 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       });
       return;
     }
-
-    // Clean up leader roll number
-    const cleanLeaderRoll = leaderRollNumber.trim();
 
     // Ensure leader is included in member rolls
     if (!rawRolls.some(r => r.toLowerCase() === cleanLeaderRoll.toLowerCase())) {
@@ -564,21 +581,39 @@ export const updateGroup = async (req: AuthRequest, res: Response): Promise<void
     const rawRolls: string[] = [];
 
     const inputMembers = Array.isArray(members) ? members : Array.isArray(memberRollNumbers) ? memberRollNumbers : [];
-    inputMembers.forEach((item: any) => {
+    for (const item of inputMembers) {
       if (typeof item === 'string' && item.trim()) {
-        rawRolls.push(item.trim());
+        const roll = item.trim();
+        const rollVal = validateRollNumber(roll);
+        if (!rollVal.isValid) {
+          res.status(400).json({ success: false, message: `Member roll number "${roll}" is invalid. Roll number must be exactly 7 digits (e.g. 2260000).` });
+          return;
+        }
+        rawRolls.push(roll);
       } else if (typeof item === 'object' && item?.rollNumber && item.rollNumber.trim()) {
         const roll = item.rollNumber.trim();
+        const rollVal = validateRollNumber(roll);
+        if (!rollVal.isValid) {
+          res.status(400).json({ success: false, message: `Member roll number "${roll}" is invalid. Roll number must be exactly 7 digits (e.g. 2260000).` });
+          return;
+        }
         rawRolls.push(roll);
         if (item.name && item.name.trim()) {
           memberNameMap[roll.toUpperCase()] = item.name.trim();
         }
       }
-    });
+    }
 
     const cleanLeaderRoll = (leaderRollNumber || group.leader.rollNumber || '').trim();
-    if (cleanLeaderRoll && !rawRolls.some((r) => r.toLowerCase() === cleanLeaderRoll.toLowerCase())) {
-      rawRolls.push(cleanLeaderRoll);
+    if (cleanLeaderRoll) {
+      const leaderRollVal = validateRollNumber(cleanLeaderRoll);
+      if (!leaderRollVal.isValid) {
+        res.status(400).json({ success: false, message: `Leader roll number "${cleanLeaderRoll}" is invalid. Roll number must be exactly 7 digits (e.g. 2260000).` });
+        return;
+      }
+      if (!rawRolls.some((r) => r.toLowerCase() === cleanLeaderRoll.toLowerCase())) {
+        rawRolls.push(cleanLeaderRoll);
+      }
     }
 
     const normalizedRolls = rawRolls.map((roll) => roll.toUpperCase());

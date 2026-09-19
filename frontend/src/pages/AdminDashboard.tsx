@@ -375,8 +375,16 @@ export const AdminDashboard: React.FC = () => {
   const handleSaveStudentEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStudent) return;
+    const cleanRoll = studentEditForm.rollNumber.trim();
+    if (!/^\d{7}$/.test(cleanRoll)) {
+      showToast('error', 'Roll number must be exactly 7 digits (e.g. 2260000).');
+      return;
+    }
     try {
-      const res = await api.put(`/admin/students/${editingStudent._id}`, studentEditForm);
+      const res = await api.put(`/admin/students/${editingStudent._id}`, {
+        name: studentEditForm.name.trim(),
+        rollNumber: cleanRoll,
+      });
       if (res.data.success) {
         showToast('success', res.data.message);
         setStudentEditModalOpen(false);
@@ -1948,7 +1956,7 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {studentEditModalOpen && editingStudent && (
-          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"><form onSubmit={handleSaveStudentEdit} className="glass-panel rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200/80 dark:border-white/10 shadow-2xl"><h3 className="font-bold text-slate-900">Edit Student</h3><input value={studentEditForm.name} onChange={(e) => setStudentEditForm({ ...studentEditForm, name: e.target.value })} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="Name" required /><input value={studentEditForm.rollNumber} onChange={(e) => setStudentEditForm({ ...studentEditForm, rollNumber: e.target.value })} className="w-full px-3 py-2 border rounded-xl text-sm font-mono" placeholder="Roll number" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setStudentEditModalOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold">Cancel</button><button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow">Save</button></div></form></div>
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"><form onSubmit={handleSaveStudentEdit} className="glass-panel rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200/80 dark:border-white/10 shadow-2xl"><h3 className="font-bold text-slate-900">Edit Student</h3><input value={studentEditForm.name} onChange={(e) => setStudentEditForm({ ...studentEditForm, name: e.target.value })} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="Name" required /><input value={studentEditForm.rollNumber} maxLength={7} onChange={(e) => setStudentEditForm({ ...studentEditForm, rollNumber: e.target.value.replace(/\D/g, '') })} className="w-full px-3 py-2 border rounded-xl text-sm font-mono tracking-wider" placeholder="Roll number (7 digits, e.g. 2260000)" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setStudentEditModalOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold">Cancel</button><button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow">Save</button></div></form></div>
         )}
 
         {resetPassModalOpen && resetPassStudent && (

@@ -24,6 +24,7 @@ export const StudentLogin: React.FC = () => {
   const [googleIdToken, setGoogleIdToken] = useState<string>('');
   const [googleRollNumber, setGoogleRollNumber] = useState<string>('');
   const [googleJoinCode, setGoogleJoinCode] = useState<string>('');
+  const [modalErrorMsg, setModalErrorMsg] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +71,7 @@ export const StudentLogin: React.FC = () => {
 
     setIsSubmitting(true);
     setErrorMsg(null);
+    setModalErrorMsg(null);
     setGoogleIdToken(token);
 
     const res = await googleLoginStudent({ idToken: token });
@@ -88,6 +90,7 @@ export const StudentLogin: React.FC = () => {
   const handleGoogleClick = async () => {
     setIsSubmitting(true);
     setErrorMsg(null);
+    setModalErrorMsg(null);
 
     const mockIdToken = prompt(
       'Google Login (Dev Mode): Enter Google OAuth ID Token or press OK to simulate login with your email:',
@@ -116,12 +119,20 @@ export const StudentLogin: React.FC = () => {
 
   const handleGoogleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalErrorMsg(null);
+
+    const cleanRoll = googleRollNumber.trim();
+    if (!/^\d{7}$/.test(cleanRoll)) {
+      setModalErrorMsg('Roll number must be exactly 7 digits (e.g. 2260000).');
+      return;
+    }
+
     setIsSubmitting(true);
 
     const res = await googleLoginStudent({
       idToken: googleIdToken,
-      rollNumber: googleRollNumber,
-      joinCode: googleJoinCode,
+      rollNumber: cleanRoll,
+      joinCode: googleJoinCode.trim(),
     });
 
     setIsSubmitting(false);
@@ -130,7 +141,7 @@ export const StudentLogin: React.FC = () => {
       setGoogleJoinModalOpen(false);
       navigate('/student/dashboard');
     } else {
-      setErrorMsg(res.message || 'Google registration failed.');
+      setModalErrorMsg(res.message || 'Google registration failed.');
     }
   };
 
@@ -287,16 +298,26 @@ export const StudentLogin: React.FC = () => {
               Please enter your official Roll Number and the Class Join Code provided by your CR to complete registration.
             </p>
 
+            {modalErrorMsg && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2.5 text-red-700 text-xs font-medium">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <span>{modalErrorMsg}</span>
+              </div>
+            )}
+
             <form onSubmit={handleGoogleJoinSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Roll Number</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Roll Number <span className="text-slate-400 font-normal">(7 digits, e.g. 2260000)</span>
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. 21"
+                  maxLength={7}
+                  placeholder="e.g. 2260000"
                   value={googleRollNumber}
-                  onChange={(e) => setGoogleRollNumber(e.target.value)}
+                  onChange={(e) => setGoogleRollNumber(e.target.value.replace(/\D/g, ''))}
                   required
-                  className="w-full px-3 py-2 border rounded-xl font-mono text-sm"
+                  className="w-full px-3 py-2 border rounded-xl font-mono text-sm tracking-wider"
                 />
               </div>
 
