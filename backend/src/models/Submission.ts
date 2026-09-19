@@ -25,6 +25,7 @@ export interface ISubmission extends Document {
   isLate: boolean;
   status: 'Submitted' | 'Late' | 'Submitted Late — CR Approved';
   emailStatus: 'Sent' | 'Failed';
+  groupName?: string; // populated only for Group assignments
 
   createdAt: Date;
   updatedAt: Date;
@@ -53,6 +54,7 @@ const SubmissionSchema: Schema = new Schema(
     isLate: { type: Boolean, default: false },
     status: { type: String, enum: ['Submitted', 'Late', 'Submitted Late — CR Approved'], default: 'Submitted' },
     emailStatus: { type: String, enum: ['Sent', 'Failed'], default: 'Sent' },
+    groupName: { type: String, default: null }, // null for Individual, group name for Group assignments
   },
   { timestamps: true }
 );

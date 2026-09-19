@@ -1,6 +1,5 @@
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import dotenv from 'dotenv';
-import path from 'path';
 
 dotenv.config();
 
@@ -29,17 +28,22 @@ export const uploadToCloudinary = (
   originalFilename: string,
   subjectCode: string,
   assignmentTitle: string,
-  rollNumber: string
+  rollNumber: string,
+  groupName?: string
 ): Promise<UploadApiResponse> => {
   return new Promise((resolve, reject) => {
     const cleanSubject = sanitizePathSegment(subjectCode);
     const cleanAssignment = sanitizePathSegment(assignmentTitle);
     const cleanRoll = sanitizePathSegment(rollNumber);
-    const cleanExt = path.extname(originalFilename).replace('.', '').toLowerCase();
     const timestamp = Date.now();
 
     const folderPath = `assignment-submissions/${cleanSubject}/${cleanAssignment}`;
-    const publicId = `${cleanRoll}_${timestamp}`;
+
+    // If this is a group submission, prefix the public_id with the sanitized group name
+    const cleanGroup = groupName ? sanitizePathSegment(groupName) : null;
+    const publicId = cleanGroup
+      ? `${cleanGroup}_${cleanRoll}_${timestamp}`
+      : `${cleanRoll}_${timestamp}`;
 
     const uploadStream = cloudinary.uploader.upload_stream(
       {

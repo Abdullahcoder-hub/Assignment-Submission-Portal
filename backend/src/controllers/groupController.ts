@@ -514,15 +514,18 @@ export const getNextGroupNumber = async (req: AuthRequest, res: Response): Promi
     }
 
     const groups = await Group.find({ subjectId, assignmentId });
-    let maxNum = 0;
+    const usedNumbers = new Set<number>();
     for (const g of groups) {
       const match = g.groupName.match(/(?:Group\s*|Team\s*|#\s*)?(\d+)/i);
       if (match && match[1]) {
         const num = parseInt(match[1], 10);
-        if (num > maxNum) maxNum = num;
+        if (num > 0) usedNumbers.add(num);
       }
     }
-    const nextNum = (maxNum > 0 ? maxNum : groups.length) + 1;
+    let nextNum = 1;
+    while (usedNumbers.has(nextNum)) {
+      nextNum += 1;
+    }
     res.status(200).json({
       success: true,
       nextGroupNumber: nextNum,

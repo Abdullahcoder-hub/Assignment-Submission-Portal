@@ -80,6 +80,7 @@ const authLimiter = rateLimit({
   message: { success: false, message: 'Too many authentication attempts from this IP. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true,
 });
 
 // Rate Limiting: File Uploads & Submissions

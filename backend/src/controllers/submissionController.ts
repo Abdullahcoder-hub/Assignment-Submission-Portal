@@ -108,7 +108,32 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
 
     const isLate = isPastDeadline;
 
-    // 5. File Validation (Type & Size)
+    // 5. Group Enforcement — block Group-type submissions if student is not in a group
+    let groupName: string | null = null;
+    if (assignment.submissionType === 'Group') {
+      const cleanRollForGroup = rollNumber.trim();
+      const studentGroup = await Group.findOne({
+        subjectId,
+        assignmentId,
+        $or: [
+          { 'members.studentId': studentId },
+          { 'members.rollNumber': { $regex: new RegExp(`^${cleanRollForGroup}$`, 'i') } },
+        ],
+      });
+
+      if (!studentGroup) {
+        res.status(400).json({
+          success: false,
+          message:
+            'You must be registered in a group for this assignment before submitting. Please create or join a group first.',
+        });
+        return;
+      }
+
+      groupName = studentGroup.groupName;
+    }
+
+    // 6. File Validation (Type & Size)
     const originalFileName = sanitizeFileName(file.originalname);
     if (!isFileTypeAllowed(originalFileName, assignment.allowedFileTypes)) {
       const allowedText = assignment.allowedFileTypes.map((t) => t.toUpperCase()).join(', ');
@@ -143,14 +168,30 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
     }
 
     // 7. Upload File to Cloudinary
+    //    For Group assignments: prefix the stored filename with the group name if not already present
+    let storedFileName = sanitizeFileName(file.originalname);
+    if (groupName) {
+      const groupPrefix = groupName.replace(/[^a-zA-Z0-9 _-]/g, '').trim();
+      if (groupPrefix) {
+        const ext = path.extname(storedFileName);
+        const nameWithoutExt = storedFileName.slice(0, storedFileName.length - ext.length);
+        const prefixWithSeparator = `${groupPrefix}_`.toLowerCase();
+
+        if (!nameWithoutExt.toLowerCase().startsWith(prefixWithSeparator)) {
+          storedFileName = `${groupPrefix}_${storedFileName}`;
+        }
+      }
+    }
+
     let cloudinaryResult;
     try {
       cloudinaryResult = await uploadToCloudinary(
         file.buffer,
-        originalFileName,
+        storedFileName,
         subject.code,
         assignment.title,
-        cleanRollNumber
+        cleanRollNumber,
+        groupName ?? undefined
       );
       uploadedCloudinaryPublicId = cloudinaryResult.public_id;
       uploadedResourceType = cloudinaryResult.resource_type || 'raw';
@@ -180,14 +221,15 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
         cloudinaryPublicId: cloudinaryResult.public_id,
         cloudinarySecureUrl: cloudinaryResult.secure_url,
         cloudinaryResourceType: cloudinaryResult.resource_type || 'raw',
-        cloudinaryFormat: cloudinaryResult.format || path.extname(originalFileName).replace('.', ''),
-        originalFileName,
+        cloudinaryFormat: cloudinaryResult.format || path.extname(storedFileName).replace('.', ''),
+        originalFileName: storedFileName,
         fileSize: file.size,
         fileType: file.mimetype || 'application/octet-stream',
         submittedAt: submittedAtDate,
         isLate,
         status: submissionStatus,
         emailStatus: 'Sent',
+        groupName: groupName ?? null,
       });
     } catch (dbErr: any) {
       console.error('[MongoDB Creation Error]:', dbErr);
