@@ -597,6 +597,10 @@ export const AdminDashboard: React.FC = () => {
 
       const payload = {
         ...assignmentForm,
+        deadline: new Date(assignmentForm.deadline).toISOString(),
+        groupDeadline: assignmentForm.groupDeadline
+          ? new Date(assignmentForm.groupDeadline).toISOString()
+          : undefined,
         allowedFileTypes: allowedArray,
         maxFileSize: Number(assignmentForm.maxFileSize),
         maxGroupSize: Number(assignmentForm.maxGroupSize),
