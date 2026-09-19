@@ -523,3 +523,43 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     res.status(500).json({ success: false, message: 'Failed to change password.' });
   }
 };
+
+/**
+ * 9. REAL-TIME CHECK ROLL NUMBER AVAILABILITY
+ */
+export const checkRollNumberAvailability = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rollNumber = String(req.query.rollNumber || req.body.rollNumber || '').trim();
+    if (!rollNumber) {
+      res.status(400).json({ success: false, message: 'Roll number is required.' });
+      return;
+    }
+
+    const rollValidation = validateRollNumber(rollNumber);
+    if (!rollValidation.isValid) {
+      res.status(400).json({ success: false, available: false, exists: false, message: rollValidation.message });
+      return;
+    }
+
+    const existingStudent = await Student.findOne({ rollNumber }).select('name rollNumber').lean();
+    if (existingStudent) {
+      res.json({
+        success: true,
+        available: false,
+        exists: true,
+        message: `Roll number ${rollNumber} is already registered.`,
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      available: true,
+      exists: false,
+      message: `Roll number ${rollNumber} is available.`,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to verify roll number.' });
+  }
+};
+

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { User, Lock, Mail, Loader2, AlertCircle, KeyRound, Eye, EyeOff, Send } from 'lucide-react';
+import { User, Lock, Mail, Loader2, AlertCircle, CheckCircle2, KeyRound, Eye, EyeOff, Send } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import api from '../api/axios';
 
@@ -25,6 +25,56 @@ export const StudentLogin: React.FC = () => {
   const [googleRollNumber, setGoogleRollNumber] = useState<string>('');
   const [googleJoinCode, setGoogleJoinCode] = useState<string>('');
   const [modalErrorMsg, setModalErrorMsg] = useState<string | null>(null);
+  const [rollCheckState, setRollCheckState] = useState<{
+    loading: boolean;
+    checkedRoll: string;
+    exists?: boolean;
+    message?: string;
+  } | null>(null);
+
+  const checkRollAvailability = async (roll: string) => {
+    if (roll.length !== 7) {
+      setRollCheckState(null);
+      return;
+    }
+    setRollCheckState({ loading: true, checkedRoll: roll });
+    try {
+      const res = await api.get('/auth/student/check-roll', { params: { rollNumber: roll } });
+      if (res.data?.exists) {
+        setRollCheckState({
+          loading: false,
+          checkedRoll: roll,
+          exists: true,
+          message: res.data.message || `Roll number ${roll} is already registered.`,
+        });
+      } else {
+        setRollCheckState({
+          loading: false,
+          checkedRoll: roll,
+          exists: false,
+          message: res.data.message || `Roll number ${roll} is available.`,
+        });
+      }
+    } catch (err: any) {
+      setRollCheckState({
+        loading: false,
+        checkedRoll: roll,
+        exists: err.response?.data?.exists || false,
+        message: err.response?.data?.message || 'Failed to check roll number.',
+      });
+    }
+  };
+
+  const handleRollChange = (val: string) => {
+    const clean = val.replace(/\D/g, '').slice(0, 7);
+    setGoogleRollNumber(clean);
+    setModalErrorMsg(null);
+    if (clean.length === 7) {
+      checkRollAvailability(clean);
+    } else {
+      setRollCheckState(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,6 +174,11 @@ export const StudentLogin: React.FC = () => {
     const cleanRoll = googleRollNumber.trim();
     if (!/^\d{7}$/.test(cleanRoll)) {
       setModalErrorMsg('Roll number must be exactly 7 digits (e.g. 2260000).');
+      return;
+    }
+
+    if (rollCheckState?.exists) {
+      setModalErrorMsg(rollCheckState.message || `Roll number ${cleanRoll} is already registered.`);
       return;
     }
 
@@ -310,15 +365,61 @@ export const StudentLogin: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Roll Number <span className="text-slate-400 font-normal">(7 digits, e.g. 2260000)</span>
                 </label>
-                <input
-                  type="text"
-                  maxLength={7}
-                  placeholder="e.g. 2260000"
-                  value={googleRollNumber}
-                  onChange={(e) => setGoogleRollNumber(e.target.value.replace(/\D/g, ''))}
-                  required
-                  className="w-full px-3 py-2 border rounded-xl font-mono text-sm tracking-wider"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    maxLength={7}
+                    placeholder="e.g. 2260000"
+                    value={googleRollNumber}
+                    onChange={(e) => handleRollChange(e.target.value)}
+                    required
+                    className={`w-full px-3 py-2 border rounded-xl font-mono text-sm tracking-wider transition ${
+                      rollCheckState?.exists
+                        ? 'border-red-500 bg-red-50/40 text-red-900 focus:ring-2 focus:ring-red-400'
+                        : rollCheckState && !rollCheckState.loading && !rollCheckState.exists
+                        ? 'border-emerald-500 bg-emerald-50/40 text-emerald-900 focus:ring-2 focus:ring-emerald-400'
+                        : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
+                    }`}
+                  />
+                  {rollCheckState?.loading && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                    </div>
+                  )}
+                  {rollCheckState && !rollCheckState.loading && rollCheckState.exists && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                    </div>
+                  )}
+                  {rollCheckState && !rollCheckState.loading && !rollCheckState.exists && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Instant Roll Status Indicator */}
+                {rollCheckState?.loading && (
+                  <p className="text-[11px] text-blue-600 mt-1 font-medium flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Checking roll number availability...
+                  </p>
+                )}
+                {rollCheckState && !rollCheckState.loading && rollCheckState.exists && (
+                  <div className="mt-1.5 p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-1.5 text-xs text-red-700 font-medium">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                    <span>{rollCheckState.message}</span>
+                  </div>
+                )}
+                {rollCheckState && !rollCheckState.loading && !rollCheckState.exists && (
+                  <p className="text-[11px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" /> {rollCheckState.message}
+                  </p>
+                )}
+                {!rollCheckState && googleRollNumber.length > 0 && googleRollNumber.length < 7 && (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {7 - googleRollNumber.length} more digit{7 - googleRollNumber.length > 1 ? 's' : ''} needed
+                  </p>
+                )}
               </div>
 
               <div>
@@ -343,8 +444,8 @@ export const StudentLogin: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+                  disabled={isSubmitting || rollCheckState?.loading || rollCheckState?.exists}
+                  className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white rounded-xl transition"
                 >
                   Complete Setup
                 </button>
