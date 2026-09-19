@@ -29,6 +29,24 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     return;
   }
 
+  // Mongoose CastError (invalid ObjectId or type conversion)
+  if (err.name === 'CastError') {
+    res.status(400).json({
+      success: false,
+      message: 'Invalid resource identifier provided.',
+    });
+    return;
+  }
+
+  // CORS policy rejection
+  if (err.message && err.message.startsWith('CORS policy:')) {
+    res.status(403).json({
+      success: false,
+      message: 'Origin not allowed by CORS policy.',
+    });
+    return;
+  }
+
   // Default internal server error response (sanitized for client security)
   res.status(err.status || 500).json({
     success: false,

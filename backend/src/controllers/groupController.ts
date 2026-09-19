@@ -6,6 +6,7 @@ import Assignment from '../models/Assignment.js';
 import Student from '../models/Student.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
+import { sanitizeCsvField } from '../utils/fileValidation.js';
 
 /**
  * 1. CREATE NEW GROUP (Subject-wise)
@@ -481,12 +482,12 @@ export const exportGroupsCsv = async (req: AuthRequest, res: Response): Promise<
         .join('; ');
 
       return [
-        `"${subName.replace(/"/g, '""')}"`,
-        `"${assignTitle.replace(/"/g, '""')}"`,
-        `"${g.groupName.replace(/"/g, '""')}"`,
-        `"${g.leader.name.replace(/"/g, '""')}"`,
-        `"${g.leader.rollNumber}"`,
-        `"${membersFormatted.replace(/"/g, '""')}"`,
+        sanitizeCsvField(subName),
+        sanitizeCsvField(assignTitle),
+        sanitizeCsvField(g.groupName),
+        sanitizeCsvField(g.leader.name),
+        sanitizeCsvField(g.leader.rollNumber),
+        sanitizeCsvField(membersFormatted),
       ].join(',');
     });
 

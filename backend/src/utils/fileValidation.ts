@@ -33,3 +33,20 @@ export const isFileSizeValid = (fileSizeBytes: number, maxFileSizeMB: number): b
   const maxBytes = maxFileSizeMB * 1024 * 1024;
   return fileSizeBytes <= maxBytes;
 };
+
+/**
+ * Sanitizes CSV cell content against CSV Formula Injection / DDE attacks
+ * Prevents Excel/Spreadsheet execution of malicious formulas starting with =, +, -, @, \t, \r
+ */
+export const sanitizeCsvField = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined) return '""';
+  let str = String(value).trim();
+  
+  // Escape formula injection characters
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+  
+  // Double-quote escape
+  return `"${str.replace(/"/g, '""')}"`;
+};

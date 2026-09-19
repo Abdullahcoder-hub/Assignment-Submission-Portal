@@ -11,7 +11,7 @@ import Student from '../models/Student.js';
 import cloudinary, { uploadToCloudinary, deleteFromCloudinary, sanitizePathSegment } from '../config/cloudinary.js';
 import { sendSubmissionConfirmationEmail } from '../config/brevo.js';
 import { generateSubmissionId } from '../utils/submissionId.js';
-import { sanitizeFileName, isFileTypeAllowed, isFileSizeValid } from '../utils/fileValidation.js';
+import { sanitizeFileName, isFileTypeAllowed, isFileSizeValid, sanitizeCsvField } from '../utils/fileValidation.js';
 import { AuthRequest } from '../middleware/auth.js';
 import moment from 'moment-timezone';
 
@@ -589,16 +589,16 @@ export const exportAssignmentCsv = async (req: AuthRequest, res: Response): Prom
     const rows = submissions.map((sub) => {
       const formattedDate = moment(sub.submittedAt).tz(timezone).format('YYYY-MM-DD HH:mm:ss');
       return [
-        `"${sub.submissionId}"`,
-        `"${sub.rollNumber}"`,
-        `"${sub.studentName.replace(/"/g, '""')}"`,
-        `"${sub.email}"`,
-        `"${subjectName} (${subjectCode})"`,
-        `"${assignment.title.replace(/"/g, '""')}"`,
-        `"${sub.originalFileName.replace(/"/g, '""')}"`,
-        `"${formattedDate}"`,
-        `"${sub.status}"`,
-        `"${sub.emailStatus}"`,
+        sanitizeCsvField(sub.submissionId),
+        sanitizeCsvField(sub.rollNumber),
+        sanitizeCsvField(sub.studentName),
+        sanitizeCsvField(sub.email),
+        sanitizeCsvField(`${subjectName} (${subjectCode})`),
+        sanitizeCsvField(assignment.title),
+        sanitizeCsvField(sub.originalFileName),
+        sanitizeCsvField(formattedDate),
+        sanitizeCsvField(sub.status),
+        sanitizeCsvField(sub.emailStatus),
       ].join(',');
     });
 
@@ -708,12 +708,12 @@ export const exportDefaultersCsv = async (req: AuthRequest, res: Response): Prom
     const headers = ['Roll Number', 'Student Name', 'Email', 'Assignment', 'Subject', 'Status'];
     const rows = defaulters.map((st) =>
       [
-        `"${st.rollNumber}"`,
-        `"${st.name.replace(/"/g, '""')}"`,
-        `"${st.email}"`,
-        `"${assignment.title.replace(/"/g, '""')}"`,
-        `"${(assignment.subjectId as any)?.name || 'N/A'}"`,
-        `"Unsubmitted (Defaulter)"`,
+        sanitizeCsvField(st.rollNumber),
+        sanitizeCsvField(st.name),
+        sanitizeCsvField(st.email),
+        sanitizeCsvField(assignment.title),
+        sanitizeCsvField((assignment.subjectId as any)?.name || 'N/A'),
+        sanitizeCsvField('Unsubmitted (Defaulter)'),
       ].join(',')
     );
 

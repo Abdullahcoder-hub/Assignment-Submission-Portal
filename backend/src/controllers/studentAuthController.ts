@@ -250,7 +250,12 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
         });
         googlePayload = ticket.getPayload();
       } else {
-        // Fallback for dev / unconfigured client ID
+        if (process.env.NODE_ENV === 'production') {
+          res.status(500).json({ success: false, message: 'Google OAuth is not configured on the production server.' });
+          return;
+        }
+        // Fallback ONLY in local development mode
+        console.warn('[Google OAuth Warning] GOOGLE_CLIENT_ID not configured. Simulating dev token decode.');
         const decodedToken = jwt.decode(idToken) as any;
         googlePayload = decodedToken || { email: req.body.email, name: req.body.name, sub: req.body.googleId };
       }
