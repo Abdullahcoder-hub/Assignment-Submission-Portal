@@ -54,6 +54,11 @@ export const StudentDashboard: React.FC = () => {
     window.history.replaceState(null, '', url.toString());
   };
 
+  const handleTabChange = (tab: TabType) => {
+    setReceipt(null);
+    setActiveTab(tab);
+  };
+
   // Subjects & Assignments with instant cache rehydration
   const [subjects, setSubjects] = useState<Subject[]>(() => {
     try {
@@ -827,7 +832,7 @@ export const StudentDashboard: React.FC = () => {
       {/* DASHBOARD TAB NAVIGATION BAR */}
       <div className="glass-panel-dark p-1.5 rounded-2xl border border-white/10 shadow-xl grid grid-cols-1 sm:grid-cols-4 gap-1.5 backdrop-blur-xl">
         <button
-          onClick={() => setActiveTab('submit')}
+          onClick={() => handleTabChange('submit')}
           className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
             activeTab === 'submit' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
@@ -835,7 +840,7 @@ export const StudentDashboard: React.FC = () => {
           <Upload className="w-4 h-4" /> Submit Assignment
         </button>
         <button
-          onClick={() => setActiveTab('groups')}
+          onClick={() => handleTabChange('groups')}
           className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
             activeTab === 'groups' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
@@ -843,7 +848,7 @@ export const StudentDashboard: React.FC = () => {
           <Users className="w-4 h-4" /> Group Registration
         </button>
         <button
-          onClick={() => setActiveTab('history')}
+          onClick={() => handleTabChange('history')}
           className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
             activeTab === 'history' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
@@ -851,7 +856,7 @@ export const StudentDashboard: React.FC = () => {
           <History className="w-4 h-4" /> My Submissions ({mySubmissions.length})
         </button>
         <button
-          onClick={() => setActiveTab('security')}
+          onClick={() => handleTabChange('security')}
           className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
             activeTab === 'security' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
