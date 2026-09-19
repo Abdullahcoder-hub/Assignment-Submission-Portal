@@ -23,11 +23,17 @@ export const connectDB = async (): Promise<void> => {
 
     // Synchronize Group model indexes to drop legacy non-subject-wise indexes
     try {
-      const Group = (await import('../models/Group.js')).default;
-      await (Group as any).syncIndexes();
-      console.log('[MongoDB] Group indexes synchronized successfully.');
-    } catch (idxErr) {
-      console.warn('[MongoDB] Group index sync warning:', idxErr);
+      const groupMod = await import('../models/Group.js');
+      const GroupModel = (groupMod.default as any) || mongoose.models.Group;
+      if (GroupModel && typeof GroupModel.syncIndexes === 'function') {
+        await GroupModel.syncIndexes();
+        console.log('[MongoDB] Group indexes synchronized successfully.');
+      } else if (mongoose.models.Group && typeof mongoose.models.Group.syncIndexes === 'function') {
+        await mongoose.models.Group.syncIndexes();
+        console.log('[MongoDB] Group indexes synchronized successfully.');
+      }
+    } catch (idxErr: any) {
+      console.warn('[MongoDB] Group index sync notice:', idxErr?.message || idxErr);
     }
   } catch (error) {
     console.error('[MongoDB] Connection Error:', error);
