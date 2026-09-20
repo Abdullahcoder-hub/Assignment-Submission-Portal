@@ -46,6 +46,7 @@ export interface Submission {
   isLate: boolean;
   status: 'Submitted' | 'Late' | 'Submitted Late — CR Approved';
   emailStatus: 'Sent' | 'Failed';
+  groupName?: string | null;
   createdAt: string;
   updatedAt: string;
 }

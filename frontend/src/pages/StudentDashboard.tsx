@@ -28,6 +28,7 @@ import {
   KeyRound,
   Shield,
   Edit2,
+  Eye,
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
@@ -1599,7 +1600,7 @@ export const StudentDashboard: React.FC = () => {
                   <th className="p-4">File Name</th>
                   <th className="p-4">Submitted At</th>
                   <th className="p-4">Status</th>
-                  <th className="p-4 text-right">Receipt</th>
+                  <th className="p-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1625,36 +1626,59 @@ export const StudentDashboard: React.FC = () => {
                       <td className="p-4 font-bold text-slate-900">
                         {(sub.subjectId as any)?.name || 'Subject'}
                       </td>
-                      <td className="p-4 font-semibold text-slate-800">
-                        {(sub.assignmentId as any)?.title || 'Assignment'}
+                      <td className="p-4">
+                        <span className="font-semibold text-slate-800">{(sub.assignmentId as any)?.title || 'Assignment'}</span>
+                        {sub.groupName && (
+                          <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-md border border-purple-200 align-middle">
+                            👥 {sub.groupName}
+                          </span>
+                        )}
                       </td>
-                      <td className="p-4 text-xs font-medium text-blue-600 max-w-[180px] truncate">
+                      <td className="p-4 text-xs font-medium text-blue-600 max-w-[180px] truncate" title={sub.originalFileName}>
                         {sub.originalFileName}
                       </td>
                       <td className="p-4 text-xs text-slate-500">{formatDate(sub.submittedAt)}</td>
                       <td className="p-4">
-                        <span className="px-2.5 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 rounded-full">
+                        <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full ${
+                          sub.isLate
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
                           {sub.status}
                         </span>
                       </td>
-                      <td className="p-4 text-right flex items-center justify-end gap-2">
-                        <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                          ✓ Verified
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteSubmission(sub._id)}
-                          disabled={deletingId === sub._id}
-                          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-md border border-red-200 transition flex items-center gap-1"
-                          title="Wrong file uploaded? Delete and re-upload."
-                        >
-                          {deletingId === sub._id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-3 h-3" />
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2 flex-wrap">
+                          <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                            ✓ Verified
+                          </span>
+                          {sub.cloudinarySecureUrl && (
+                            <a
+                              href={sub.cloudinarySecureUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-md border border-blue-200 transition flex items-center gap-1"
+                              title="View or download your submitted file"
+                            >
+                              <Eye className="w-3 h-3" />
+                              View File
+                            </a>
                           )}
-                          Delete & Re-upload
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSubmission(sub._id)}
+                            disabled={deletingId === sub._id}
+                            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-md border border-red-200 transition flex items-center gap-1"
+                            title="Wrong file uploaded? Delete and re-upload."
+                          >
+                            {deletingId === sub._id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3 h-3" />
+                            )}
+                            Delete & Re-upload
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1663,16 +1687,53 @@ export const StudentDashboard: React.FC = () => {
             </table>
           </div>
           <div className="sm:hidden divide-y divide-slate-100">
-            {loadingHistory ? <div className="p-8 text-center text-sm text-slate-500">Loading your submission history...</div> : mySubmissions.length === 0 ? <div className="p-8 text-center text-sm text-slate-400">You have not submitted any assignments yet.</div> : mySubmissions.map((sub) => (
-              <article key={sub._id} className="p-4 space-y-2">
-                <div className="flex justify-between gap-2"><p className="font-mono text-xs font-bold text-slate-700 break-all">{sub.submissionId}</p><span className="shrink-0 px-2 py-1 text-[10px] font-bold bg-slate-100 text-slate-700 rounded-full">{sub.status}</span></div>
-                <p className="font-bold text-slate-900 break-words">{(sub.subjectId as any)?.name || 'Subject'}</p>
-                <p className="text-sm font-semibold text-slate-800 break-words">{(sub.assignmentId as any)?.title || 'Assignment'}</p>
-                <p className="text-xs text-blue-600 break-words">File: {sub.originalFileName}</p>
-                <p className="text-[11px] text-slate-500">Submitted: {formatDate(sub.submittedAt)}</p>
-                <button type="button" onClick={() => handleDeleteSubmission(sub._id)} disabled={deletingId === sub._id} className="w-full py-2 bg-red-50 text-red-700 text-xs font-bold rounded-lg border border-red-200">{deletingId === sub._id ? 'Deleting...' : 'Delete & Re-upload'}</button>
-              </article>
-            ))}
+            {loadingHistory ? (
+              <div className="p-8 text-center text-sm text-slate-500">Loading your submission history...</div>
+            ) : mySubmissions.length === 0 ? (
+              <div className="p-8 text-center text-sm text-slate-400">You have not submitted any assignments yet.</div>
+            ) : (
+              mySubmissions.map((sub) => (
+                <article key={sub._id} className="p-4 space-y-2">
+                  <div className="flex justify-between gap-2">
+                    <p className="font-mono text-xs font-bold text-slate-700 break-all">{sub.submissionId}</p>
+                    <span className={`shrink-0 px-2 py-1 text-[10px] font-bold rounded-full ${
+                      sub.isLate ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'
+                    }`}>{sub.status}</span>
+                  </div>
+                  <p className="font-bold text-slate-900 break-words">{(sub.subjectId as any)?.name || 'Subject'}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-slate-800 break-words">{(sub.assignmentId as any)?.title || 'Assignment'}</p>
+                    {sub.groupName && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-md border border-purple-200">
+                        👥 {sub.groupName}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-blue-600 break-words">File: {sub.originalFileName}</p>
+                  <p className="text-[11px] text-slate-500">Submitted: {formatDate(sub.submittedAt)}</p>
+                  <div className="flex gap-2">
+                    {sub.cloudinarySecureUrl && (
+                      <a
+                        href={sub.cloudinarySecureUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 flex items-center justify-center gap-1"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View File
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSubmission(sub._id)}
+                      disabled={deletingId === sub._id}
+                      className="flex-1 py-2 bg-red-50 text-red-700 text-xs font-bold rounded-lg border border-red-200"
+                    >
+                      {deletingId === sub._id ? 'Deleting...' : 'Delete & Re-upload'}
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
           </div>
         </div>
       )}
