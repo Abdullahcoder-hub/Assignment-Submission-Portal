@@ -12,7 +12,20 @@ import {
   BookOpen,
   Calendar,
   AlertTriangle,
+  Eye,
 } from 'lucide-react';
+
+const getStudentViewUrl = (submissionId?: string, fallbackUrl?: string) => {
+  const token = localStorage.getItem('portalToken') || '';
+  const apiBase = import.meta.env.DEV
+    ? '/api'
+    : (import.meta.env.VITE_API_URL || 'https://assignment-submission-portal-rfq1.onrender.com/api');
+
+  if (submissionId) {
+    return `${apiBase}/submissions/${submissionId}/view?token=${token}`;
+  }
+  return fallbackUrl || '#';
+};
 
 export const StudentSubmission: React.FC = () => {
   const [subjects, setSubjects] = useState<Subject[]>(() => {
@@ -298,9 +311,22 @@ export const StudentSubmission: React.FC = () => {
                 <span className="text-slate-500 font-medium">Assignment</span>
                 <span className="font-semibold text-slate-800">{receipt.assignmentTitle}</span>
               </div>
-              <div className="flex justify-between border-b border-slate-200 pb-2 text-sm">
-                <span className="text-slate-500 font-medium">File Name</span>
-                <span className="font-medium text-blue-600 truncate max-w-[200px]">{receipt.originalFileName}</span>
+              <div className="flex justify-between border-b border-slate-200 pb-2 text-sm items-center">
+                <span className="text-slate-500 font-medium">Uploaded File</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-blue-600 truncate max-w-[180px]">{receipt.originalFileName}</span>
+                  {receipt.cloudinarySecureUrl && (
+                    <a
+                      href={getStudentViewUrl((receipt as any).id || (receipt as any)._id || receipt.submissionId, receipt.cloudinarySecureUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition flex items-center gap-1 shrink-0"
+                      title="View submitted file in new tab"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> View File
+                    </a>
+                  )}
+                </div>
               </div>
               <div className="flex justify-between border-b border-slate-200 pb-2 text-sm">
                 <span className="text-slate-500 font-medium">Submitted At</span>
