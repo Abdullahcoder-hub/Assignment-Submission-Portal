@@ -33,52 +33,23 @@ import {
   Download,
 } from 'lucide-react';
 
-const FilePreviewViewer: React.FC<{ url: string; fileName: string }> = ({ url, fileName }) => {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [useFallbackViewer, setUseFallbackViewer] = useState<boolean>(false);
+const getInlinePreviewUrl = (url: string, fileName: string): string => {
+  if (!url) return url;
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  if (ext === 'pdf' && url.includes('/image/upload/')) {
+    // Inject fl_inline flag into Cloudinary image URLs for PDFs to force inline PDF content-disposition
+    return url.replace('/image/upload/', '/image/upload/fl_inline/');
+  }
+  return url;
+};
 
+const FilePreviewViewer: React.FC<{ url: string; fileName: string }> = ({ url, fileName }) => {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
   const isPdf = ext === 'pdf';
   const isOffice = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext);
 
-  useEffect(() => {
-    let active = true;
-    let createdBlobUrl: string | null = null;
-
-    if (isPdf) {
-      setLoading(true);
-      fetch(url)
-        .then((res) => {
-          if (!res.ok) throw new Error('Fetch failed');
-          return res.blob();
-        })
-        .then((blob) => {
-          if (!active) return;
-          const pdfBlob = new Blob([blob], { type: 'application/pdf' });
-          createdBlobUrl = URL.createObjectURL(pdfBlob);
-          setBlobUrl(createdBlobUrl);
-          setLoading(false);
-        })
-        .catch((err) => {
-          console.error('Failed blob fetch for PDF:', err);
-          if (active) {
-            setUseFallbackViewer(true);
-            setLoading(false);
-          }
-        });
-    } else {
-      setLoading(false);
-    }
-
-    return () => {
-      active = false;
-      if (createdBlobUrl) {
-        URL.revokeObjectURL(createdBlobUrl);
-      }
-    };
-  }, [url, isPdf]);
+  const inlineUrl = getInlinePreviewUrl(url, fileName);
 
   if (isImage) {
     return (
@@ -91,31 +62,10 @@ const FilePreviewViewer: React.FC<{ url: string; fileName: string }> = ({ url, f
   }
 
   if (isPdf) {
-    if (loading) {
-      return (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-300 gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
-          <p className="text-sm font-semibold">Loading document preview...</p>
-        </div>
-      );
-    }
-
-    if (blobUrl && !useFallbackViewer) {
-      return (
-        <div className="w-full h-[75vh] relative bg-white rounded-lg overflow-hidden shadow-xl">
-          <iframe
-            src={blobUrl}
-            className="w-full h-full border-0"
-            title={fileName}
-          />
-        </div>
-      );
-    }
-
     return (
       <div className="w-full h-[75vh] relative bg-white rounded-lg overflow-hidden shadow-xl">
         <iframe
-          src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`}
+          src={inlineUrl}
           className="w-full h-full border-0"
           title={fileName}
         />
@@ -2108,7 +2058,7 @@ export const StudentDashboard: React.FC = () => {
 
               <div className="flex items-center gap-2 shrink-0">
                 <a
-                  href={previewFile.url}
+                  href={getInlinePreviewUrl(previewFile.url, previewFile.fileName)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg border border-slate-600 flex items-center gap-1.5 transition"

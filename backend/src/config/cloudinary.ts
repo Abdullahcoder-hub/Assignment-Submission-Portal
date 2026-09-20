@@ -45,11 +45,17 @@ export const uploadToCloudinary = (
       ? `${cleanGroup}_${cleanRoll}_${timestamp}`
       : `${cleanRoll}_${timestamp}`;
 
+    // Determine resource_type based on file extension:
+    // Images (jpg, png, etc.) use 'image', PDFs and documents (pdf, doc, zip) use 'raw'
+    const ext = originalFilename.split('.').pop()?.toLowerCase() || '';
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
+    const resourceType = isImage ? 'image' : 'raw';
+
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: folderPath,
         public_id: publicId,
-        resource_type: 'auto',
+        resource_type: resourceType,
         use_filename: false,
         unique_filename: true,
       },
