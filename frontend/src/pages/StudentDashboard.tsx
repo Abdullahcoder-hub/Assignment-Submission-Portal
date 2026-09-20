@@ -34,59 +34,24 @@ import {
 } from 'lucide-react';
 
 const FilePreviewViewer: React.FC<{ url: string; fileName: string; submissionId?: string }> = ({ url, fileName, submissionId }) => {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
   const isPdf = ext === 'pdf';
   const isOffice = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext);
 
-  useEffect(() => {
-    let active = true;
-    let createdUrl: string | null = null;
+  const token = localStorage.getItem('portalToken') || '';
+  const apiBase = import.meta.env.DEV
+    ? '/api'
+    : (import.meta.env.VITE_API_URL || 'https://assignment-submission-portal-rfq1.onrender.com/api');
 
-    const loadStream = async () => {
-      if (!submissionId) {
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        const res = await api.get(`/submissions/${submissionId}/view`, { responseType: 'blob' });
-        if (!active) return;
-        const mime = isPdf ? 'application/pdf' : res.data.type || 'application/octet-stream';
-        const blob = new Blob([res.data], { type: mime });
-        createdUrl = URL.createObjectURL(blob);
-        setBlobUrl(createdUrl);
-      } catch (err: any) {
-        console.error('Failed to stream file from backend:', err);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    loadStream();
-
-    return () => {
-      active = false;
-      if (createdUrl) URL.revokeObjectURL(createdUrl);
-    };
-  }, [submissionId, isPdf]);
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-slate-300 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
-        <p className="text-sm font-semibold">Loading document preview...</p>
-      </div>
-    );
-  }
+  const directViewUrl = submissionId
+    ? `${apiBase}/submissions/${submissionId}/view?token=${token}`
+    : url;
 
   if (isImage) {
     return (
       <img
-        src={blobUrl || url}
+        src={directViewUrl}
         alt={fileName}
         className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl border border-white/10"
       />
@@ -97,7 +62,7 @@ const FilePreviewViewer: React.FC<{ url: string; fileName: string; submissionId?
     return (
       <div className="w-full h-[75vh] relative bg-white rounded-lg overflow-hidden shadow-xl">
         <iframe
-          src={blobUrl || url}
+          src={directViewUrl}
           className="w-full h-full border-0"
           title={fileName}
         />
@@ -106,10 +71,11 @@ const FilePreviewViewer: React.FC<{ url: string; fileName: string; submissionId?
   }
 
   if (isOffice) {
+    const fullOfficeUrl = directViewUrl.startsWith('http') ? directViewUrl : window.location.origin + directViewUrl;
     return (
       <div className="w-full h-[75vh] relative bg-white rounded-lg overflow-hidden shadow-xl">
         <iframe
-          src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`}
+          src={`https://docs.google.com/gview?url=${encodeURIComponent(fullOfficeUrl)}&embedded=true`}
           className="w-full h-full border-0"
           title={fileName}
         />
@@ -128,7 +94,7 @@ const FilePreviewViewer: React.FC<{ url: string; fileName: string; submissionId?
         You can download the file directly to view it on your device.
       </p>
       <a
-        href={url}
+        href={directViewUrl + '&download=true'}
         download={fileName}
         target="_blank"
         rel="noopener noreferrer"
