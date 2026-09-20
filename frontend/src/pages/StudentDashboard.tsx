@@ -33,28 +33,60 @@ import {
   Download,
 } from 'lucide-react';
 
-const getInlinePreviewUrl = (url: string, fileName: string): string => {
-  if (!url) return url;
-  const ext = fileName.split('.').pop()?.toLowerCase() || '';
-  if (ext === 'pdf' && url.includes('/image/upload/')) {
-    // Inject fl_inline flag into Cloudinary image URLs for PDFs to force inline PDF content-disposition
-    return url.replace('/image/upload/', '/image/upload/fl_inline/');
-  }
-  return url;
-};
+const FilePreviewViewer: React.FC<{ url: string; fileName: string; submissionId?: string }> = ({ url, fileName, submissionId }) => {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
-const FilePreviewViewer: React.FC<{ url: string; fileName: string }> = ({ url, fileName }) => {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
   const isPdf = ext === 'pdf';
   const isOffice = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext);
 
-  const inlineUrl = getInlinePreviewUrl(url, fileName);
+  useEffect(() => {
+    let active = true;
+    let createdUrl: string | null = null;
+
+    const loadStream = async () => {
+      if (!submissionId) {
+        setLoading(false);
+        return;
+      }
+      try {
+        setLoading(true);
+        const res = await api.get(`/submissions/${submissionId}/view`, { responseType: 'blob' });
+        if (!active) return;
+        const mime = isPdf ? 'application/pdf' : res.data.type || 'application/octet-stream';
+        const blob = new Blob([res.data], { type: mime });
+        createdUrl = URL.createObjectURL(blob);
+        setBlobUrl(createdUrl);
+      } catch (err: any) {
+        console.error('Failed to stream file from backend:', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadStream();
+
+    return () => {
+      active = false;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+  }, [submissionId, isPdf]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-slate-300 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+        <p className="text-sm font-semibold">Loading document preview...</p>
+      </div>
+    );
+  }
 
   if (isImage) {
     return (
       <img
-        src={url}
+        src={blobUrl || url}
         alt={fileName}
         className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl border border-white/10"
       />
@@ -65,7 +97,7 @@ const FilePreviewViewer: React.FC<{ url: string; fileName: string }> = ({ url, f
     return (
       <div className="w-full h-[75vh] relative bg-white rounded-lg overflow-hidden shadow-xl">
         <iframe
-          src={inlineUrl}
+          src={blobUrl || url}
           className="w-full h-full border-0"
           title={fileName}
         />
@@ -223,7 +255,7 @@ export const StudentDashboard: React.FC = () => {
   const [groupMsg, setGroupMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Preview Modal State
-  const [previewFile, setPreviewFile] = useState<{ url: string; fileName: string } | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ url: string; fileName: string; submissionId?: string } | null>(null);
 
   // Group Edit Modal State
   const [groupEditModalOpen, setGroupEditModalOpen] = useState<boolean>(false);
@@ -976,7 +1008,7 @@ export const StudentDashboard: React.FC = () => {
                   {receipt.cloudinarySecureUrl && (
                     <button
                       type="button"
-                      onClick={() => setPreviewFile({ url: receipt.cloudinarySecureUrl!, fileName: receipt.originalFileName })}
+                      onClick={() => setPreviewFile({ url: receipt.cloudinarySecureUrl!, fileName: receipt.originalFileName, submissionId: (receipt as any).id || (receipt as any)._id })}
                       className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition flex items-center gap-1 shrink-0"
                     >
                       <Eye className="w-3.5 h-3.5" /> Preview
@@ -1746,7 +1778,7 @@ export const StudentDashboard: React.FC = () => {
                           {sub.cloudinarySecureUrl && (
                             <button
                               type="button"
-                              onClick={() => setPreviewFile({ url: sub.cloudinarySecureUrl, fileName: sub.originalFileName })}
+                              onClick={() => setPreviewFile({ url: sub.cloudinarySecureUrl, fileName: sub.originalFileName, submissionId: sub._id })}
                               className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-md border border-blue-200 transition flex items-center gap-1"
                               title="Preview file in browser"
                             >
@@ -1805,7 +1837,7 @@ export const StudentDashboard: React.FC = () => {
                     {sub.cloudinarySecureUrl && (
                       <button
                         type="button"
-                        onClick={() => setPreviewFile({ url: sub.cloudinarySecureUrl, fileName: sub.originalFileName })}
+                        onClick={() => setPreviewFile({ url: sub.cloudinarySecureUrl, fileName: sub.originalFileName, submissionId: sub._id })}
                         className="flex-1 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 flex items-center justify-center gap-1"
                       >
                         <Eye className="w-3.5 h-3.5" /> View File
@@ -2058,7 +2090,7 @@ export const StudentDashboard: React.FC = () => {
 
               <div className="flex items-center gap-2 shrink-0">
                 <a
-                  href={getInlinePreviewUrl(previewFile.url, previewFile.fileName)}
+                  href={previewFile.submissionId ? `/api/submissions/${previewFile.submissionId}/view?token=${sessionStorage.getItem('token') || localStorage.getItem('token') || ''}` : previewFile.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg border border-slate-600 flex items-center gap-1.5 transition"

@@ -107,13 +107,19 @@ export const authenticateStudent = async (req: AuthRequest, res: Response, next:
 
 export const authenticateStudentOrAdmin = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    let token: string | undefined;
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.query.token && typeof req.query.token === 'string') {
+      token = req.query.token;
+    }
+
+    if (!token) {
       res.status(401).json({ success: false, message: 'Authentication token required.' });
       return;
     }
 
-    const token = authHeader.split(' ')[1];
     const secret = process.env.JWT_SECRET || 'default_secret_key_change_in_production_12345';
     const decoded = jwt.verify(token, secret) as { id: string; email: string; role: 'ADMIN' | 'STUDENT' };
 

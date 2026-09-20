@@ -494,6 +494,99 @@ export const downloadSingleSubmission = async (req: AuthRequest, res: Response):
 };
 
 /**
+ * IN-BROWSER FILE STREAMING (STUDENT & ADMIN)
+ */
+export const viewSubmissionFile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const submission = await Submission.findById(id).lean();
+
+    if (!submission) {
+      res.status(404).json({ success: false, message: 'Submission record not found.' });
+      return;
+    }
+
+    // Security Guard: Check if user is Admin OR student owns this submission
+    if (req.student) {
+      if (submission.studentId.toString() !== req.student.id) {
+        res.status(403).json({ success: false, message: 'Access denied to this submission.' });
+        return;
+      }
+    } else if (!req.admin) {
+      res.status(401).json({ success: false, message: 'Authentication required.' });
+      return;
+    }
+
+    if (!submission.cloudinarySecureUrl && !submission.cloudinaryPublicId) {
+      res.status(404).json({ success: false, message: 'File URL is not available.' });
+      return;
+    }
+
+    const format = submission.cloudinaryFormat || path.extname(submission.originalFileName).replace('.', '');
+    const signedRawUrl = cloudinary.utils.private_download_url(submission.cloudinaryPublicId, format, {
+      resource_type: submission.cloudinaryResourceType || 'raw',
+      type: 'upload',
+      attachment: false,
+    });
+    const signedImageUrl = cloudinary.utils.private_download_url(submission.cloudinaryPublicId, format, {
+      resource_type: 'image',
+      type: 'upload',
+      attachment: false,
+    });
+
+    const downloadUrls = [
+      submission.cloudinarySecureUrl,
+      submission.cloudinarySecureUrl?.replace('/image/upload/', '/image/upload/fl_inline/'),
+      signedRawUrl,
+      signedImageUrl,
+    ].filter(Boolean) as string[];
+
+    const cleanFileName = submission.originalFileName.replace(/["\r\n]/g, '_');
+
+    let contentType = submission.fileType || 'application/octet-stream';
+    const lowerExt = path.extname(submission.originalFileName).toLowerCase();
+    if (lowerExt === '.pdf') contentType = 'application/pdf';
+    else if (['.jpg', '.jpeg'].includes(lowerExt)) contentType = 'image/jpeg';
+    else if (lowerExt === '.png') contentType = 'image/png';
+    else if (lowerExt === '.webp') contentType = 'image/webp';
+    else if (lowerExt === '.svg') contentType = 'image/svg+xml';
+    else if (['.doc', '.docx'].includes(lowerExt)) contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    for (const url of downloadUrls) {
+      try {
+        const streamResponse = await axios.get(url, {
+          responseType: 'stream',
+          timeout: 30000,
+          validateStatus: (status) => status >= 200 && status < 300,
+        });
+
+        res.setHeader('Content-Type', contentType);
+        if (submission.fileSize) {
+          res.setHeader('Content-Length', submission.fileSize);
+        }
+        res.setHeader(
+          'Content-Disposition',
+          `inline; filename="${cleanFileName}"; filename*=UTF-8''${encodeURIComponent(submission.originalFileName)}`
+        );
+        res.setHeader('Cache-Control', 'private, max-age=86400');
+
+        streamResponse.data.pipe(res);
+        return;
+      } catch (streamErr) {
+        // Try next candidate URL
+      }
+    }
+
+    res.status(502).json({ success: false, message: 'Unable to stream file from Cloudinary.' });
+  } catch (error) {
+    console.error('[View Submission Stream Error]:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Failed to stream submission file.' });
+    }
+  }
+};
+
+/**
  * STUDENT DELETE OWN SUBMISSION FOR RE-UPLOAD
  */
 export const deleteStudentSubmission = async (req: AuthRequest, res: Response): Promise<void> => {
