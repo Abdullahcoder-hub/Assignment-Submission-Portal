@@ -2030,23 +2030,16 @@ export const StudentDashboard: React.FC = () => {
                   );
                 }
 
-                if (isPdf) {
+                if (isPdf || isOffice) {
+                  const gviewUrl = `https://docs.google.com/gview?url=${encodeURIComponent(previewFile.url)}&embedded=true`;
                   return (
-                    <iframe
-                      src={previewFile.url}
-                      className="w-full h-[75vh] rounded-lg border-0 bg-white shadow-xl"
-                      title={previewFile.fileName}
-                    />
-                  );
-                }
-
-                if (isOffice) {
-                  return (
-                    <iframe
-                      src={`https://docs.google.com/gview?url=${encodeURIComponent(previewFile.url)}&embedded=true`}
-                      className="w-full h-[75vh] rounded-lg border-0 bg-white shadow-xl"
-                      title={previewFile.fileName}
-                    />
+                    <div className="w-full h-[75vh] relative bg-white rounded-lg overflow-hidden shadow-xl">
+                      <iframe
+                        src={gviewUrl}
+                        className="w-full h-full border-0"
+                        title={previewFile.fileName}
+                      />
+                    </div>
                   );
                 }
 
