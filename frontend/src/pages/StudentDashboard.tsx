@@ -33,6 +33,131 @@ import {
   Download,
 } from 'lucide-react';
 
+const FilePreviewViewer: React.FC<{ url: string; fileName: string }> = ({ url, fileName }) => {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [useFallbackViewer, setUseFallbackViewer] = useState<boolean>(false);
+
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
+  const isPdf = ext === 'pdf';
+  const isOffice = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext);
+
+  useEffect(() => {
+    let active = true;
+    let createdBlobUrl: string | null = null;
+
+    if (isPdf) {
+      setLoading(true);
+      fetch(url)
+        .then((res) => {
+          if (!res.ok) throw new Error('Fetch failed');
+          return res.blob();
+        })
+        .then((blob) => {
+          if (!active) return;
+          const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+          createdBlobUrl = URL.createObjectURL(pdfBlob);
+          setBlobUrl(createdBlobUrl);
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error('Failed blob fetch for PDF:', err);
+          if (active) {
+            setUseFallbackViewer(true);
+            setLoading(false);
+          }
+        });
+    } else {
+      setLoading(false);
+    }
+
+    return () => {
+      active = false;
+      if (createdBlobUrl) {
+        URL.revokeObjectURL(createdBlobUrl);
+      }
+    };
+  }, [url, isPdf]);
+
+  if (isImage) {
+    return (
+      <img
+        src={url}
+        alt={fileName}
+        className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl border border-white/10"
+      />
+    );
+  }
+
+  if (isPdf) {
+    if (loading) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-300 gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+          <p className="text-sm font-semibold">Loading document preview...</p>
+        </div>
+      );
+    }
+
+    if (blobUrl && !useFallbackViewer) {
+      return (
+        <div className="w-full h-[75vh] relative bg-white rounded-lg overflow-hidden shadow-xl">
+          <iframe
+            src={blobUrl}
+            className="w-full h-full border-0"
+            title={fileName}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full h-[75vh] relative bg-white rounded-lg overflow-hidden shadow-xl">
+        <iframe
+          src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`}
+          className="w-full h-full border-0"
+          title={fileName}
+        />
+      </div>
+    );
+  }
+
+  if (isOffice) {
+    return (
+      <div className="w-full h-[75vh] relative bg-white rounded-lg overflow-hidden shadow-xl">
+        <iframe
+          src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`}
+          className="w-full h-full border-0"
+          title={fileName}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 text-center max-w-md space-y-4">
+      <div className="p-4 bg-slate-800/80 rounded-2xl border border-slate-700 inline-block">
+        <FileText className="w-12 h-12 text-slate-400 mx-auto" />
+      </div>
+      <h3 className="font-bold text-lg text-white">Preview Not Available</h3>
+      <p className="text-xs text-slate-400">
+        In-browser preview is not supported for <strong>.{ext.toUpperCase()}</strong> files.
+        You can download the file directly to view it on your device.
+      </p>
+      <a
+        href={url}
+        download={fileName}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg transition"
+      >
+        <Download className="w-4 h-4" /> Download {fileName}
+      </a>
+    </div>
+  );
+};
+
 export const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
   const student = user as StudentUser;
@@ -2014,58 +2139,7 @@ export const StudentDashboard: React.FC = () => {
 
             {/* Modal Body / Viewer */}
             <div className="p-3 sm:p-4 flex-1 bg-slate-950 flex items-center justify-center overflow-auto min-h-[50vh]">
-              {(() => {
-                const ext = previewFile.fileName.split('.').pop()?.toLowerCase() || '';
-                const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
-                const isPdf = ext === 'pdf';
-                const isOffice = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext);
-
-                if (isImage) {
-                  return (
-                    <img
-                      src={previewFile.url}
-                      alt={previewFile.fileName}
-                      className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl border border-white/10"
-                    />
-                  );
-                }
-
-                if (isPdf || isOffice) {
-                  const gviewUrl = `https://docs.google.com/gview?url=${encodeURIComponent(previewFile.url)}&embedded=true`;
-                  return (
-                    <div className="w-full h-[75vh] relative bg-white rounded-lg overflow-hidden shadow-xl">
-                      <iframe
-                        src={gviewUrl}
-                        className="w-full h-full border-0"
-                        title={previewFile.fileName}
-                      />
-                    </div>
-                  );
-                }
-
-                // Fallback for zip, rar, or unknown extensions
-                return (
-                  <div className="p-8 text-center max-w-md space-y-4">
-                    <div className="p-4 bg-slate-800/80 rounded-2xl border border-slate-700 inline-block">
-                      <FileText className="w-12 h-12 text-slate-400 mx-auto" />
-                    </div>
-                    <h3 className="font-bold text-lg text-white">Preview Not Available</h3>
-                    <p className="text-xs text-slate-400">
-                      In-browser preview is not supported for <strong>.{ext.toUpperCase()}</strong> files.
-                      You can download the file directly to view it on your device.
-                    </p>
-                    <a
-                      href={previewFile.url}
-                      download={previewFile.fileName}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg transition"
-                    >
-                      <Download className="w-4 h-4" /> Download {previewFile.fileName}
-                    </a>
-                  </div>
-                );
-              })()}
+              <FilePreviewViewer url={previewFile.url} fileName={previewFile.fileName} />
             </div>
           </div>
         </div>
