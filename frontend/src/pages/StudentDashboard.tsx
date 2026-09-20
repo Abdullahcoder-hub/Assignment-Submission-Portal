@@ -29,6 +29,8 @@ import {
   Shield,
   Edit2,
   Eye,
+  ExternalLink,
+  Download,
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
@@ -144,6 +146,9 @@ export const StudentDashboard: React.FC = () => {
   const [loadingPrevGroups, setLoadingPrevGroups] = useState<boolean>(false);
   const [groupSubmitting, setGroupSubmitting] = useState<boolean>(false);
   const [groupMsg, setGroupMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Preview Modal State
+  const [previewFile, setPreviewFile] = useState<{ url: string; fileName: string } | null>(null);
 
   // Group Edit Modal State
   const [groupEditModalOpen, setGroupEditModalOpen] = useState<boolean>(false);
@@ -889,9 +894,20 @@ export const StudentDashboard: React.FC = () => {
                 <span className="text-slate-500 font-medium">Assignment</span>
                 <span className="font-semibold text-slate-800">{receipt.assignmentTitle}</span>
               </div>
-              <div className="flex justify-between border-b pb-2 text-sm">
+              <div className="flex justify-between border-b pb-2 text-sm items-center">
                 <span className="text-slate-500 font-medium">Uploaded File</span>
-                <span className="font-medium text-blue-600 truncate max-w-[200px]">{receipt.originalFileName}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-blue-600 truncate max-w-[160px] sm:max-w-[220px]">{receipt.originalFileName}</span>
+                  {receipt.cloudinarySecureUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewFile({ url: receipt.cloudinarySecureUrl!, fileName: receipt.originalFileName })}
+                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition flex items-center gap-1 shrink-0"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Preview
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex justify-between border-b pb-2 text-sm">
                 <span className="text-slate-500 font-medium">Submitted At</span>
@@ -1653,16 +1669,15 @@ export const StudentDashboard: React.FC = () => {
                             ✓ Verified
                           </span>
                           {sub.cloudinarySecureUrl && (
-                            <a
-                              href={sub.cloudinarySecureUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => setPreviewFile({ url: sub.cloudinarySecureUrl, fileName: sub.originalFileName })}
                               className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-md border border-blue-200 transition flex items-center gap-1"
-                              title="View or download your submitted file"
+                              title="Preview file in browser"
                             >
                               <Eye className="w-3 h-3" />
                               View File
-                            </a>
+                            </button>
                           )}
                           <button
                             type="button"
@@ -1713,14 +1728,13 @@ export const StudentDashboard: React.FC = () => {
                   <p className="text-[11px] text-slate-500">Submitted: {formatDate(sub.submittedAt)}</p>
                   <div className="flex gap-2">
                     {sub.cloudinarySecureUrl && (
-                      <a
-                        href={sub.cloudinarySecureUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => setPreviewFile({ url: sub.cloudinarySecureUrl, fileName: sub.originalFileName })}
                         className="flex-1 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 flex items-center justify-center gap-1"
                       >
                         <Eye className="w-3.5 h-3.5" /> View File
-                      </a>
+                      </button>
                     )}
                     <button
                       type="button"
@@ -1950,6 +1964,116 @@ export const StudentDashboard: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* IN-BROWSER FILE PREVIEW MODAL */}
+      {previewFile && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center p-2 sm:p-4">
+          <div className="glass-panel rounded-2xl w-full max-w-5xl bg-slate-900 border border-white/10 text-white shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 bg-slate-800/90 border-b border-white/10 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <FileText className="w-5 h-5 text-blue-400 shrink-0" />
+                <span className="font-bold text-sm sm:text-base truncate max-w-xs sm:max-w-md text-white" title={previewFile.fileName}>
+                  {previewFile.fileName}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={previewFile.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg border border-slate-600 flex items-center gap-1.5 transition"
+                  title="Open in new browser tab"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Open in New Tab</span>
+                </a>
+                <a
+                  href={previewFile.url}
+                  download={previewFile.fileName}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow flex items-center gap-1.5 transition"
+                  title="Download File"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Download</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewFile(null)}
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition"
+                  title="Close preview"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body / Viewer */}
+            <div className="p-3 sm:p-4 flex-1 bg-slate-950 flex items-center justify-center overflow-auto min-h-[50vh]">
+              {(() => {
+                const ext = previewFile.fileName.split('.').pop()?.toLowerCase() || '';
+                const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
+                const isPdf = ext === 'pdf';
+                const isOffice = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext);
+
+                if (isImage) {
+                  return (
+                    <img
+                      src={previewFile.url}
+                      alt={previewFile.fileName}
+                      className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl border border-white/10"
+                    />
+                  );
+                }
+
+                if (isPdf) {
+                  return (
+                    <iframe
+                      src={previewFile.url}
+                      className="w-full h-[75vh] rounded-lg border-0 bg-white shadow-xl"
+                      title={previewFile.fileName}
+                    />
+                  );
+                }
+
+                if (isOffice) {
+                  return (
+                    <iframe
+                      src={`https://docs.google.com/gview?url=${encodeURIComponent(previewFile.url)}&embedded=true`}
+                      className="w-full h-[75vh] rounded-lg border-0 bg-white shadow-xl"
+                      title={previewFile.fileName}
+                    />
+                  );
+                }
+
+                // Fallback for zip, rar, or unknown extensions
+                return (
+                  <div className="p-8 text-center max-w-md space-y-4">
+                    <div className="p-4 bg-slate-800/80 rounded-2xl border border-slate-700 inline-block">
+                      <FileText className="w-12 h-12 text-slate-400 mx-auto" />
+                    </div>
+                    <h3 className="font-bold text-lg text-white">Preview Not Available</h3>
+                    <p className="text-xs text-slate-400">
+                      In-browser preview is not supported for <strong>.{ext.toUpperCase()}</strong> files.
+                      You can download the file directly to view it on your device.
+                    </p>
+                    <a
+                      href={previewFile.url}
+                      download={previewFile.fileName}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg transition"
+                    >
+                      <Download className="w-4 h-4" /> Download {previewFile.fileName}
+                    </a>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}

@@ -130,6 +130,7 @@ export interface SubmissionReceipt {
   subjectCode: string;
   assignmentTitle: string;
   originalFileName: string;
+  cloudinarySecureUrl?: string;
   submittedAt: string;
   isLate: boolean;
   status: string;

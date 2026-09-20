@@ -298,6 +298,7 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
         subjectCode: subject.code,
         assignmentTitle: assignment.title,
         originalFileName: newSubmission.originalFileName,
+        cloudinarySecureUrl: newSubmission.cloudinarySecureUrl,
         submittedAt: formattedSubmittedAt,
         isLate: newSubmission.isLate,
         status: newSubmission.status,
