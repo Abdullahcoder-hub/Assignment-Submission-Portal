@@ -2089,25 +2089,42 @@ export const StudentDashboard: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <a
-                  href={previewFile.submissionId ? `/api/submissions/${previewFile.submissionId}/view?token=${sessionStorage.getItem('token') || localStorage.getItem('token') || ''}` : previewFile.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg border border-slate-600 flex items-center gap-1.5 transition"
-                  title="Open in new browser tab"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Open in New Tab</span>
-                </a>
-                <a
-                  href={previewFile.url}
-                  download={previewFile.fileName}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow flex items-center gap-1.5 transition"
-                  title="Download File"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Download</span>
-                </a>
+                {(() => {
+                  const token = localStorage.getItem('portalToken') || '';
+                  const apiBase = import.meta.env.DEV
+                    ? '/api'
+                    : (import.meta.env.VITE_API_URL || 'https://assignment-submission-portal-rfq1.onrender.com/api');
+                  const viewUrl = previewFile.submissionId
+                    ? `${apiBase}/submissions/${previewFile.submissionId}/view?token=${token}`
+                    : previewFile.url;
+                  const downloadUrl = previewFile.submissionId
+                    ? `${apiBase}/submissions/${previewFile.submissionId}/view?token=${token}&download=true`
+                    : previewFile.url;
+
+                  return (
+                    <>
+                      <a
+                        href={viewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg border border-slate-600 flex items-center gap-1.5 transition"
+                        title="Open in new browser tab"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Open in New Tab</span>
+                      </a>
+                      <a
+                        href={downloadUrl}
+                        download={previewFile.fileName}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow flex items-center gap-1.5 transition"
+                        title="Download File"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Download</span>
+                      </a>
+                    </>
+                  );
+                })()}
                 <button
                   type="button"
                   onClick={() => setPreviewFile(null)}

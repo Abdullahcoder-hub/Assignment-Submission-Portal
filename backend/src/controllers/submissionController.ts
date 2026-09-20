@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import path from 'path';
 import archiver from 'archiver';
 import axios from 'axios';
@@ -498,8 +499,16 @@ export const downloadSingleSubmission = async (req: AuthRequest, res: Response):
  */
 export const viewSubmissionFile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const submission = await Submission.findById(id).lean();
+    const id = req.params.id as string;
+    const isDownload = req.query.download === 'true';
+
+    let submission: any = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      submission = await Submission.findById(id).lean();
+    }
+    if (!submission) {
+      submission = await Submission.findOne({ submissionId: id }).lean();
+    }
 
     if (!submission) {
       res.status(404).json({ success: false, message: 'Submission record not found.' });
@@ -564,9 +573,10 @@ export const viewSubmissionFile = async (req: AuthRequest, res: Response): Promi
         if (submission.fileSize) {
           res.setHeader('Content-Length', submission.fileSize);
         }
+        const dispositionType = isDownload ? 'attachment' : 'inline';
         res.setHeader(
           'Content-Disposition',
-          `inline; filename="${cleanFileName}"; filename*=UTF-8''${encodeURIComponent(submission.originalFileName)}`
+          `${dispositionType}; filename="${cleanFileName}"; filename*=UTF-8''${encodeURIComponent(submission.originalFileName)}`
         );
         res.setHeader('Cache-Control', 'private, max-age=86400');
 
