@@ -8,6 +8,11 @@ import { AuthRequest } from '../middleware/auth.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
 import { sanitizeCsvField } from '../utils/fileValidation.js';
 
+const getGroupSequenceNumber = (groupName: string): number => {
+  const match = groupName?.match(/(?:Group|Team|#)?\s*(\d+)/i);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+};
+
 /**
  * 1. CREATE NEW GROUP (Subject-wise)
  */
@@ -347,8 +352,12 @@ export const getMyPreviousGroups = async (req: AuthRequest, res: Response): Prom
     const studentId = req.student.id;
     const groups = await Group.find({ 'members.studentId': studentId })
       .populate('subjectId', 'name code')
-      .populate('assignmentId', 'title')
-      .sort({ createdAt: -1 });
+      .populate('assignmentId', 'title');
+
+    groups.sort((a, b) => {
+      const diff = getGroupSequenceNumber(a.groupName) - getGroupSequenceNumber(b.groupName);
+      return diff !== 0 ? diff : a.createdAt.getTime() - b.createdAt.getTime();
+    });
 
     res.status(200).json({
       success: true,
@@ -440,8 +449,12 @@ export const getGroups = async (req: AuthRequest, res: Response): Promise<void> 
 
     const groups = await Group.find(filter)
       .populate('subjectId', 'name code')
-      .populate('assignmentId', 'title deadline maxGroupSize')
-      .sort({ createdAt: -1 });
+      .populate('assignmentId', 'title deadline maxGroupSize');
+
+    groups.sort((a, b) => {
+      const diff = getGroupSequenceNumber(a.groupName) - getGroupSequenceNumber(b.groupName);
+      return diff !== 0 ? diff : a.createdAt.getTime() - b.createdAt.getTime();
+    });
 
     res.status(200).json({
       success: true,
@@ -466,28 +479,30 @@ export const exportGroupsCsv = async (req: AuthRequest, res: Response): Promise<
 
     const groups = await Group.find(filter)
       .populate('subjectId', 'name code')
-      .populate('assignmentId', 'title')
-      .sort({ createdAt: -1 });
+      .populate('assignmentId', 'title');
 
-    const headers = ['Subject', 'Assignment', 'Group Name', 'Group Leader', 'Leader Roll No', 'Members'];
+    groups.sort((a, b) => {
+      const diff = getGroupSequenceNumber(a.groupName) - getGroupSequenceNumber(b.groupName);
+      return diff !== 0 ? diff : a.createdAt.getTime() - b.createdAt.getTime();
+    });
+
+    const headers = ['Subject', 'Assignment', 'Group Name', 'Leader + Members'];
     const rows = groups.map((g) => {
       const subName = (g.subjectId as any)?.name ? `${(g.subjectId as any).name} (${(g.subjectId as any).code})` : 'N/A';
       const assignTitle = (g.assignmentId as any)?.title || 'N/A';
 
-      const membersFormatted = g.members
-        .map((m) => {
-          const isLeader = m.rollNumber.toLowerCase() === g.leader.rollNumber.toLowerCase();
-          return `${m.name} (${m.rollNumber})${isLeader ? ' - Leader' : ''}`;
-        })
-        .join('; ');
+      const groupBlock = [
+        `Leader: ${g.leader.name} (${g.leader.rollNumber})`,
+        ...g.members
+          .filter((m) => m.rollNumber.toLowerCase() !== g.leader.rollNumber.toLowerCase())
+          .map((m) => `${m.name} (${m.rollNumber})`),
+      ].join('\n');
 
       return [
         sanitizeCsvField(subName),
         sanitizeCsvField(assignTitle),
         sanitizeCsvField(g.groupName),
-        sanitizeCsvField(g.leader.name),
-        sanitizeCsvField(g.leader.rollNumber),
-        sanitizeCsvField(membersFormatted),
+        sanitizeCsvField(groupBlock),
       ].join(',');
     });
 
