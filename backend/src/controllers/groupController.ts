@@ -13,6 +13,20 @@ const getGroupSequenceNumber = (groupName: string): number => {
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
 };
 
+const calculateNextGroupNumber = async (subjectId: mongoose.Types.ObjectId | string, assignmentId: mongoose.Types.ObjectId | string): Promise<number> => {
+  const groups = await Group.find({ subjectId, assignmentId }).select('groupName');
+  const usedNumbers = new Set<number>();
+
+  for (const group of groups) {
+    const number = getGroupSequenceNumber(group.groupName);
+    if (number > 0 && number !== Number.MAX_SAFE_INTEGER) usedNumbers.add(number);
+  }
+
+  let nextNumber = 1;
+  while (usedNumbers.has(nextNumber)) nextNumber += 1;
+  return nextNumber;
+};
+
 /**
  * 1. CREATE NEW GROUP (Subject-wise)
  */
@@ -54,6 +68,16 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       res.status(400).json({
         success: false,
         message: 'Group registration is not allowed for this assignment because the CR set it to Individual Submission.',
+      });
+      return;
+    }
+
+    const nextGroupNumber = await calculateNextGroupNumber(subject._id, assignment._id);
+    const expectedGroupName = `Group ${nextGroupNumber}`;
+    if (groupName.trim().toLowerCase() !== expectedGroupName.toLowerCase()) {
+      res.status(400).json({
+        success: false,
+        message: `The next available group number is ${nextGroupNumber}. Please use "${expectedGroupName}".`,
       });
       return;
     }
@@ -528,19 +552,7 @@ export const getNextGroupNumber = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
-    const groups = await Group.find({ subjectId, assignmentId });
-    const usedNumbers = new Set<number>();
-    for (const g of groups) {
-      const match = g.groupName.match(/(?:Group\s*|Team\s*|#\s*)?(\d+)/i);
-      if (match && match[1]) {
-        const num = parseInt(match[1], 10);
-        if (num > 0) usedNumbers.add(num);
-      }
-    }
-    let nextNum = 1;
-    while (usedNumbers.has(nextNum)) {
-      nextNum += 1;
-    }
+    const nextNum = await calculateNextGroupNumber(subjectId as string, assignmentId as string);
     res.status(200).json({
       success: true,
       nextGroupNumber: nextNum,
@@ -707,7 +719,12 @@ export const updateGroup = async (req: AuthRequest, res: Response): Promise<void
     const leaderDoc: any =
       membersDocs.find((m) => m.rollNumber.toLowerCase() === cleanLeaderRoll.toLowerCase()) || membersDocs[0];
 
-    if (groupName && groupName.trim()) {
+    if (req.student && groupName && groupName.trim() !== group.groupName) {
+      res.status(400).json({ success: false, message: 'Students cannot change the assigned group number.' });
+      return;
+    }
+
+    if (!req.student && groupName && groupName.trim()) {
       group.groupName = groupName.trim();
     }
     group.leader = leaderDoc;
