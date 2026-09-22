@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ILateRequest extends Document {
+  requestType: 'Submission' | 'GroupRegistration';
   studentId: mongoose.Types.ObjectId;
   groupId?: mongoose.Types.ObjectId;
   subjectId: mongoose.Types.ObjectId;
@@ -18,6 +19,7 @@ export interface ILateRequest extends Document {
 
 const LateRequestSchema: Schema = new Schema(
   {
+    requestType: { type: String, enum: ['Submission', 'GroupRegistration'], default: 'Submission', index: true },
     studentId: { type: Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
     groupId: { type: Schema.Types.ObjectId, ref: 'Group', index: true },
     subjectId: { type: Schema.Types.ObjectId, ref: 'Subject', required: true, index: true },

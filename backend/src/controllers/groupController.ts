@@ -3,10 +3,26 @@ import mongoose from 'mongoose';
 import Group from '../models/Group.js';
 import Subject from '../models/Subject.js';
 import Assignment from '../models/Assignment.js';
+import LateRequest from '../models/LateRequest.js';
 import Student from '../models/Student.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
 import { sanitizeCsvField } from '../utils/fileValidation.js';
+
+const hasApprovedLateGroupAccess = async (
+  assignmentId: mongoose.Types.ObjectId | string,
+  studentId: string,
+  groupId?: mongoose.Types.ObjectId | string,
+): Promise<boolean> => {
+  const requestFilter: Record<string, any> = {
+    assignmentId,
+    requestType: 'GroupRegistration',
+    status: 'Approved',
+    $or: [{ studentId }],
+  };
+  if (groupId) requestFilter.$or.push({ groupId });
+  return Boolean(await LateRequest.exists(requestFilter));
+};
 
 const getGroupSequenceNumber = (groupName: string): number => {
   const match = groupName?.match(/(?:Group|Team|#)?\s*(\d+)/i);
@@ -85,7 +101,10 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
     // Group registration deadline check
     const groupDeadline = assignment.groupDeadline || assignment.deadline;
     const isPastGroupDeadline = new Date() > new Date(groupDeadline);
-    if (isPastGroupDeadline && !assignment.allowLateGroupRegistration) {
+    const hasLateApproval = isPastGroupDeadline
+      ? await hasApprovedLateGroupAccess(assignment._id, req.student.id)
+      : false;
+    if (isPastGroupDeadline && !assignment.allowLateGroupRegistration && !hasLateApproval) {
       res.status(400).json({
         success: false,
         message: 'Group registration deadline for this assignment has passed. Please contact CR to allow late group registration.',
@@ -307,7 +326,10 @@ export const continueGroup = async (req: AuthRequest, res: Response): Promise<vo
     // Group registration deadline check
     const groupDeadline = assignment.groupDeadline || assignment.deadline;
     const isPastGroupDeadline = new Date() > new Date(groupDeadline);
-    if (isPastGroupDeadline && !assignment.allowLateGroupRegistration) {
+    const hasLateApproval = isPastGroupDeadline
+      ? await hasApprovedLateGroupAccess(assignment._id, req.student.id)
+      : false;
+    if (isPastGroupDeadline && !assignment.allowLateGroupRegistration && !hasLateApproval) {
       res.status(400).json({
         success: false,
         message: 'Group registration deadline for this assignment has passed. Please contact CR to allow late group registration.',
@@ -594,7 +616,10 @@ export const updateGroup = async (req: AuthRequest, res: Response): Promise<void
       if (assignment) {
         const groupDeadline = assignment.groupDeadline || assignment.deadline;
         const isPast = new Date() > new Date(groupDeadline);
-        if (isPast && !assignment.allowLateGroupRegistration) {
+        const hasLateApproval = isPast
+          ? await hasApprovedLateGroupAccess(assignment._id, req.student.id, group._id)
+          : false;
+        if (isPast && !assignment.allowLateGroupRegistration && !hasLateApproval) {
           res.status(400).json({
             success: false,
             message: 'Group registration deadline has passed. Contact CR to edit group members.',

@@ -57,16 +57,26 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const { subjectId, assignmentId, reason } = req.body;
+    const { subjectId, assignmentId, reason, requestType = 'Submission' } = req.body;
 
     if (!subjectId || !assignmentId) {
       res.status(400).json({ success: false, message: 'Subject ID and Assignment ID are required.' });
       return;
     }
 
+    if (!['Submission', 'GroupRegistration'].includes(requestType)) {
+      res.status(400).json({ success: false, message: 'Invalid late request type.' });
+      return;
+    }
+
     const assignment = await Assignment.findById(assignmentId);
     if (!assignment || !assignment.isActive) {
       res.status(400).json({ success: false, message: 'Assignment not available.' });
+      return;
+    }
+
+    if (requestType === 'GroupRegistration' && assignment.submissionType !== 'Group') {
+      res.status(400).json({ success: false, message: 'Late group registration is only available for group assignments.' });
       return;
     }
 
@@ -81,7 +91,10 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
     });
 
     // Check existing late request for student or group for this assignment
-    const filter: any = { assignmentId };
+    const filter: any = {
+      assignmentId,
+      requestType: requestType === 'Submission' ? { $in: ['Submission', null] } : requestType,
+    };
     if (group) {
       filter.$or = [{ groupId: group._id }, { studentId }];
     } else {
@@ -105,6 +118,7 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
 
     const newRequest = await LateRequest.create({
       studentId,
+      requestType,
       groupId: group ? group._id : undefined,
       subjectId,
       assignmentId,
@@ -115,26 +129,43 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
       requestedAt: new Date(),
     });
 
-    const admin = await Admin.findOne({ role: 'ADMIN' });
-    const subject = await Subject.findById(subjectId).select('name code');
-    if (admin && subject) {
-      const baseUrl = (process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}/api`).replace(/\/$/, '');
-      await sendLateRequestEmail({
-        toEmail: admin.email,
-        toName: admin.name,
-        studentName,
-        rollNumber,
-        subjectName: subject.name,
-        assignmentTitle: assignment.title,
-        reason: newRequest.reason,
-        approveUrl: `${baseUrl}/api/late-requests/email-decision/${newRequest._id}/Approved/${decisionToken(newRequest._id.toString(), 'Approved')}`,
-        rejectUrl: `${baseUrl}/api/late-requests/email-decision/${newRequest._id}/Rejected/${decisionToken(newRequest._id.toString(), 'Rejected')}`,
-      });
+    const admin = await Admin.findOne({ role: 'ADMIN' }).select('name email').lean();
+    const subject = await Subject.findById(assignment.subjectId).select('name code').lean();
+    const adminEmails = Array.from(new Set([
+      admin?.email?.trim(),
+      process.env.ADMIN_EMAIL?.trim(),
+    ].filter((email): email is string => Boolean(email))));
+    const adminName = admin?.name || process.env.ADMIN_NAME || 'Class Representative';
+    let crNotified = false;
+    if (adminEmails.length > 0 && subject) {
+      const configuredBackendUrl = (process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, '');
+      const apiBaseUrl = configuredBackendUrl.endsWith('/api') ? configuredBackendUrl : `${configuredBackendUrl}/api`;
+      for (const adminEmail of adminEmails) {
+        const emailResult = await sendLateRequestEmail({
+          toEmail: adminEmail,
+          toName: adminName,
+          studentName,
+          rollNumber,
+          subjectName: subject.name,
+          assignmentTitle: requestType === 'GroupRegistration' ? `${assignment.title} (Late Group Registration)` : assignment.title,
+          reason: newRequest.reason,
+          approveUrl: `${apiBaseUrl}/late-requests/email-decision/${newRequest._id}/Approved/${decisionToken(newRequest._id.toString(), 'Approved')}`,
+          rejectUrl: `${apiBaseUrl}/late-requests/email-decision/${newRequest._id}/Rejected/${decisionToken(newRequest._id.toString(), 'Rejected')}`,
+        });
+        crNotified = crNotified || emailResult.success;
+        if (!emailResult.success) {
+          console.error(`[Late Request] Failed to notify CR at ${adminEmail}.`);
+        }
+      }
+    } else {
+      console.error('[Late Request] CR notification skipped: no admin email or subject was found.');
     }
 
     res.status(201).json({
       success: true,
-      message: 'Assignment deadline has passed. Your late submission request has been sent to the CR for approval.',
+      message: crNotified
+        ? 'Assignment deadline has passed. Your late submission request has been sent to the CR for approval.'
+        : 'Your request was saved, but the CR notification email could not be sent. Please contact the CR directly.',
       request: newRequest,
     });
   } catch (error) {
@@ -153,7 +184,7 @@ export const getMyLateRequestStatus = async (req: AuthRequest, res: Response): P
       return;
     }
 
-    const { assignmentId } = req.query;
+    const { assignmentId, requestType = 'Submission' } = req.query;
     if (!assignmentId) {
       res.status(400).json({ success: false, message: 'Assignment ID is required.' });
       return;
@@ -168,7 +199,10 @@ export const getMyLateRequestStatus = async (req: AuthRequest, res: Response): P
       group = await Group.findOne({ subjectId: assignment.subjectId, 'members.studentId': studentId });
     }
 
-    const filter: any = { assignmentId };
+    const filter: any = {
+      assignmentId,
+      requestType: requestType === 'Submission' ? { $in: ['Submission', null] } : requestType,
+    };
     if (group) {
       filter.$or = [{ groupId: group._id }, { studentId }];
     } else {
@@ -191,12 +225,15 @@ export const getMyLateRequestStatus = async (req: AuthRequest, res: Response): P
  */
 export const getLateRequests = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { subjectId, assignmentId, status, search } = req.query;
+    const { subjectId, assignmentId, status, search, requestType } = req.query;
     const filter: any = {};
 
     if (subjectId) filter.subjectId = subjectId;
     if (assignmentId) filter.assignmentId = assignmentId;
     if (status) filter.status = status;
+    if (requestType) {
+      filter.requestType = requestType === 'Submission' ? { $in: ['Submission', null] } : requestType;
+    }
 
     if (search) {
       const searchRegex = new RegExp((search as string).trim(), 'i');
@@ -209,7 +246,7 @@ export const getLateRequests = async (req: AuthRequest, res: Response): Promise<
 
     const requests = await LateRequest.find(filter)
       .populate('subjectId', 'name code')
-      .populate('assignmentId', 'title deadline')
+      .populate('assignmentId', 'title deadline submissionType allowLateGroupRegistration')
       .populate('groupId', 'groupName leader members')
       .sort({ requestedAt: -1 });
 

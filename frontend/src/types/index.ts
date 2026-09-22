@@ -71,6 +71,7 @@ export interface Group {
 
 export interface LateRequest {
   _id: string;
+  requestType: 'Submission' | 'GroupRegistration';
   studentId: string;
   groupId?: Group | string;
   subjectId: Subject | string;

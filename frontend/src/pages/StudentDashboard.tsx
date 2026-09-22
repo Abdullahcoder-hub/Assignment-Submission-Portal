@@ -26,11 +26,8 @@ import {
   X,
   Crown,
   KeyRound,
-  Shield,
   Edit2,
   Eye,
-  ExternalLink,
-  Download,
 } from 'lucide-react';
 
 const getStudentViewUrl = (submissionId?: string, fallbackUrl?: string) => {
@@ -158,6 +155,9 @@ export const StudentDashboard: React.FC = () => {
   const [loadingPrevGroups, setLoadingPrevGroups] = useState<boolean>(false);
   const [groupSubmitting, setGroupSubmitting] = useState<boolean>(false);
   const [groupMsg, setGroupMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [groupLateRequest, setGroupLateRequest] = useState<LateRequest | null>(null);
+  const [groupLateReason, setGroupLateReason] = useState<string>('');
+  const [submittingGroupLateRequest, setSubmittingGroupLateRequest] = useState<boolean>(false);
 
   // Group Edit Modal State
   const [groupEditModalOpen, setGroupEditModalOpen] = useState<boolean>(false);
@@ -167,6 +167,7 @@ export const StudentDashboard: React.FC = () => {
   ]);
   const [editLeaderIndex, setEditLeaderIndex] = useState<number>(0);
   const [editingGroupSaving, setEditingGroupSaving] = useState<boolean>(false);
+  const [groupEditError, setGroupEditError] = useState<string | null>(null);
 
   // Change Password State
   const [currentPassword, setCurrentPassword] = useState<string>('');
@@ -512,6 +513,46 @@ export const StudentDashboard: React.FC = () => {
   }, [selectedGroupAssignmentIds, groupAssignmentId]);
 
   useEffect(() => {
+    if (!groupAssignmentId) {
+      setGroupLateRequest(null);
+      return;
+    }
+    const fetchGroupLateRequest = async () => {
+      try {
+        const res = await api.get(`/late-requests/my-status?assignmentId=${groupAssignmentId}&requestType=GroupRegistration`);
+        if (res.data.success) setGroupLateRequest(res.data.request);
+      } catch (err) {
+        console.error('Failed to fetch group late request status:', err);
+      }
+    };
+    fetchGroupLateRequest();
+  }, [groupAssignmentId]);
+
+  const handleCreateGroupLateRequest = async () => {
+    if (!groupSubjectId || !groupAssignmentId) return;
+    try {
+      setSubmittingGroupLateRequest(true);
+      const res = await api.post('/late-requests', {
+        subjectId: groupSubjectId,
+        assignmentId: groupAssignmentId,
+        requestType: 'GroupRegistration',
+        reason: groupLateReason,
+      });
+      if (res.data.success) {
+        setGroupLateRequest(res.data.request);
+        setGroupMsg({ type: 'success', text: res.data.message });
+      }
+    } catch (err: any) {
+      setGroupMsg({
+        type: 'error',
+        text: err.response?.data?.message || `Failed to submit late group ${myGroup ? 'edit' : 'registration'} request.`,
+      });
+    } finally {
+      setSubmittingGroupLateRequest(false);
+    }
+  };
+
+  useEffect(() => {
     if (!groupSubjectId) return;
     setExtraMembers((currentMembers) => {
       if (currentMembers.length === maxGroupMembers - 1) return currentMembers;
@@ -631,12 +672,26 @@ export const StudentDashboard: React.FC = () => {
 
   const handleOpenEditGroup = () => {
     if (!myGroup) return;
+    const groupDeadline = selectedGroupAssignment?.groupDeadline || selectedGroupAssignment?.deadline;
+    const lateEditNeedsApproval = Boolean(
+      groupDeadline &&
+      new Date(groupDeadline).getTime() < deadlineTick &&
+      !selectedGroupAssignment?.allowLateGroupRegistration
+    );
+    if (lateEditNeedsApproval && groupLateRequest?.status !== 'Approved') {
+      setGroupMsg({
+        type: 'error',
+        text: `First send a late group ${myGroup ? 'edit' : 'registration'} request and wait for CR approval.`,
+      });
+      return;
+    }
     setEditGroupName(myGroup.groupName);
     setEditMembers(myGroup.members.map((m) => ({ name: m.name, rollNumber: m.rollNumber })));
     const leaderIdx = myGroup.members.findIndex(
       (m) => m.rollNumber.toLowerCase() === myGroup.leader.rollNumber.toLowerCase()
     );
     setEditLeaderIndex(leaderIdx >= 0 ? leaderIdx : 0);
+    setGroupEditError(null);
     setGroupEditModalOpen(true);
   };
 
@@ -644,10 +699,11 @@ export const StudentDashboard: React.FC = () => {
     e.preventDefault();
     if (!myGroup) return;
     setGroupMsg(null);
+    setGroupEditError(null);
 
     const validMembers = editMembers.filter((m) => m.rollNumber.trim() !== '');
     if (validMembers.length === 0) {
-      setGroupMsg({ type: 'error', text: 'Group must have at least 1 member.' });
+      setGroupEditError('Group must have at least 1 member.');
       return;
     }
 
@@ -655,12 +711,12 @@ export const StudentDashboard: React.FC = () => {
     for (const m of validMembers) {
       const r = m.rollNumber.trim();
       if (!/^\d{7}$/.test(r)) {
-        setGroupMsg({ type: 'error', text: `Roll number '${r}' is invalid. Roll number must be exactly 7 digits (e.g. 2260000).` });
+        setGroupEditError(`Roll number '${r}' is invalid. Roll number must be exactly 7 digits (e.g. 2260000).`);
         return;
       }
       const upperR = r.toUpperCase();
       if (seen.has(upperR)) {
-        setGroupMsg({ type: 'error', text: `Roll number '${r}' cannot be used more than once.` });
+        setGroupEditError(`Roll number '${r}' cannot be used more than once.`);
         return;
       }
       seen.add(upperR);
@@ -682,7 +738,7 @@ export const StudentDashboard: React.FC = () => {
         setGroupEditModalOpen(false);
       }
     } catch (err: any) {
-      setGroupMsg({ type: 'error', text: err.response?.data?.message || 'Failed to update group.' });
+      setGroupEditError(err.response?.data?.message || 'Failed to update group.');
     } finally {
       setEditingGroupSaving(false);
     }
@@ -1297,6 +1353,50 @@ export const StudentDashboard: React.FC = () => {
               </div>
             )}
 
+            {selectedGroupAssignment &&
+              new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
+              !selectedGroupAssignment.allowLateGroupRegistration && (
+                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 space-y-3">
+                  <p className="text-sm font-bold text-amber-900">
+                    {myGroup
+                      ? 'Group edit deadline has passed. Send a request to your CR to allow late group editing.'
+                      : 'Group registration deadline has passed. Send a request to your CR to allow late registration.'}
+                  </p>
+                  {groupLateRequest?.status === 'Approved' ? (
+                    <p className="text-xs font-bold text-emerald-800">
+                      {myGroup ? 'Late group editing approved. You can edit the group now.' : 'Late group registration approved. You can register the group now.'}
+                    </p>
+                  ) : groupLateRequest?.status === 'Pending' ? (
+                    <p className="text-xs font-bold text-amber-800">
+                      Your late group {myGroup ? 'edit' : 'registration'} request is pending CR approval.
+                    </p>
+                  ) : groupLateRequest?.status === 'Rejected' ? (
+                    <p className="text-xs font-bold text-red-800">
+                      Your late group {myGroup ? 'edit' : 'registration'} request was rejected by your CR.
+                    </p>
+                  ) : (
+                    <>
+                      <textarea
+                        value={groupLateReason}
+                        onChange={(e) => setGroupLateReason(e.target.value)}
+                        placeholder={`Explain why late group ${myGroup ? 'editing' : 'registration'} is needed...`}
+                        rows={2}
+                        className="w-full p-2.5 bg-white border border-amber-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateGroupLateRequest}
+                        disabled={submittingGroupLateRequest}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white font-bold text-xs rounded-lg flex items-center gap-2"
+                      >
+                        {submittingGroupLateRequest ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        Request Late Group {myGroup ? 'Edit' : 'Registration'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
             {groupMsg && (
               <div
                 className={`p-4 rounded-xl border text-sm flex items-center gap-2 ${
@@ -1334,9 +1434,21 @@ export const StudentDashboard: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleOpenEditGroup}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5"
+                      disabled={Boolean(
+                        selectedGroupAssignment &&
+                        new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
+                        !selectedGroupAssignment.allowLateGroupRegistration &&
+                        groupLateRequest?.status !== 'Approved'
+                      )}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5"
                     >
-                      <Edit2 className="w-3.5 h-3.5" /> Edit Group Members
+                      <Edit2 className="w-3.5 h-3.5" />
+                      {selectedGroupAssignment &&
+                      new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
+                      !selectedGroupAssignment.allowLateGroupRegistration &&
+                      groupLateRequest?.status !== 'Approved'
+                        ? 'CR Approval Required'
+                        : 'Edit Group Members'}
                     </button>
                   </div>
                 </div>
@@ -1875,6 +1987,12 @@ export const StudentDashboard: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveGroupEdit} className="space-y-4">
+              {groupEditError && (
+                <div className="p-3 rounded-xl border border-red-300 bg-red-50 text-red-800 text-xs font-semibold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{groupEditError}</span>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Group Name</label>
                 <input
