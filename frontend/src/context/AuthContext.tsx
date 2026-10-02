@@ -17,6 +17,7 @@ interface AuthContextType {
     message?: string;
   }>;
   logout: () => void;
+  replaceToken: (token: string) => void;
   refreshStudentProfile: () => Promise<void>;
 }
 
@@ -188,6 +189,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
+  const replaceToken = (updatedToken: string) => {
+    localStorage.setItem('portalToken', updatedToken);
+    setToken(updatedToken);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -201,6 +207,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         studentRegister,
         googleLoginStudent,
         logout,
+        replaceToken,
         refreshStudentProfile,
       }}
     >

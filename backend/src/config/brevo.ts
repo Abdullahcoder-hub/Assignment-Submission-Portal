@@ -1,10 +1,14 @@
 import axios from 'axios';
 import moment from 'moment-timezone';
 import dotenv from 'dotenv';
+import { escapeHtml } from '../utils/fileValidation.js';
 
 dotenv.config();
 
 const apiKey = process.env.BREVO_API_KEY || '';
+if (process.env.NODE_ENV === 'production' && (!apiKey || apiKey === 'xkeysib-demo')) {
+  throw new Error('BREVO_API_KEY must be configured in production.');
+}
 const senderEmail = process.env.BREVO_SENDER_EMAIL || 'cr@assignmentportal.com';
 const senderName = process.env.BREVO_SENDER_NAME || 'Class Representative';
 const timezone = process.env.TIMEZONE || 'Asia/Karachi';
@@ -34,29 +38,65 @@ export const sendLateRequestEmail = async (params: {
   approveUrl?: string;
   rejectUrl?: string;
   decision?: 'Approved' | 'Rejected';
+  isStudentNotification?: boolean;
+  requestType?: 'Submission' | 'GroupRegistration';
+  groupName?: string;
+  groupMembers?: string;
+  rejectionReason?: string;
 }): Promise<{ success: boolean }> => {
-  const decisionText = params.decision
-    ? `Your late submission request has been <strong>${params.decision.toLowerCase()}</strong>.`
-    : 'A student has submitted a late submission request.';
-  const actionHtml = params.approveUrl && params.rejectUrl
-    ? `<p><a href="${params.approveUrl}" style="background:#16a34a;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">Approve</a> <a href="${params.rejectUrl}" style="background:#dc2626;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">Reject</a></p>`
-    : '<p>Please open the portal to submit again.</p>';
-  const htmlContent = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto"><h2>Late Submission Request</h2><p>Hello <strong>${params.toName}</strong>,</p><p>${decisionText}</p><p><strong>Student:</strong> ${params.studentName} (${params.rollNumber})<br><strong>Subject:</strong> ${params.subjectName}<br><strong>Assignment:</strong> ${params.assignmentTitle}<br><strong>Reason:</strong> ${params.reason}</p>${actionHtml}</div>`;
+  let decisionText: string;
+  let actionHtml: string;
+  let emailSubject: string;
+  let additionalInfo: string = '';
+
+  const requestTypeText = params.requestType === 'GroupRegistration' ? 'Late Group Registration' : 'Late Assignment Submission';
+
+  if (params.isStudentNotification) {
+    decisionText = 'Your late submission request has been submitted successfully and is pending approval from the Class Representative.';
+    actionHtml = '<p>You will receive an email notification once your request is reviewed. Please check the portal for updates.</p>';
+    emailSubject = `Late Request Submitted — ${params.assignmentTitle}`;
+  } else if (params.decision) {
+    if (params.decision === 'Approved') {
+      decisionText = `Your late ${requestTypeText.toLowerCase()} request has been <strong>approved</strong> by the Class Representative. You can now continue with the requested action through the portal.`;
+    } else {
+      decisionText = `Your late ${requestTypeText.toLowerCase()} request has been <strong>rejected</strong> by the Class Representative.`;
+      if (params.rejectionReason) {
+        decisionText += `<br><br><strong>Rejection Reason:</strong> ${escapeHtml(params.rejectionReason)}`;
+      }
+    }
+    actionHtml = '<p>Please open the portal to submit again.</p>';
+    emailSubject = `Late Request ${params.decision} — ${params.assignmentTitle}`;
+  } else {
+    decisionText = 'A student has submitted a late permission request.';
+    actionHtml = `<p><a href="${escapeHtml(params.approveUrl)}" style="background:#16a34a;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">Approve</a> <a href="${escapeHtml(params.rejectUrl)}" style="background:#dc2626;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">Reject</a></p>`;
+    emailSubject = `New Late Request — ${params.assignmentTitle}`;
+  }
+
+  if (params.requestType === 'GroupRegistration' && params.groupName) {
+    additionalInfo = `<br><strong>Request Type:</strong> Late Group Registration<br><strong>Group:</strong> ${escapeHtml(params.groupName)}`;
+    if (params.groupMembers) {
+      additionalInfo += `<br><strong>Group Members:</strong> ${escapeHtml(params.groupMembers)}`;
+    }
+  } else if (params.requestType === 'Submission') {
+    additionalInfo = `<br><strong>Request Type:</strong> Late Assignment Submission`;
+  }
+
+  const htmlContent = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:8px;background:#ffffff"><h2 style="color:#1f2937;margin-top:0">Late Request Notification</h2><p>Hello <strong>${escapeHtml(params.toName)}</strong>,</p><p>${decisionText}</p><div style="background:#f9fafb;padding:15px;border-radius:6px;margin:15px 0"><p style="margin:0"><strong>Student:</strong> ${escapeHtml(params.studentName)}<br><strong>Roll No:</strong> ${escapeHtml(params.rollNumber)}<br><strong>Subject:</strong> ${escapeHtml(params.subjectName)}<br><strong>Assignment:</strong> ${escapeHtml(params.assignmentTitle)}${additionalInfo}<br><strong>Reason:</strong> ${escapeHtml(params.reason)}</p></div>${actionHtml}</div>`;
 
   try {
     if (!apiKey || apiKey === 'xkeysib-demo') {
-      console.log(`[Brevo Email Mock] Late request email to: ${params.toEmail}`);
+      console.info('[Brevo Email Mock] Late request email skipped.');
       return { success: true };
     }
     await sendBrevoEmail(
-      params.decision ? `Late Request ${params.decision} — ${params.assignmentTitle}` : `New Late Submission Request — ${params.assignmentTitle}`,
+      emailSubject,
       htmlContent,
       params.toEmail,
       params.toName
     );
     return { success: true };
   } catch (error) {
-    console.error('[Brevo Late Request Email Error]:', error);
+    console.error('[Brevo Late Request Email Error] Delivery failed.');
     return { success: false };
   }
 };
@@ -78,7 +118,7 @@ export const sendSubmissionConfirmationEmail = async (
   params: SendConfirmationEmailParams
 ): Promise<{ success: boolean; error?: string }> => {
   if (!apiKey || apiKey === 'xkeysib-demo') {
-    console.log(`[Brevo Email Mock] Would send submission confirmation email to: ${params.toEmail}`);
+    console.info('[Brevo Email Mock] Submission confirmation email skipped.');
     return { success: true };
   }
 
@@ -113,33 +153,33 @@ export const sendSubmissionConfirmationEmail = async (
           <h1>Assignment Submission Receipt</h1>
         </div>
         <div class="content">
-          <p>Dear <strong>${params.toName}</strong>,</p>
+          <p>Dear <strong>${escapeHtml(params.toName)}</strong>,</p>
           <p>Your assignment submission has been recorded successfully in the Class Portal.</p>
 
           <div class="receipt-card">
             <div class="row">
               <span class="label">Submission ID</span>
-              <span class="value">${params.submissionId}</span>
+              <span class="value">${escapeHtml(params.submissionId)}</span>
             </div>
             <div class="row">
               <span class="label">Student Name</span>
-              <span class="value">${params.toName}</span>
+              <span class="value">${escapeHtml(params.toName)}</span>
             </div>
             <div class="row">
               <span class="label">Roll Number</span>
-              <span class="value">${params.rollNumber}</span>
+              <span class="value">${escapeHtml(params.rollNumber)}</span>
             </div>
             <div class="row">
               <span class="label">Subject</span>
-              <span class="value">${params.subjectName} (${params.subjectCode})</span>
+              <span class="value">${escapeHtml(params.subjectName)} (${escapeHtml(params.subjectCode)})</span>
             </div>
             <div class="row">
               <span class="label">Assignment</span>
-              <span class="value">${params.assignmentTitle}</span>
+              <span class="value">${escapeHtml(params.assignmentTitle)}</span>
             </div>
             <div class="row">
               <span class="label">Uploaded File</span>
-              <span class="value">${params.originalFileName}</span>
+              <span class="value">${escapeHtml(params.originalFileName)}</span>
             </div>
             <div class="row">
               <span class="label">Submitted At</span>
@@ -167,7 +207,7 @@ export const sendSubmissionConfirmationEmail = async (
     await sendBrevoEmail(`Assignment Submission Confirmation — ${params.subjectCode} ${params.assignmentTitle}`, htmlContent, params.toEmail, params.toName);
     return { success: true };
   } catch (error: any) {
-    console.error('[Brevo Email Error]:', error?.response?.body || error?.message || error);
+    console.error('[Brevo Email Error] Submission confirmation delivery failed.');
     return { success: false, error: error?.message || 'Failed to send confirmation email via Brevo.' };
   }
 };
@@ -183,7 +223,7 @@ export const sendStudentVerificationEmail = async (
   const verifyUrl = `${frontendUrl}/verify-email?token=${verificationToken}`;
 
   if (!apiKey || apiKey === 'xkeysib-demo') {
-    console.log(`[Brevo Email Mock] Verification link for ${toEmail}: ${verifyUrl}`);
+    console.info('[Brevo Email Mock] Verification email skipped.');
     return { success: true };
   }
 
@@ -193,7 +233,7 @@ export const sendStudentVerificationEmail = async (
     <body style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 20px;">
       <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0;">
         <h2 style="color: #1e293b; margin-top: 0;">Verify Your Student Account Email</h2>
-        <p style="color: #475569;">Hello <strong>${toName}</strong>,</p>
+        <p style="color: #475569;">Hello <strong>${escapeHtml(toName)}</strong>,</p>
         <p style="color: #475569;">Thank you for registering on the Class Assignment Submission Portal. Please click the button below to verify your email address and activate your account:</p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${verifyUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; font-weight: bold; border-radius: 8px; text-decoration: none; display: inline-block;">Verify Email Address</a>
@@ -208,7 +248,7 @@ export const sendStudentVerificationEmail = async (
     await sendBrevoEmail('Verify Your Email — Class Assignment Portal', htmlContent, toEmail, toName);
     return { success: true };
   } catch (error: any) {
-    console.error('[Brevo Verification Email Error]:', error);
+    console.error('[Brevo Verification Email Error] Delivery failed.');
     return { success: false, error: 'Failed to send verification email.' };
   }
 };
@@ -224,7 +264,7 @@ export const sendPasswordResetEmail = async (
   const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
 
   if (!apiKey || apiKey === 'xkeysib-demo') {
-    console.log(`[Brevo Email Mock] Password reset link for ${toEmail}: ${resetUrl}`);
+    console.info('[Brevo Email Mock] Password reset email skipped.');
     return { success: true };
   }
 
@@ -234,7 +274,7 @@ export const sendPasswordResetEmail = async (
     <body style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 20px;">
       <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0;">
         <h2 style="color: #1e293b; margin-top: 0;">Reset Your Password</h2>
-        <p style="color: #475569;">Hello <strong>${toName}</strong>,</p>
+        <p style="color: #475569;">Hello <strong>${escapeHtml(toName)}</strong>,</p>
         <p style="color: #475569;">You requested a password reset for your Class Portal account. Click the button below to set a new password:</p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${resetUrl}" style="background-color: #dc2626; color: #ffffff; padding: 12px 24px; font-weight: bold; border-radius: 8px; text-decoration: none; display: inline-block;">Reset Password</a>
@@ -249,7 +289,7 @@ export const sendPasswordResetEmail = async (
     await sendBrevoEmail('Reset Password — Class Assignment Portal', htmlContent, toEmail, toName);
     return { success: true };
   } catch (error: any) {
-    console.error('[Brevo Reset Email Error]:', error);
+    console.error('[Brevo Reset Email Error] Delivery failed.');
     return { success: false, error: 'Failed to send password reset email.' };
   }
 };

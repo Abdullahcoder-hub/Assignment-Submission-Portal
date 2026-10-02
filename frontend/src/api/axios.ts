@@ -24,3 +24,23 @@ api.interceptors.request.use(
 );
 
 export default api;
+
+export const openSubmissionFile = async (submissionId: string): Promise<void> => {
+  const fileWindow = window.open('about:blank', '_blank');
+  if (!fileWindow) {
+    throw new Error('Please allow pop-ups to open submission files.');
+  }
+  fileWindow.opener = null;
+
+  try {
+    const response = await api.get(`/submissions/${encodeURIComponent(submissionId)}/view`, {
+      responseType: 'blob',
+    });
+    const fileUrl = URL.createObjectURL(response.data);
+    fileWindow.location.replace(fileUrl);
+    window.setTimeout(() => URL.revokeObjectURL(fileUrl), 60_000);
+  } catch (error) {
+    fileWindow.close();
+    throw error;
+  }
+};

@@ -18,7 +18,7 @@ const router = Router();
 router.get('/check-roll', checkRollNumberAvailability);
 router.post('/check-roll', checkRollNumberAvailability);
 router.post('/register', registerStudent);
-router.get('/verify-email', verifyEmail);
+router.post('/verify-email', verifyEmail);
 router.post('/resend-verification', resendVerificationEmail);
 router.post('/login', loginStudent);
 router.post('/google', googleAuthStudent);

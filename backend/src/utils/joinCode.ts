@@ -1,16 +1,20 @@
 import ClassSettings, { IClassSettings } from '../models/ClassSettings.js';
+import crypto from 'node:crypto';
 
 /**
  * Gets or initializes the class join code settings
  */
 export const getOrCreateClassJoinCode = async (): Promise<IClassSettings> => {
   let settings = await ClassSettings.findOne();
+  const generateJoinCode = () => `CLASS-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
   if (!settings) {
+    const configuredCode = process.env.CLASS_JOIN_CODE?.trim();
     settings = await ClassSettings.create({
-      joinCode: process.env.CLASS_JOIN_CODE || 'CLASS-2026-PORTAL',
+      joinCode: configuredCode && configuredCode.toUpperCase() !== 'CLASS-2026-PORTAL'
+        ? configuredCode
+        : generateJoinCode(),
       isJoinCodeActive: true,
     });
-    console.log(`[ClassSettings] Initialized default Class Join Code: ${settings.joinCode}`);
   }
   return settings;
 };
@@ -29,8 +33,7 @@ export const verifyClassJoinCode = async (inputCode: string): Promise<boolean> =
  * Regenerate a new random Class Join Code
  */
 export const regenerateClassJoinCode = async (): Promise<string> => {
-  const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-  const newCode = `CLASS-2026-${randomSuffix}`;
+  const newCode = `CLASS-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
 
   let settings = await ClassSettings.findOne();
   if (settings) {

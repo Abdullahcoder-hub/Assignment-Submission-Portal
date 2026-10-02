@@ -5,9 +5,5 @@
   "scripts": {
     "build": "npm --prefix backend install && npm --prefix backend run build",
     "start": "npm --prefix backend start"
-  },
-  "dependencies": {
-    "@vercel/analytics": "^2.0.1"
   }
 }
-

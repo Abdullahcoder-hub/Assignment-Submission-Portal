@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.js';
 import { getOrCreateClassJoinCode, regenerateClassJoinCode, updateClassJoinCode } from '../utils/joinCode.js';
+import Admin from '../models/Admin.js';
 
 export const getJoinCode = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -63,5 +64,17 @@ export const toggleCode = async (req: AuthRequest, res: Response): Promise<void>
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to toggle class join code.' });
+  }
+};
+
+export const getAdmins = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const admins = await Admin.find({}).select('name email _id').lean();
+    res.status(200).json({
+      success: true,
+      admins,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch admins.' });
   }
 };

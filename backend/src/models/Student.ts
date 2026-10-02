@@ -4,6 +4,7 @@ export interface IStudent extends Document {
   name: string;
   email: string;
   passwordHash?: string;
+  tokenVersion: number;
   rollNumber: string;
   googleId?: string;
   isEmailVerified: boolean;
@@ -21,6 +22,7 @@ const StudentSchema: Schema = new Schema(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String },
+    tokenVersion: { type: Number, default: 0 },
     rollNumber: { type: String, required: true, unique: true, trim: true },
     googleId: { type: String, default: '' },
     isEmailVerified: { type: Boolean, default: false },

@@ -7,7 +7,8 @@ import LateRequest from '../models/LateRequest.js';
 import Student from '../models/Student.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
-import { sanitizeCsvField } from '../utils/fileValidation.js';
+import { escapeRegex, sanitizeCsvField } from '../utils/fileValidation.js';
+import { logError } from '../utils/logger.js';
 
 const hasApprovedLateGroupAccess = async (
   assignmentId: mongoose.Types.ObjectId | string,
@@ -113,6 +114,7 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const maxLimit = assignment.maxGroupSize || 4;
+    const minLimit = assignment.minGroupSize || 1;
 
     // Parse member roll numbers & names
     const memberNameMap: Record<string, string> = {};
@@ -154,7 +156,7 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
     const existingName = await Group.findOne({
       subjectId: subject._id,
       assignmentId: assignment._id,
-      groupName: { $regex: new RegExp(`^${groupName.trim()}$`, 'i') },
+      groupName: { $regex: new RegExp(`^${escapeRegex(groupName.trim())}$`, 'i') },
     });
 
     if (existingName) {
@@ -183,7 +185,7 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
     // Deduplicate roll numbers
     const uniqueRolls = Array.from(new Set(rawRolls.map(r => r.toUpperCase())));
 
-    // Check maximum group limit
+    // Check group size limits
     if (uniqueRolls.length > maxLimit) {
       res.status(400).json({
         success: false,
@@ -192,21 +194,24 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    if (uniqueRolls.length < 1) {
-      res.status(400).json({ success: false, message: 'Group must have at least 1 member.' });
+    if (uniqueRolls.length < minLimit) {
+      res.status(400).json({
+        success: false,
+        message: `Group must have at least ${minLimit} member(s). Current: ${uniqueRolls.length}.`,
+      });
       return;
     }
 
     // Find existing student records for the rolls (if any)
     const students = await Student.find({
-      rollNumber: { $in: uniqueRolls.map(r => new RegExp(`^${r}$`, 'i')) }
+      rollNumber: { $in: uniqueRolls.map(r => new RegExp(`^${escapeRegex(r)}$`, 'i')) }
     });
 
     // Check if any roll number is ALREADY registered in a group for this assignment
     const existingGroup = await Group.findOne({
       subjectId: subject._id,
       assignmentId: assignment._id,
-      'members.rollNumber': { $in: uniqueRolls.map(r => new RegExp(`^${r}$`, 'i')) }
+      'members.rollNumber': { $in: uniqueRolls.map(r => new RegExp(`^${escapeRegex(r)}$`, 'i')) }
     });
 
     if (existingGroup) {
@@ -260,7 +265,7 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       group: newGroup,
     });
   } catch (error: any) {
-    console.error('[Create Group Error]:', error);
+    logError('[Create Group Error]', error);
     if (error?.code === 11000) {
       if (error?.keyPattern?.groupName || JSON.stringify(error).includes('groupName')) {
         res.status(400).json({
@@ -338,10 +343,19 @@ export const continueGroup = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     const maxLimit = assignment.maxGroupSize || 4;
+    const minLimit = assignment.minGroupSize || 1;
     if (prevGroup.members.length > maxLimit) {
       res.status(400).json({
         success: false,
         message: `Previous group member count (${prevGroup.members.length}) exceeds the maximum group limit (${maxLimit}) for ${assignment.title}.`,
+      });
+      return;
+    }
+
+    if (prevGroup.members.length < minLimit) {
+      res.status(400).json({
+        success: false,
+        message: `Previous group member count (${prevGroup.members.length}) is below the minimum required (${minLimit}) for ${assignment.title}.`,
       });
       return;
     }
@@ -351,7 +365,7 @@ export const continueGroup = async (req: AuthRequest, res: Response): Promise<vo
     const existingGroup = await Group.findOne({
       subjectId: subject._id,
       assignmentId: assignment._id,
-      'members.rollNumber': { $in: memberRolls.map(r => new RegExp(`^${r}$`, 'i')) }
+      'members.rollNumber': { $in: memberRolls.map(r => new RegExp(`^${escapeRegex(r)}$`, 'i')) }
     });
 
     if (existingGroup) {
@@ -380,7 +394,7 @@ export const continueGroup = async (req: AuthRequest, res: Response): Promise<vo
       group: newGroup,
     });
   } catch (error: any) {
-    console.error('[Continue Group Error]:', error);
+    logError('[Continue Group Error]', error);
     res.status(500).json({ success: false, message: 'Failed to continue group.' });
   }
 };
@@ -431,7 +445,7 @@ export const getMyGroupForSubject = async (req: AuthRequest, res: Response): Pro
       subjectId,
       $or: [
         { 'members.studentId': req.student.id },
-        { 'members.rollNumber': new RegExp(`^${req.student.rollNumber.trim()}$`, 'i') },
+        { 'members.rollNumber': new RegExp(`^${escapeRegex(req.student.rollNumber.trim())}$`, 'i') },
       ],
     };
 
@@ -483,7 +497,7 @@ export const getGroups = async (req: AuthRequest, res: Response): Promise<void> 
     if (assignmentId) filter.assignmentId = assignmentId;
 
     if (search) {
-      const searchRegex = new RegExp((search as string).trim(), 'i');
+      const searchRegex = new RegExp(escapeRegex((search as string).trim()), 'i');
       filter.$or = [
         { groupName: searchRegex },
         { 'leader.name': searchRegex },
@@ -558,7 +572,7 @@ export const exportGroupsCsv = async (req: AuthRequest, res: Response): Promise<
     res.setHeader('Content-Disposition', 'attachment; filename="Group_Registrations.csv"');
     res.status(200).send(csvContent);
   } catch (error) {
-    console.error('[Export Group CSV Error]:', error);
+    logError('[Export Group CSV Error]', error);
     res.status(500).json({ success: false, message: 'Failed to export group CSV.' });
   }
 };
@@ -631,6 +645,7 @@ export const updateGroup = async (req: AuthRequest, res: Response): Promise<void
 
     const assignment = await Assignment.findById(group.assignmentId);
     const maxLimit = assignment?.maxGroupSize || group.maxGroupSize || 4;
+    const minLimit = assignment?.minGroupSize || 1;
 
     // Parse member roll numbers & names
     const memberNameMap: Record<string, string> = {};
@@ -690,8 +705,11 @@ export const updateGroup = async (req: AuthRequest, res: Response): Promise<void
       });
       return;
     }
-    if (uniqueRolls.length < 1) {
-      res.status(400).json({ success: false, message: 'Group must have at least 1 member.' });
+    if (uniqueRolls.length < minLimit) {
+      res.status(400).json({
+        success: false,
+        message: `Group must have at least ${minLimit} member(s). Current: ${uniqueRolls.length}.`,
+      });
       return;
     }
 
@@ -700,7 +718,7 @@ export const updateGroup = async (req: AuthRequest, res: Response): Promise<void
       _id: { $ne: group._id },
       subjectId: group.subjectId,
       assignmentId: group.assignmentId,
-      'members.rollNumber': { $in: uniqueRolls.map((r) => new RegExp(`^${r}$`, 'i')) },
+      'members.rollNumber': { $in: uniqueRolls.map((r) => new RegExp(`^${escapeRegex(r)}$`, 'i')) },
     });
 
     if (conflictingGroup) {
@@ -715,7 +733,7 @@ export const updateGroup = async (req: AuthRequest, res: Response): Promise<void
 
     // Find student records
     const students = await Student.find({
-      rollNumber: { $in: uniqueRolls.map((r) => new RegExp(`^${r}$`, 'i')) },
+      rollNumber: { $in: uniqueRolls.map((r) => new RegExp(`^${escapeRegex(r)}$`, 'i')) },
     });
 
     const membersDocs: any[] = uniqueRolls.map((roll) => {
@@ -763,7 +781,7 @@ export const updateGroup = async (req: AuthRequest, res: Response): Promise<void
       group,
     });
   } catch (error: any) {
-    console.error('[Update Group Error]:', error);
+    logError('[Update Group Error]', error);
     res.status(500).json({ success: false, message: 'Failed to update group.' });
   }
 };

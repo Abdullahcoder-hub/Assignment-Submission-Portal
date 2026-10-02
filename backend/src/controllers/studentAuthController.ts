@@ -10,8 +10,9 @@ import { validatePasswordStrength } from '../utils/passwordValidator.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
 import { sendStudentVerificationEmail, sendPasswordResetEmail } from '../config/brevo.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { getJwtSecret } from '../config/security.js';
+import { logError } from '../utils/logger.js';
 
-const secret = process.env.JWT_SECRET || 'default_secret_key_change_in_production_12345';
 const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = new OAuth2Client(googleClientId);
 
@@ -92,7 +93,7 @@ export const registerStudent = async (req: Request, res: Response): Promise<void
       message: 'Registration successful! A verification email has been sent to your inbox. Please verify before logging in.',
     });
   } catch (error: any) {
-    console.error('[Student Register Error]:', error);
+    logError('[Student Register Error]', error);
     res.status(500).json({ success: false, message: 'Server error during registration.' });
   }
 };
@@ -102,9 +103,9 @@ export const registerStudent = async (req: Request, res: Response): Promise<void
  */
 export const verifyEmail = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { token } = req.query;
+    const { token } = req.body;
 
-    if (!token) {
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/i.test(token)) {
       res.status(400).json({ success: false, message: 'Verification token is required.' });
       return;
     }
@@ -207,8 +208,8 @@ export const loginStudent = async (req: Request, res: Response): Promise<void> =
     }
 
     const token = jwt.sign(
-      { id: student._id, email: student.email, role: 'STUDENT' },
-      secret,
+      { id: student._id, email: student.email, role: 'STUDENT', tokenVersion: student.tokenVersion ?? 0 },
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
@@ -260,7 +261,7 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
         googlePayload = decodedToken || { email: req.body.email, name: req.body.name, sub: req.body.googleId };
       }
     } catch (gErr) {
-      console.error('[Google OAuth Token Error]:', gErr);
+      logError('[Google OAuth Token Error]', gErr);
       res.status(400).json({ success: false, message: 'Invalid or expired Google authentication token.' });
       return;
     }
@@ -328,8 +329,8 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
     }
 
     const token = jwt.sign(
-      { id: student._id, email: student.email, role: 'STUDENT' },
-      secret,
+      { id: student._id, email: student.email, role: 'STUDENT', tokenVersion: student.tokenVersion ?? 0 },
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
@@ -346,7 +347,7 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
       },
     });
   } catch (error: any) {
-    console.error('[Google Auth Error]:', error);
+    logError('[Google Auth Error]', error);
     res.status(500).json({ success: false, message: 'Server error during Google authentication.' });
   }
 };
@@ -396,7 +397,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
   try {
     const { token, newPassword, confirmPassword } = req.body;
 
-    if (!token || !newPassword) {
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/i.test(token) || !newPassword) {
       res.status(400).json({ success: false, message: 'Token and new password are required.' });
       return;
     }
@@ -426,6 +427,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     student.passwordHash = await bcrypt.hash(newPassword, salt);
     student.resetPasswordToken = undefined;
     student.resetPasswordExpires = undefined;
+    student.tokenVersion = (student.tokenVersion ?? 0) + 1;
     await student.save();
 
     res.status(200).json({
@@ -521,9 +523,15 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
 
     const salt = await bcrypt.genSalt(10);
     student.passwordHash = await bcrypt.hash(newPassword, salt);
+    student.tokenVersion = (student.tokenVersion ?? 0) + 1;
     await student.save();
 
-    res.status(200).json({ success: true, message: 'Password changed successfully.' });
+    const token = jwt.sign(
+      { id: student._id, email: student.email, role: 'STUDENT', tokenVersion: student.tokenVersion },
+      getJwtSecret(),
+      { expiresIn: '7d' },
+    );
+    res.status(200).json({ success: true, message: 'Password changed successfully. Other sessions have been signed out.', token });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to change password.' });
   }

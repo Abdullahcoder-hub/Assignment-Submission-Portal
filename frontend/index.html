@@ -4,7 +4,24 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
     <title>Class Assignment Submission Portal</title>
+    <script>
+      (() => {
+        const url = new URL(window.location.href);
+        const token = url.searchParams.get('token');
+        const tokenKey = url.pathname === '/verify-email'
+          ? 'portalVerifyToken'
+          : url.pathname === '/reset-password'
+            ? 'portalResetToken'
+            : null;
+        if (token && tokenKey) {
+          sessionStorage.setItem(tokenKey, token);
+          url.searchParams.delete('token');
+          window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+        }
+      })();
+    </script>
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased font-sans">
     <div id="root"></div>

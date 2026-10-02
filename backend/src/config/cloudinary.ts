@@ -1,5 +1,6 @@
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import dotenv from 'dotenv';
+import { logError } from '../utils/logger.js';
 
 dotenv.config();
 
@@ -56,12 +57,13 @@ export const uploadToCloudinary = (
         folder: folderPath,
         public_id: publicId,
         resource_type: resourceType,
+        type: 'authenticated',
         use_filename: false,
         unique_filename: true,
       },
       (error, result) => {
         if (error || !result) {
-          console.error('[Cloudinary Upload Error]:', error);
+          logError('[Cloudinary Upload Error]', error);
           return reject(error || new Error('Cloudinary upload failed with empty result.'));
         }
         resolve(result);
@@ -83,10 +85,9 @@ export const deleteFromCloudinary = async (publicId: string, resourceType: strin
       // Try image or auto as fallback
       await cloudinary.uploader.destroy(publicId, { invalidate: true });
     }
-    console.log(`[Cloudinary Delete] Deleted ${publicId}:`, result);
     return true;
   } catch (error) {
-    console.error(`[Cloudinary Delete Error] Failed to delete public_id ${publicId}:`, error);
+    logError('[Cloudinary Delete Error]', error);
     return false;
   }
 };

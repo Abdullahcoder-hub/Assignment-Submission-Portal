@@ -5,6 +5,7 @@ import Submission from '../models/Submission.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { validatePasswordStrength } from '../utils/passwordValidator.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
+import { escapeRegex } from '../utils/fileValidation.js';
 
 /**
  * 1. LIST ALL REGISTERED STUDENTS (WITH SEARCH & PAGINATION)
@@ -15,7 +16,7 @@ export const getStudents = async (req: AuthRequest, res: Response): Promise<void
     const filter: any = {};
 
     if (search) {
-      const searchRegex = new RegExp((search as string).trim(), 'i');
+      const searchRegex = new RegExp(escapeRegex((search as string).trim()), 'i');
       filter.$or = [
         { name: searchRegex },
         { rollNumber: searchRegex },
@@ -115,6 +116,7 @@ export const resetStudentPassword = async (req: AuthRequest, res: Response): Pro
 
     const salt = await bcrypt.genSalt(10);
     student.passwordHash = await bcrypt.hash(newPassword, salt);
+    student.tokenVersion = (student.tokenVersion ?? 0) + 1;
     await student.save();
 
     res.status(200).json({

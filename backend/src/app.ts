@@ -16,10 +16,13 @@ import groupRoutes from './routes/groupRoutes.js';
 import lateRequestRoutes from './routes/lateRequestRoutes.js';
 import adminStudentRoutes from './routes/adminStudentRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { validateStartupSecurityConfig } from './config/security.js';
 
 dotenv.config();
+validateStartupSecurityConfig();
 
 const app = express();
+app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
 
 // High-speed response compression for mobile 4G/3G
 app.use(compression());
@@ -86,8 +89,27 @@ const authLimiter = rateLimit({
 // Rate Limiting: File Uploads & Submissions
 const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 40, // 40 uploads per 15 minutes per IP
+  max: 40,
   message: { success: false, message: 'Upload rate limit exceeded. Please wait a few minutes before uploading again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const emailActionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => typeof req.body?.email === 'string'
+    ? req.body.email.trim().toLowerCase() || 'missing-email'
+    : 'missing-email',
+  message: { success: false, message: 'Too many email requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const accountCreationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 100,
+  message: { success: false, message: 'Too many registration attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -104,6 +126,9 @@ const apiLimiter = rateLimit({
 app.use('/api', apiLimiter);
 app.use('/api/auth', authLimiter);
 app.use('/api/auth/student', authLimiter);
+app.use('/api/auth/student/register', accountCreationLimiter);
+app.use('/api/auth/student/resend-verification', emailActionLimiter);
+app.use('/api/auth/student/forgot-password', emailActionLimiter);
 app.use('/api/submissions', uploadLimiter);
 
 // Body Parsing Middleware

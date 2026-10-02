@@ -8,23 +8,30 @@ import Student from '../models/Student.js';
 import jwt from 'jsonwebtoken';
 import { sendLateRequestEmail } from '../config/brevo.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { getJwtSecret } from '../config/security.js';
+import { escapeRegex } from '../utils/fileValidation.js';
+import { escapeHtml } from '../utils/fileValidation.js';
+import { logError } from '../utils/logger.js';
 
 const decisionToken = (requestId: string, decision: 'Approved' | 'Rejected') => jwt.sign(
   { requestId, decision, purpose: 'late-request-decision' },
-  process.env.JWT_SECRET || 'default_secret_key_change_in_production_12345',
-  { expiresIn: '7d' }
+  getJwtSecret(),
+  { expiresIn: '24h' }
 );
 
 const getLateRequestDetails = async (requestId: string) => LateRequest.findById(requestId)
   .populate('subjectId', 'name code')
   .populate('assignmentId', 'title');
 
-const applyDecision = async (requestId: string, decision: 'Approved' | 'Rejected', adminId?: string) => {
+const applyDecision = async (requestId: string, decision: 'Approved' | 'Rejected', adminId?: string, rejectionReason?: string) => {
   const lateReq = await LateRequest.findById(requestId);
   if (!lateReq) return null;
   lateReq.status = decision;
   lateReq.decidedAt = new Date();
   if (adminId) lateReq.decidedBy = adminId as any;
+  if (decision === 'Rejected' && rejectionReason) {
+    lateReq.rejectionReason = rejectionReason;
+  }
   await lateReq.save();
   return lateReq;
 };
@@ -44,6 +51,7 @@ const notifyStudentOfDecision = async (lateReq: any, decision: 'Approved' | 'Rej
     assignmentTitle: assignment.title,
     reason: lateReq.reason,
     decision,
+    rejectionReason: lateReq.rejectionReason,
   });
 };
 
@@ -129,21 +137,39 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
       requestedAt: new Date(),
     });
 
+    const student = await Student.findById(studentId).select('name email').lean();
+    const subject = await Subject.findById(assignment.subjectId).select('name code crId').populate('crId', 'name email').lean();
     const admin = await Admin.findOne({ role: 'ADMIN' }).select('name email').lean();
-    const subject = await Subject.findById(assignment.subjectId).select('name code').lean();
-    const adminEmails = Array.from(new Set([
-      admin?.email?.trim(),
-      process.env.ADMIN_EMAIL?.trim(),
-    ].filter((email): email is string => Boolean(email))));
-    const adminName = admin?.name || process.env.ADMIN_NAME || 'Class Representative';
+    let crEmails: string[] = [];
+    let crName = 'Class Representative';
+
+    if (subject && subject.crId && (subject.crId as any).email) {
+      crEmails.push((subject.crId as any).email.trim());
+      crName = (subject.crId as any).name || 'Class Representative';
+    } else {
+      const fallbackAdminEmails = Array.from(new Set([
+        admin?.email?.trim(),
+        process.env.ADMIN_EMAIL?.trim(),
+      ].filter((email): email is string => Boolean(email))));
+      crEmails = fallbackAdminEmails;
+      crName = admin?.name || process.env.ADMIN_NAME || 'Class Representative';
+    }
+
     let crNotified = false;
-    if (adminEmails.length > 0 && subject) {
+    let studentNotified = false;
+
+    if (crEmails.length > 0 && subject) {
       const configuredBackendUrl = (process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, '');
       const apiBaseUrl = configuredBackendUrl.endsWith('/api') ? configuredBackendUrl : `${configuredBackendUrl}/api`;
-      for (const adminEmail of adminEmails) {
+      if (configuredBackendUrl.includes('localhost') || configuredBackendUrl.includes('127.0.0.1')) {
+        console.warn('[Late Request] WARNING: Using localhost URL for email links. Set BACKEND_URL environment variable in production.');
+      }
+      const groupInfo = group ? await Group.findById(group._id).select('groupName members').lean() : null;
+      const groupMembers = groupInfo?.members.map((m: any) => `${m.name} (${m.rollNumber})`).join(', ') || '';
+      for (const crEmail of crEmails) {
         const emailResult = await sendLateRequestEmail({
-          toEmail: adminEmail,
-          toName: adminName,
+          toEmail: crEmail,
+          toName: crName,
           studentName,
           rollNumber,
           subjectName: subject.name,
@@ -151,25 +177,51 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
           reason: newRequest.reason,
           approveUrl: `${apiBaseUrl}/late-requests/email-decision/${newRequest._id}/Approved/${decisionToken(newRequest._id.toString(), 'Approved')}`,
           rejectUrl: `${apiBaseUrl}/late-requests/email-decision/${newRequest._id}/Rejected/${decisionToken(newRequest._id.toString(), 'Rejected')}`,
+          requestType,
+          groupName: groupInfo?.groupName || '',
+          groupMembers,
         });
         crNotified = crNotified || emailResult.success;
         if (!emailResult.success) {
-          console.error(`[Late Request] Failed to notify CR at ${adminEmail}.`);
+          console.error('[Late Request] CR email delivery failed.');
         }
       }
     } else {
-      console.error('[Late Request] CR notification skipped: no admin email or subject was found.');
+      console.error('[Late Request] CR notification skipped: no CR email or subject was found.');
+    }
+
+    if (student && subject) {
+      const studentEmailResult = await sendLateRequestEmail({
+        toEmail: student.email,
+        toName: student.name,
+        studentName,
+        rollNumber,
+        subjectName: subject.name,
+        assignmentTitle: requestType === 'GroupRegistration' ? `${assignment.title} (Late Group Registration)` : assignment.title,
+        reason: newRequest.reason,
+        isStudentNotification: true,
+      });
+      studentNotified = studentEmailResult.success;
+      if (!studentEmailResult.success) {
+        console.error('[Late Request] Student email delivery failed.');
+      }
+    } else {
+      console.error('[Late Request] Student notification skipped: no student email or subject was found.');
     }
 
     res.status(201).json({
       success: true,
-      message: crNotified
-        ? 'Assignment deadline has passed. Your late submission request has been sent to the CR for approval.'
-        : 'Your request was saved, but the CR notification email could not be sent. Please contact the CR directly.',
+      message: crNotified && studentNotified
+        ? 'Assignment deadline has passed. Your late submission request has been sent to the CR for approval. A confirmation email has been sent to your email address.'
+        : crNotified
+        ? 'Assignment deadline has passed. Your late submission request has been sent to the CR for approval. (Student notification email failed)'
+        : studentNotified
+        ? 'Your request was saved and a confirmation email has been sent, but the CR notification email could not be sent. Please contact the CR directly.'
+        : 'Your request was saved, but the notification emails could not be sent. Please contact the CR directly.',
       request: newRequest,
     });
   } catch (error) {
-    console.error('[Create Late Request Error]:', error);
+    logError('[Create Late Request Error]', error);
     res.status(500).json({ success: false, message: 'Failed to submit late request.' });
   }
 };
@@ -236,7 +288,7 @@ export const getLateRequests = async (req: AuthRequest, res: Response): Promise<
     }
 
     if (search) {
-      const searchRegex = new RegExp((search as string).trim(), 'i');
+      const searchRegex = new RegExp(escapeRegex((search as string).trim()), 'i');
       filter.$or = [
         { studentName: searchRegex },
         { rollNumber: searchRegex },
@@ -266,14 +318,14 @@ export const getLateRequests = async (req: AuthRequest, res: Response): Promise<
 export const updateLateRequestDecision = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = String(req.params.id);
-    const { decision } = req.body; // 'Approved' | 'Rejected'
+    const { decision, rejectionReason } = req.body; // 'Approved' | 'Rejected'
 
     if (!decision || !['Approved', 'Rejected'].includes(decision)) {
       res.status(400).json({ success: false, message: 'Decision must be "Approved" or "Rejected".' });
       return;
     }
 
-    const lateReq = await applyDecision(id, decision as 'Approved' | 'Rejected', req.admin?.id);
+    const lateReq = await applyDecision(id, decision as 'Approved' | 'Rejected', req.admin?.id, rejectionReason);
     if (!lateReq) {
       res.status(404).json({ success: false, message: 'Late submission request not found.' });
       return;
@@ -287,7 +339,7 @@ export const updateLateRequestDecision = async (req: AuthRequest, res: Response)
       request: lateReq,
     });
   } catch (error) {
-    console.error('[Update Decision Error]:', error);
+    logError('[Update Decision Error]', error);
     res.status(500).json({ success: false, message: 'Failed to update late submission decision.' });
   }
 };
@@ -298,14 +350,48 @@ export const decideLateRequestByEmail = async (req: Request, res: Response): Pro
     const id = String(rawId);
     const decision = String(rawDecision) as 'Approved' | 'Rejected';
     const token = String(rawToken);
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'default_secret_key_change_in_production_12345') as any;
+    if (!['Approved', 'Rejected'].includes(decision)) {
+      res.status(400).send('Invalid late request decision link.');
+      return;
+    }
+    const payload = jwt.verify(token, getJwtSecret()) as any;
     if (payload.requestId !== id || payload.decision !== decision || payload.purpose !== 'late-request-decision') {
       res.status(400).send('Invalid late request decision link.');
       return;
     }
-    const lateReq = await applyDecision(id, decision as 'Approved' | 'Rejected');
+    const lateReq = await LateRequest.findOne({ _id: id, status: 'Pending' });
     if (!lateReq) {
-      res.status(404).send('Late submission request not found.');
+      res.status(409).send('This late request has already been decided or no longer exists.');
+      return;
+    }
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('html').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirm late request</title></head><body><main><h1>Confirm ${decision.toLowerCase()} decision</h1><p>This action will notify the student. Confirm only if you intend to proceed.</p><form method="post" action="${escapeHtml(`${req.baseUrl}/email-decision`)}"><input type="hidden" name="id" value="${escapeHtml(id)}"><input type="hidden" name="decision" value="${escapeHtml(decision)}"><input type="hidden" name="token" value="${escapeHtml(token)}"><button type="submit">Confirm ${decision.toLowerCase()}</button></form></main></body></html>`);
+  } catch {
+    res.status(400).send('This late request link is invalid or expired.');
+  }
+};
+
+export const completeLateRequestDecisionByEmail = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id, decision, token } = req.body;
+    if (typeof id !== 'string' || typeof token !== 'string' || !['Approved', 'Rejected'].includes(decision)) {
+      res.status(400).send('Invalid late request decision.');
+      return;
+    }
+    const payload = jwt.verify(token, getJwtSecret()) as any;
+    if (payload.requestId !== id || payload.decision !== decision || payload.purpose !== 'late-request-decision') {
+      res.status(400).send('Invalid late request decision.');
+      return;
+    }
+
+    const lateReq = await LateRequest.findOneAndUpdate(
+      { _id: id, status: 'Pending' },
+      { $set: { status: decision, decidedAt: new Date() } },
+      { new: true },
+    );
+    if (!lateReq) {
+      res.status(409).send('This late request has already been decided or no longer exists.');
       return;
     }
     await notifyStudentOfDecision(lateReq, decision);

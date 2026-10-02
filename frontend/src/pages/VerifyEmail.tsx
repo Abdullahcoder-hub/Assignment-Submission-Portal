@@ -5,7 +5,7 @@ import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const [token] = useState(() => searchParams.get('token') || sessionStorage.getItem('portalVerifyToken'));
 
   const [loading, setLoading] = useState<boolean>(true);
   const [success, setSuccess] = useState<boolean>(false);
@@ -30,6 +30,7 @@ export const VerifyEmail: React.FC = () => {
   };
 
   useEffect(() => {
+    sessionStorage.removeItem('portalVerifyToken');
     const verify = async () => {
       if (!token) {
         setLoading(false);
@@ -38,7 +39,7 @@ export const VerifyEmail: React.FC = () => {
       }
 
       try {
-        const res = await api.get(`/auth/student/verify-email?token=${token}`);
+        const res = await api.post('/auth/student/verify-email', { token });
         setSuccess(res.data.success);
         setMessage(res.data.message || 'Email verified successfully!');
       } catch (err: any) {

@@ -12,9 +12,11 @@ import Student from '../models/Student.js';
 import cloudinary, { uploadToCloudinary, deleteFromCloudinary, sanitizePathSegment } from '../config/cloudinary.js';
 import { sendSubmissionConfirmationEmail } from '../config/brevo.js';
 import { generateSubmissionId } from '../utils/submissionId.js';
-import { sanitizeFileName, isFileTypeAllowed, isFileSizeValid, sanitizeCsvField } from '../utils/fileValidation.js';
+import { escapeRegex, sanitizeFileName, isFileTypeAllowed, isFileSignatureValid, isFileSizeValid, sanitizeCsvField } from '../utils/fileValidation.js';
 import { AuthRequest } from '../middleware/auth.js';
 import moment from 'moment-timezone';
+import { mergePDFs, getGroupSequence } from '../utils/pdfMerge.js';
+import { logError } from '../utils/logger.js';
 
 const timezone = process.env.TIMEZONE || 'Asia/Karachi';
 
@@ -111,14 +113,15 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
 
     // 5. Group Enforcement — block Group-type submissions if student is not in a group
     let groupName: string | null = null;
+    let studentGroup: any = null;
     if (assignment.submissionType === 'Group') {
       const cleanRollForGroup = rollNumber.trim();
-      const studentGroup = await Group.findOne({
+      studentGroup = await Group.findOne({
         subjectId,
         assignmentId,
         $or: [
           { 'members.studentId': studentId },
-          { 'members.rollNumber': { $regex: new RegExp(`^${cleanRollForGroup}$`, 'i') } },
+          { 'members.rollNumber': { $regex: new RegExp(`^${escapeRegex(cleanRollForGroup)}$`, 'i') } },
         ],
       });
 
@@ -145,6 +148,11 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    if (!isFileSignatureValid(originalFileName, file.buffer)) {
+      res.status(400).json({ success: false, message: 'The uploaded file content does not match its file extension.' });
+      return;
+    }
+
     if (!isFileSizeValid(file.size, assignment.maxFileSize)) {
       res.status(400).json({
         success: false,
@@ -157,7 +165,7 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
     const cleanRollNumber = rollNumber.trim();
     const existingSubmission = await Submission.findOne({
       assignmentId: assignment._id,
-      rollNumber: { $regex: new RegExp(`^${cleanRollNumber}$`, 'i') },
+      rollNumber: { $regex: new RegExp(`^${escapeRegex(cleanRollNumber)}$`, 'i') },
     });
 
     if (existingSubmission) {
@@ -197,7 +205,7 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
       uploadedCloudinaryPublicId = cloudinaryResult.public_id;
       uploadedResourceType = cloudinaryResult.resource_type || 'raw';
     } catch (uploadErr) {
-      console.error('[Cloudinary Upload Error]:', uploadErr);
+      logError('[Cloudinary Upload Error]', uploadErr);
       res.status(500).json({
         success: false,
         message: 'Unable to upload the assignment right now. Please try again.',
@@ -231,9 +239,11 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
         status: submissionStatus,
         emailStatus: 'Sent',
         groupName: groupName ?? null,
+        groupId: studentGroup ? studentGroup._id : undefined,
+        sequenceNumber: req.body.sequenceNumber ? Number(req.body.sequenceNumber) : undefined,
       });
     } catch (dbErr: any) {
-      console.error('[MongoDB Creation Error]:', dbErr);
+      logError('[MongoDB Creation Error]', dbErr);
       // Clean up orphaned Cloudinary file
       if (uploadedCloudinaryPublicId) {
         await deleteFromCloudinary(uploadedCloudinaryPublicId, uploadedResourceType);
@@ -276,7 +286,7 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
         await newSubmission.save();
       }
     } catch (emailErr) {
-      console.error('[Brevo Confirmation Failure]:', emailErr);
+      logError('[Brevo Confirmation Failure]', emailErr);
       newSubmission.emailStatus = 'Failed';
       await newSubmission.save();
     }
@@ -307,7 +317,7 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
       },
     });
   } catch (error: any) {
-    console.error('[Submission Error]:', error);
+    logError('[Submission Error]', error);
     res.status(500).json({
       success: false,
       message: 'Something went wrong on the server. Please try again.',
@@ -333,7 +343,7 @@ export const getSubmissions = async (req: AuthRequest, res: Response): Promise<v
     if (status) filter.status = status;
 
     if (search) {
-      const searchRegex = new RegExp((search as string).trim(), 'i');
+      const searchRegex = new RegExp(escapeRegex((search as string).trim()), 'i');
       filter.$or = [{ studentName: searchRegex }, { rollNumber: searchRegex }, { email: searchRegex }, { submissionId: searchRegex }];
     }
 
@@ -407,15 +417,15 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
 /**
  * Helper to fetch file buffer from Cloudinary URL with browser User-Agent
  */
-const getCloudinaryDownloadUrl = (submission: any): string => {
+const getCloudinaryDownloadUrls = (submission: any): string[] => {
   const resourceType = submission.cloudinaryResourceType || 'raw';
   const format = submission.cloudinaryFormat || path.extname(submission.originalFileName).replace('.', '');
 
-  return cloudinary.utils.private_download_url(submission.cloudinaryPublicId, format, {
-    resource_type: resourceType,
-    type: 'upload',
-    attachment: false,
-  });
+  return ['authenticated', 'upload'].map((type) => cloudinary.utils.private_download_url(
+    submission.cloudinaryPublicId,
+    format,
+    { resource_type: resourceType, type, attachment: false },
+  ));
 };
 
 const fetchFileBuffer = async (fileUrls: string[]): Promise<Buffer> => {
@@ -458,7 +468,7 @@ export const downloadSingleSubmission = async (req: AuthRequest, res: Response):
       return;
     }
 
-    const downloadUrls = [submission.cloudinarySecureUrl, getCloudinaryDownloadUrl(submission)].filter(Boolean);
+    const downloadUrls = [submission.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(submission)];
     const cleanFileName = submission.originalFileName.replace(/["\r\n]/g, '_');
 
     for (const url of downloadUrls) {
@@ -481,13 +491,13 @@ export const downloadSingleSubmission = async (req: AuthRequest, res: Response):
         streamResponse.data.pipe(res);
         return;
       } catch (streamErr) {
-        console.warn(`[Stream Download Attempt Failed for URL: ${url}]:`, streamErr);
+        logError('[Stream Download Attempt Failed]', streamErr);
       }
     }
 
     res.status(502).json({ success: false, message: 'Unable to fetch the submission file from Cloudinary.' });
   } catch (error) {
-    console.error('[Download Single Error]:', error);
+    logError('[Download Single Error]', error);
     if (!res.headersSent) {
       res.status(500).json({ success: false, message: 'Failed to download submission file.' });
     }
@@ -532,34 +542,31 @@ export const viewSubmissionFile = async (req: AuthRequest, res: Response): Promi
     }
 
     const format = submission.cloudinaryFormat || path.extname(submission.originalFileName).replace('.', '');
-    const signedRawUrl = cloudinary.utils.private_download_url(submission.cloudinaryPublicId, format, {
-      resource_type: submission.cloudinaryResourceType || 'raw',
-      type: 'upload',
-      attachment: false,
-    });
-    const signedImageUrl = cloudinary.utils.private_download_url(submission.cloudinaryPublicId, format, {
-      resource_type: 'image',
-      type: 'upload',
-      attachment: false,
-    });
+    const signedRawUrls = ['authenticated', 'upload'].map((type) => cloudinary.utils.private_download_url(
+      submission.cloudinaryPublicId,
+      format,
+      { resource_type: submission.cloudinaryResourceType || 'raw', type, attachment: false },
+    ));
+    const signedImageUrls = ['authenticated', 'upload'].map((type) => cloudinary.utils.private_download_url(
+      submission.cloudinaryPublicId,
+      format,
+      { resource_type: 'image', type, attachment: false },
+    ));
 
-    const downloadUrls = [
-      submission.cloudinarySecureUrl,
-      submission.cloudinarySecureUrl?.replace('/image/upload/', '/image/upload/fl_inline/'),
-      signedRawUrl,
-      signedImageUrl,
-    ].filter(Boolean) as string[];
+    const downloadUrls = [submission.cloudinarySecureUrl, ...signedRawUrls, ...signedImageUrls];
 
     const cleanFileName = submission.originalFileName.replace(/["\r\n]/g, '_');
 
-    let contentType = submission.fileType || 'application/octet-stream';
     const lowerExt = path.extname(submission.originalFileName).toLowerCase();
-    if (lowerExt === '.pdf') contentType = 'application/pdf';
-    else if (['.jpg', '.jpeg'].includes(lowerExt)) contentType = 'image/jpeg';
-    else if (lowerExt === '.png') contentType = 'image/png';
-    else if (lowerExt === '.webp') contentType = 'image/webp';
-    else if (lowerExt === '.svg') contentType = 'image/svg+xml';
-    else if (['.doc', '.docx'].includes(lowerExt)) contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const inlineContentTypes: Record<string, string> = {
+      '.pdf': 'application/pdf',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+    };
+    const contentType = inlineContentTypes[lowerExt] || 'application/octet-stream';
 
     for (const url of downloadUrls) {
       try {
@@ -573,12 +580,12 @@ export const viewSubmissionFile = async (req: AuthRequest, res: Response): Promi
         if (submission.fileSize) {
           res.setHeader('Content-Length', submission.fileSize);
         }
-        const dispositionType = isDownload ? 'attachment' : 'inline';
+        const dispositionType = isDownload || !inlineContentTypes[lowerExt] ? 'attachment' : 'inline';
         res.setHeader(
           'Content-Disposition',
           `${dispositionType}; filename="${cleanFileName}"; filename*=UTF-8''${encodeURIComponent(submission.originalFileName)}`
         );
-        res.setHeader('Cache-Control', 'private, max-age=86400');
+        res.setHeader('Cache-Control', 'private, no-store');
 
         streamResponse.data.pipe(res);
         return;
@@ -589,7 +596,7 @@ export const viewSubmissionFile = async (req: AuthRequest, res: Response): Promi
 
     res.status(502).json({ success: false, message: 'Unable to stream file from Cloudinary.' });
   } catch (error) {
-    console.error('[View Submission Stream Error]:', error);
+    logError('[View Submission Stream Error]', error);
     if (!res.headersSent) {
       res.status(500).json({ success: false, message: 'Failed to stream submission file.' });
     }
@@ -633,9 +640,14 @@ export const deleteStudentSubmission = async (req: AuthRequest, res: Response): 
       message: 'Submission deleted successfully. You can now re-upload your correct file.',
     });
   } catch (error) {
-    console.error('[Student Delete Error]:', error);
+    logError('[Student Delete Error]', error);
     res.status(500).json({ success: false, message: 'Failed to delete submission for re-upload.' });
   }
+};
+
+const getGroupNumber = (groupName: string): number => {
+  const match = groupName?.match(/(?:Group|Team|#)?\s*(\d+)/i);
+  return match ? Number(match[1]) : 0;
 };
 
 /**
@@ -659,42 +671,118 @@ export const downloadAssignmentZip = async (req: AuthRequest, res: Response): Pr
 
     const subjectCode = (assignment.subjectId as any)?.code || 'SUB';
     const cleanAssignmentTitle = sanitizePathSegment(assignment.title);
-    const zipFolderName = `${subjectCode}_${cleanAssignmentTitle}`;
+    const isGroupAssignment = assignment.submissionType === 'Group';
 
-    const usedFileNames = new Set<string>();
     const filesToArchive: Array<{ buffer: Buffer; name: string }> = [];
 
-    for (const sub of submissions) {
-      if (!sub.cloudinarySecureUrl && !sub.cloudinaryPublicId) continue;
-      try {
-        const ext = path.extname(sub.originalFileName) || '.pdf';
-        const cleanRoll = sanitizePathSegment(sub.rollNumber);
-        const cleanName = sanitizePathSegment(sub.studentName);
-
-        let targetFileName = `${cleanRoll}-${cleanName}${ext}`;
-
-        let duplicateCounter = 1;
-        while (usedFileNames.has(targetFileName)) {
-          targetFileName = `${cleanRoll}-${cleanName}_${duplicateCounter}${ext}`;
-          duplicateCounter++;
+    if (isGroupAssignment) {
+      // Group assignment: Merge PDFs by group
+      const groupMap = new Map<string, typeof submissions>();
+      // Group submissions by groupId
+      for (const sub of submissions) {
+        if (sub.groupId) {
+          const groupId = sub.groupId.toString();
+          if (!groupMap.has(groupId)) {
+            groupMap.set(groupId, []);
+          }
+          groupMap.get(groupId)!.push(sub);
+        } else {
+          // Individual submissions in group assignment (edge case)
+          const key = 'individual';
+          if (!groupMap.has(key)) {
+            groupMap.set(key, []);
+          }
+          groupMap.get(key)!.push(sub);
         }
-        usedFileNames.add(targetFileName);
+      }
 
-        const fileBuffer = await fetchFileBuffer([sub.cloudinarySecureUrl, getCloudinaryDownloadUrl(sub)]);
-        filesToArchive.push({ buffer: fileBuffer, name: `${zipFolderName}/${targetFileName}` });
-        usedFileNames.add(targetFileName);
-      } catch (fileErr) {
-        console.error(`[ZIP Stream File Error] Failed for submission ${sub.submissionId} (${sub.originalFileName}):`, fileErr);
+      // Process each group
+      for (const [groupId, groupSubmissions] of groupMap) {
+        const pdfsToMerge: Array<{ buffer: Buffer; sequenceNumber: number; studentName: string; rollNumber: string }> = [];
+        for (const sub of groupSubmissions) {
+          if (!sub.cloudinarySecureUrl && !sub.cloudinaryPublicId) continue;
+          try {
+            const fileBuffer = await fetchFileBuffer([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)]);
+            const sequenceNumber = sub.sequenceNumber || groupSubmissions.indexOf(sub) + 1;
+            pdfsToMerge.push({
+              buffer: fileBuffer,
+              sequenceNumber,
+              studentName: sub.studentName,
+              rollNumber: sub.rollNumber,
+            });
+          } catch (err) {
+            logError('[ZIP Group Error] Failed to fetch PDF.', err);
+          }
+        }
+
+        // Merge PDFs if we have more than one
+        let finalBuffer: Buffer;
+        let fileName: string;
+
+        if (pdfsToMerge.length > 1) {
+          try {
+            finalBuffer = await mergePDFs(pdfsToMerge);
+            const groupNumber = groupId === 'individual' ? 'Individual' : getGroupSequence(groupSubmissions[0]?.groupName || '');
+            fileName = `Group ${groupNumber}.pdf`;
+          } catch (mergeErr) {
+            logError('[ZIP Merge Error] Failed to merge PDFs.', mergeErr);
+            // Fallback: add individual files
+            for (const pdf of pdfsToMerge) {
+              const ext = path.extname(pdf.studentName) || '.pdf';
+              filesToArchive.push({
+                buffer: pdf.buffer,
+                name: `${subjectCode}_${cleanAssignmentTitle}/${pdf.rollNumber}-${pdf.studentName}${ext}`,
+              });
+            }
+            continue;
+          }
+        } else if (pdfsToMerge.length === 1) {
+          finalBuffer = pdfsToMerge[0].buffer;
+          const groupNumber = groupId === 'individual' ? 'Individual' : getGroupSequence(groupSubmissions[0]?.groupName || '');
+          fileName = `Group ${groupNumber}.pdf`;
+        } else {
+          continue; // No PDFs for this group
+        }
+
+        filesToArchive.push({
+          buffer: finalBuffer,
+          name: `${subjectCode}_${cleanAssignmentTitle}/${fileName}`,
+        });
+      }
+    } else {
+      // Individual assignment: Keep original naming
+      const usedFileNames = new Set<string>();
+      for (const sub of submissions) {
+        if (!sub.cloudinarySecureUrl && !sub.cloudinaryPublicId) continue;
+        try {
+          const ext = path.extname(sub.originalFileName) || '.pdf';
+          const cleanRoll = sanitizePathSegment(sub.rollNumber);
+          const cleanName = sanitizePathSegment(sub.studentName);
+
+          let targetFileName = `${cleanRoll}-${cleanName}${ext}`;
+
+          let duplicateCounter = 1;
+          while (usedFileNames.has(targetFileName)) {
+            targetFileName = `${cleanRoll}-${cleanName}_${duplicateCounter}${ext}`;
+            duplicateCounter++;
+          }
+          usedFileNames.add(targetFileName);
+
+          const fileBuffer = await fetchFileBuffer([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)]);
+          filesToArchive.push({ buffer: fileBuffer, name: `${subjectCode}_${cleanAssignmentTitle}/${targetFileName}` });
+        } catch (fileErr) {
+          logError('[ZIP Stream File Error]', fileErr);
+        }
       }
     }
 
-    if (usedFileNames.size === 0) {
+    if (filesToArchive.length === 0) {
       res.status(502).json({ success: false, message: 'Cloudinary files could not be downloaded.' });
       return;
     }
 
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${zipFolderName}_Submissions.zip"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${subjectCode}_${cleanAssignmentTitle}_Submissions.zip"`);
 
     const archive = archiver('zip', { zlib: { level: 6 } });
     archive.pipe(res);
@@ -704,7 +792,7 @@ export const downloadAssignmentZip = async (req: AuthRequest, res: Response): Pr
 
     await archive.finalize();
   } catch (error) {
-    console.error('[Download ZIP Error]:', error);
+    logError('[Download ZIP Error]', error);
     if (!res.headersSent) {
       res.status(500).json({ success: false, message: 'Failed to generate ZIP archive.' });
     }
@@ -755,7 +843,7 @@ export const exportAssignmentCsv = async (req: AuthRequest, res: Response): Prom
     res.setHeader('Content-Disposition', `attachment; filename="${subjectCode}_${cleanTitle}_Submissions.csv"`);
     res.status(200).send(csvContent);
   } catch (error) {
-    console.error('[Export CSV Error]:', error);
+    logError('[Export CSV Error]', error);
     res.status(500).json({ success: false, message: 'Failed to export CSV.' });
   }
 };

@@ -46,11 +46,19 @@ npm install
 
 Create a `.env` file in the `backend/` directory:
 
+Generate a fresh JWT secret for each environment with:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
+```
+
+Set the generated value as `JWT_SECRET` (minimum 32 characters). Production also requires valid MongoDB, Cloudinary, Brevo, `FRONTEND_URL`, and `BACKEND_URL` settings; both public URLs must use HTTPS. Never use sample credentials in production.
+
 ```env
 PORT=5000
 MONGODB_URI=mongodb://localhost:27017/assignment_submission_db
 
-JWT_SECRET=your_super_secret_jwt_key
+JWT_SECRET=
 
 CLOUDINARY_CLOUD_NAME=your_cloudinary_name
 CLOUDINARY_API_KEY=your_cloudinary_api_key
@@ -61,9 +69,17 @@ BREVO_SENDER_EMAIL=admin@example.com
 BREVO_SENDER_NAME=Assignment Portal Admin
 
 FRONTEND_URL=http://localhost:5173
-CLASS_JOIN_CODE=CLASS-2026-PORTAL
+BACKEND_URL=http://localhost:5000/api
+ADMIN_NAME=
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
+CLASS_JOIN_CODE=
 GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 ```
+
+The `seed:admin` command requires `ADMIN_NAME`, `ADMIN_EMAIL`, and a strong `ADMIN_PASSWORD`; it has no built-in credentials.
+
+Before releasing authenticated Cloudinary delivery, run `npm run secure:uploads` once from `backend/` with database and Cloudinary credentials configured. It converts existing submission assets and invalidates cached public URLs. Check the command's success counts before deploying; CDN invalidation can take a few minutes.
 
 For deployment, set `FRONTEND_URL` in the backend hosting environment to the deployed frontend URL (for example, `https://your-frontend.vercel.app`). This URL is used in email verification and password reset links.
 
@@ -85,7 +101,7 @@ npm install
 Create a `.env` file in the `frontend/` directory (optional):
 
 ```env
-VITE_API_BASE_URL=http://localhost:5000/api
+VITE_API_URL=http://localhost:5000/api
 ```
 
 Run the frontend development server:

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api/axios';
+import api, { openSubmissionFile } from '../api/axios';
 import { Subject, Assignment, Submission, StudentUser, SubmissionReceipt, Group, LateRequest } from '../types';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -30,20 +30,8 @@ import {
   Eye,
 } from 'lucide-react';
 
-const getStudentViewUrl = (submissionId?: string, fallbackUrl?: string) => {
-  const token = localStorage.getItem('portalToken') || '';
-  const apiBase = import.meta.env.DEV
-    ? '/api'
-    : (import.meta.env.VITE_API_URL || 'https://assignment-submission-portal-rfq1.onrender.com/api');
-
-  if (submissionId) {
-    return `${apiBase}/submissions/${submissionId}/view?token=${token}`;
-  }
-  return fallbackUrl || '#';
-};
-
 export const StudentDashboard: React.FC = () => {
-  const { user } = useAuth();
+  const { user, replaceToken } = useAuth();
   const student = user as StudentUser;
 
   const validTabs = ['submit', 'groups', 'history', 'security'] as const;
@@ -176,6 +164,7 @@ export const StudentDashboard: React.FC = () => {
   const [changingPass, setChangingPass] = useState<boolean>(false);
   const [passMsg, setPassMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deadlineTick, setDeadlineTick] = useState(() => Date.now());
+  const [sequenceNumber, setSequenceNumber] = useState<number>(1);
 
   useEffect(() => {
     const timer = window.setInterval(() => setDeadlineTick(Date.now()), 60000);
@@ -201,6 +190,7 @@ export const StudentDashboard: React.FC = () => {
         confirmPassword,
       });
       if (res.data.success) {
+        if (res.data.token) replaceToken(res.data.token);
         setPassMsg({ type: 'success', text: res.data.message });
         setCurrentPassword('');
         setNewPassword('');
@@ -526,6 +516,9 @@ export const StudentDashboard: React.FC = () => {
       }
     };
     fetchGroupLateRequest();
+    // Refresh every 30 seconds to check for approval
+    const interval = setInterval(fetchGroupLateRequest, 30000);
+    return () => clearInterval(interval);
   }, [groupAssignmentId]);
 
   const handleCreateGroupLateRequest = async () => {
@@ -822,6 +815,10 @@ export const StudentDashboard: React.FC = () => {
       formData.append('subjectId', selectedSubjectId);
       formData.append('assignmentId', selectedAssignmentId);
       formData.append('file', selectedFile);
+      // Add sequence number for group assignments
+      if (selectedAssignment?.submissionType === 'Group') {
+        formData.append('sequenceNumber', String(sequenceNumber));
+      }
 
       const res = await api.post('/submissions', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -964,15 +961,14 @@ export const StudentDashboard: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-blue-600 truncate max-w-[160px] sm:max-w-[220px]">{receipt.originalFileName}</span>
                   {receipt.cloudinarySecureUrl && (
-                    <a
-                      href={getStudentViewUrl((receipt as any).id || (receipt as any)._id || receipt.submissionId, receipt.cloudinarySecureUrl)}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => void openSubmissionFile((receipt as any).id || (receipt as any)._id || receipt.submissionId).catch(() => window.alert('Unable to open this submission file.'))}
                       className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition flex items-center gap-1 shrink-0"
                       title="View submitted file in new tab"
                     >
                       <Eye className="w-3.5 h-3.5" /> View File
-                    </a>
+                    </button>
                   )}
                 </div>
               </div>
@@ -1248,6 +1244,29 @@ export const StudentDashboard: React.FC = () => {
               </div>
             )}
 
+            {/* Sequence Number for Group Assignments */}
+            {canSubmitNow && selectedAssignment?.submissionType === 'Group' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Your Position in Group <span className="text-red-500">*</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    max={selectedAssignment.maxGroupSize || 4}
+                    value={sequenceNumber}
+                    onChange={(e) => setSequenceNumber(Number(e.target.value))}
+                    disabled={isSubmitting}
+                    className="w-24 px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold"
+                  />
+                  <p className="text-xs text-slate-600">
+                    Enter your sequence number (1, 2, 3, etc.) - this determines the order in the merged PDF
+                  </p>
+                </div>
+              </div>
+            )}
+
             {canSubmitNow && (
               <button
                 type="submit"
@@ -1489,11 +1508,23 @@ export const StudentDashboard: React.FC = () => {
               <div className="space-y-6">
                 {selectedGroupAssignment &&
                   new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
-                  !selectedGroupAssignment.allowLateGroupRegistration && (
+                  !selectedGroupAssignment.allowLateGroupRegistration &&
+                  groupLateRequest?.status !== 'Approved' && (
                     <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-amber-900 text-xs font-bold flex items-center gap-2">
                       <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
                       <span>
                         Group registration deadline has passed. Group creation is locked. Please contact your CR for approval to register late.
+                      </span>
+                    </div>
+                  )}
+                {selectedGroupAssignment &&
+                  new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
+                  !selectedGroupAssignment.allowLateGroupRegistration &&
+                  groupLateRequest?.status === 'Approved' && (
+                    <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl text-emerald-900 text-xs font-bold flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <span>
+                        Late group registration approved! You can now create your group below.
                       </span>
                     </div>
                   )}
@@ -1647,7 +1678,8 @@ export const StudentDashboard: React.FC = () => {
                         groupSubmitting ||
                         (selectedGroupAssignment &&
                           new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
-                          !selectedGroupAssignment.allowLateGroupRegistration)
+                          !selectedGroupAssignment.allowLateGroupRegistration &&
+                          groupLateRequest?.status !== 'Approved')
                       }
                       className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2"
                     >
@@ -1699,7 +1731,8 @@ export const StudentDashboard: React.FC = () => {
                               groupSubmitting ||
                               (selectedGroupAssignment &&
                                 new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
-                                !selectedGroupAssignment.allowLateGroupRegistration)
+                                !selectedGroupAssignment.allowLateGroupRegistration &&
+                                groupLateRequest?.status !== 'Approved')
                             }
                             className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white text-xs font-bold rounded-xl shadow transition flex items-center justify-center gap-2 shrink-0"
                           >
@@ -1792,16 +1825,15 @@ export const StudentDashboard: React.FC = () => {
                             ✓ Verified
                           </span>
                           {sub.cloudinarySecureUrl && (
-                            <a
-                              href={getStudentViewUrl(sub._id, sub.cloudinarySecureUrl)}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => void openSubmissionFile(sub._id).catch(() => window.alert('Unable to open this submission file.'))}
                               className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-md border border-blue-200 transition flex items-center gap-1"
                               title="Open file in new tab"
                             >
                               <Eye className="w-3 h-3" />
                               View File
-                            </a>
+                            </button>
                           )}
                           <button
                             type="button"
@@ -1852,14 +1884,13 @@ export const StudentDashboard: React.FC = () => {
                   <p className="text-[11px] text-slate-500">Submitted: {formatDate(sub.submittedAt)}</p>
                   <div className="flex gap-2">
                     {sub.cloudinarySecureUrl && (
-                      <a
-                        href={getStudentViewUrl(sub._id, sub.cloudinarySecureUrl)}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => void openSubmissionFile(sub._id).catch(() => window.alert('Unable to open this submission file.'))}
                         className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 flex items-center justify-center gap-1"
                       >
                         <Eye className="w-3.5 h-3.5" /> View File
-                      </a>
+                      </button>
                     )}
                     <button
                       type="button"
@@ -1971,16 +2002,16 @@ export const StudentDashboard: React.FC = () => {
       {/* EDIT GROUP MEMBERS MODAL */}
       {groupEditModalOpen && myGroup && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="glass-panel rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200/80 dark:border-white/10 space-y-4 my-8">
+          <div className="glass-panel rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-200/80 dark:border-white/10 space-y-4 my-8">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Edit Group Members</h3>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">Edit Group {editGroupName}</h3>
                 <p className="text-xs text-slate-500">Update member names, roll numbers, or group leader.</p>
               </div>
               <button
                 type="button"
                 onClick={() => setGroupEditModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 font-bold text-xl"
+                className="text-slate-400 hover:text-slate-600 font-bold text-xl p-1"
               >
                 &times;
               </button>
@@ -1993,18 +2024,8 @@ export const StudentDashboard: React.FC = () => {
                   <span>{groupEditError}</span>
                 </div>
               )}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Group Name</label>
-                <input
-                  type="text"
-                  value={editGroupName}
-                  readOnly
-                  className="w-full px-3 py-2 border rounded-xl font-bold text-sm bg-slate-100 cursor-not-allowed"
-                  required
-                />
-              </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-slate-700 uppercase">
                     Members (Max {selectedGroupAssignment?.maxGroupSize || myGroup.maxGroupSize || 4})
@@ -2013,85 +2034,87 @@ export const StudentDashboard: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setEditMembers([...editMembers, { name: '', rollNumber: '' }])}
-                      className="text-xs text-blue-600 font-bold hover:underline"
+                      className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1"
                     >
-                      + Add Member
+                      <UserPlus className="w-3 h-3" /> Add Member
                     </button>
                   )}
                 </div>
 
                 {editMembers.map((m, idx) => (
-                  <div key={idx} className="p-3 bg-slate-50 border rounded-xl space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-2">
-                    <input
-                      type="text"
-                      value={m.name}
-                      onChange={(e) => {
-                        const updated = [...editMembers];
-                        updated[idx].name = e.target.value;
-                        setEditMembers(updated);
-                      }}
-                      placeholder={`Member ${idx + 1} Name`}
-                      className="flex-1 px-3 py-1.5 border rounded-lg text-xs font-semibold"
-                      required
-                    />
-                    <input
-                      type="text"
-                      maxLength={7}
-                      value={m.rollNumber}
-                      onChange={(e) => {
-                        const updated = [...editMembers];
-                        updated[idx].rollNumber = e.target.value.replace(/\D/g, '');
-                        setEditMembers(updated);
-                      }}
-                      placeholder="Roll (e.g. 2260000)"
-                      className="flex-1 px-3 py-1.5 border rounded-lg text-xs font-mono font-semibold tracking-wider"
-                      required
-                    />
-                    <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
-                      <label className="flex items-center gap-1 cursor-pointer">
+                  <div key={idx} className="p-3 bg-slate-50 border rounded-xl space-y-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={m.name}
+                        onChange={(e) => {
+                          const updated = [...editMembers];
+                          updated[idx].name = e.target.value;
+                          setEditMembers(updated);
+                        }}
+                        placeholder={`Member ${idx + 1} Name`}
+                        className="flex-1 px-3 py-2 border rounded-lg text-xs font-semibold min-w-0"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = editMembers.filter((_, i) => i !== idx);
+                          setEditMembers(updated);
+                          if (editLeaderIndex >= updated.length) setEditLeaderIndex(0);
+                        }}
+                        className="text-red-500 hover:text-red-700 p-2 shrink-0"
+                        disabled={editMembers.length <= 1}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        maxLength={7}
+                        value={m.rollNumber}
+                        onChange={(e) => {
+                          const updated = [...editMembers];
+                          updated[idx].rollNumber = e.target.value.replace(/\D/g, '');
+                          setEditMembers(updated);
+                        }}
+                        placeholder="Roll (e.g. 2260000)"
+                        className="flex-1 px-3 py-2 border rounded-lg text-xs font-mono font-semibold tracking-wider min-w-0"
+                        required
+                      />
+                      <label className="flex items-center gap-1 cursor-pointer shrink-0 bg-white px-3 py-2 border rounded-lg hover:bg-slate-50 transition">
                         <input
                           type="radio"
                           name="edit-leader"
                           checked={editLeaderIndex === idx}
                           onChange={() => setEditLeaderIndex(idx)}
+                          className="sr-only"
                         />
-                        <span className="text-xs font-bold text-amber-700 flex items-center gap-0.5">
-                          <Crown className="w-3 h-3" /> Leader
+                        <span className={`text-xs font-bold flex items-center gap-1 ${editLeaderIndex === idx ? 'text-amber-700' : 'text-slate-500'}`}>
+                          <Crown className="w-3 h-3" /> {editLeaderIndex === idx ? 'Leader' : 'Set Leader'}
                         </span>
                       </label>
-                      {editMembers.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated = editMembers.filter((_, i) => i !== idx);
-                            setEditMembers(updated);
-                            if (editLeaderIndex >= updated.length) setEditLeaderIndex(0);
-                          }}
-                          className="text-red-500 hover:text-red-700 p-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t">
+              <div className="flex flex-col sm:flex-row justify-end gap-2 pt-3 border-t">
                 <button
                   type="button"
                   onClick={() => setGroupEditModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={editingGroupSaving}
-                  className="px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow flex items-center gap-1.5"
+                  className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow flex items-center justify-center gap-1.5"
                 >
                   {editingGroupSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                  Save Changes
+                  Save Group
                 </button>
               </div>
             </form>

@@ -26,6 +26,8 @@ export interface ISubmission extends Document {
   status: 'Submitted' | 'Late' | 'Submitted Late — CR Approved';
   emailStatus: 'Sent' | 'Failed';
   groupName?: string; // populated only for Group assignments
+  groupId?: mongoose.Types.ObjectId; // reference to Group for group assignments
+  sequenceNumber?: number; // student's sequence in group for merged PDF
 
   createdAt: Date;
   updatedAt: Date;
@@ -55,6 +57,8 @@ const SubmissionSchema: Schema = new Schema(
     status: { type: String, enum: ['Submitted', 'Late', 'Submitted Late — CR Approved'], default: 'Submitted' },
     emailStatus: { type: String, enum: ['Sent', 'Failed'], default: 'Sent' },
     groupName: { type: String, default: null }, // null for Individual, group name for Group assignments
+    groupId: { type: Schema.Types.ObjectId, ref: 'Group', index: true },
+    sequenceNumber: { type: Number, default: null }, // student's sequence in group for merged PDF
   },
   { timestamps: true }
 );

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import Admin from '../models/Admin.js';
 import Student from '../models/Student.js';
+import { getJwtSecret } from '../config/security.js';
 
 export interface AuthRequest extends Request {
   admin?: {
@@ -27,9 +28,7 @@ export const authenticateAdmin = async (req: AuthRequest, res: Response, next: N
     }
 
     const token = authHeader.split(' ')[1];
-    const secret = process.env.JWT_SECRET || 'default_secret_key_change_in_production_12345';
-
-    const decoded = jwt.verify(token, secret) as { id: string; email: string; role: 'ADMIN' | 'STUDENT' };
+    const decoded = jwt.verify(token, getJwtSecret()) as { id: string; email: string; role: 'ADMIN' | 'STUDENT'; tokenVersion?: number };
 
     if (!decoded || decoded.role !== 'ADMIN') {
       res.status(403).json({ success: false, message: 'Access denied. Admin privileges required.' });
@@ -39,6 +38,11 @@ export const authenticateAdmin = async (req: AuthRequest, res: Response, next: N
     const admin = await Admin.findById(decoded.id);
     if (!admin) {
       res.status(401).json({ success: false, message: 'Invalid token: Admin account not found.' });
+      return;
+    }
+
+    if ((decoded.tokenVersion ?? 0) !== (admin.tokenVersion ?? 0)) {
+      res.status(401).json({ success: false, message: 'Session expired. Please log in again.' });
       return;
     }
 
@@ -67,9 +71,7 @@ export const authenticateStudent = async (req: AuthRequest, res: Response, next:
     }
 
     const token = authHeader.split(' ')[1];
-    const secret = process.env.JWT_SECRET || 'default_secret_key_change_in_production_12345';
-
-    const decoded = jwt.verify(token, secret) as { id: string; email: string; role: 'ADMIN' | 'STUDENT' };
+    const decoded = jwt.verify(token, getJwtSecret()) as { id: string; email: string; role: 'ADMIN' | 'STUDENT'; tokenVersion?: number };
 
     if (!decoded || decoded.role !== 'STUDENT') {
       res.status(403).json({ success: false, message: 'Access denied. Student authentication required.' });
@@ -79,6 +81,11 @@ export const authenticateStudent = async (req: AuthRequest, res: Response, next:
     const student = await Student.findById(decoded.id);
     if (!student) {
       res.status(401).json({ success: false, message: 'Invalid token: Student account not found.' });
+      return;
+    }
+
+    if ((decoded.tokenVersion ?? 0) !== (student.tokenVersion ?? 0)) {
+      res.status(401).json({ success: false, message: 'Session expired. Please log in again.' });
       return;
     }
 
@@ -111,8 +118,6 @@ export const authenticateStudentOrAdmin = async (req: AuthRequest, res: Response
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
-    } else if (req.query.token && typeof req.query.token === 'string') {
-      token = req.query.token;
     }
 
     if (!token) {
@@ -120,12 +125,15 @@ export const authenticateStudentOrAdmin = async (req: AuthRequest, res: Response
       return;
     }
 
-    const secret = process.env.JWT_SECRET || 'default_secret_key_change_in_production_12345';
-    const decoded = jwt.verify(token, secret) as { id: string; email: string; role: 'ADMIN' | 'STUDENT' };
+    const decoded = jwt.verify(token, getJwtSecret()) as { id: string; email: string; role: 'ADMIN' | 'STUDENT'; tokenVersion?: number };
 
     if (decoded.role === 'ADMIN') {
       const admin = await Admin.findById(decoded.id);
       if (admin) {
+        if ((decoded.tokenVersion ?? 0) !== (admin.tokenVersion ?? 0)) {
+          res.status(401).json({ success: false, message: 'Session expired. Please log in again.' });
+          return;
+        }
         req.admin = { id: admin._id.toString(), email: admin.email, role: 'ADMIN' };
         next();
         return;
@@ -133,6 +141,14 @@ export const authenticateStudentOrAdmin = async (req: AuthRequest, res: Response
     } else if (decoded.role === 'STUDENT') {
       const student = await Student.findById(decoded.id);
       if (student) {
+        if ((decoded.tokenVersion ?? 0) !== (student.tokenVersion ?? 0)) {
+          res.status(401).json({ success: false, message: 'Session expired. Please log in again.' });
+          return;
+        }
+        if (!student.isEmailVerified) {
+          res.status(403).json({ success: false, message: 'Please verify your email address before continuing.' });
+          return;
+        }
         req.student = {
           id: student._id.toString(),
           name: student.name,

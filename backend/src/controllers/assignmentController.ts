@@ -59,11 +59,18 @@ export const createAssignment = async (req: AuthRequest, res: Response): Promise
       allowedFileTypes,
       maxFileSize,
       maxGroupSize,
+      minGroupSize,
       submissionType,
       groupDeadline,
       allowLateGroupRegistration,
       isActive,
     } = req.body;
+
+    const requestedMaxFileSize = Number(maxFileSize);
+    if (Number.isFinite(requestedMaxFileSize) && requestedMaxFileSize > 50) {
+      res.status(400).json({ success: false, message: 'Maximum allowed upload size is 50 MB.' });
+      return;
+    }
 
     if (!subjectId || !title || !deadline) {
       res.status(400).json({ success: false, message: 'Subject, Title, and Deadline are required.' });
@@ -87,8 +94,9 @@ export const createAssignment = async (req: AuthRequest, res: Response): Promise
       allowedFileTypes: Array.isArray(allowedFileTypes) && allowedFileTypes.length > 0
         ? allowedFileTypes.map((t: string) => t.replace('.', '').toLowerCase().trim())
         : ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'zip'],
-      maxFileSize: Number(maxFileSize) > 0 ? Number(maxFileSize) : 10,
+      maxFileSize: requestedMaxFileSize > 0 ? requestedMaxFileSize : 10,
       maxGroupSize: Number(maxGroupSize) > 0 ? Number(maxGroupSize) : 4,
+      minGroupSize: Number(minGroupSize) > 0 ? Number(minGroupSize) : 1,
       submissionType: submissionType === 'Individual' ? 'Individual' : 'Group',
       isActive: isActive !== undefined ? Boolean(isActive) : true,
     });
@@ -118,10 +126,16 @@ export const updateAssignment = async (req: AuthRequest, res: Response): Promise
       allowedFileTypes,
       maxFileSize,
       maxGroupSize,
+      minGroupSize,
       submissionType,
       isActive,
       subjectId,
     } = req.body;
+
+    if (maxFileSize !== undefined && (!Number.isFinite(Number(maxFileSize)) || Number(maxFileSize) <= 0 || Number(maxFileSize) > 50)) {
+      res.status(400).json({ success: false, message: 'Maximum allowed upload size is 50 MB.' });
+      return;
+    }
 
     const assignment = await Assignment.findById(id);
     if (!assignment) {
@@ -147,8 +161,9 @@ export const updateAssignment = async (req: AuthRequest, res: Response): Promise
     if (Array.isArray(allowedFileTypes) && allowedFileTypes.length > 0) {
       assignment.allowedFileTypes = allowedFileTypes.map((t: string) => t.replace('.', '').toLowerCase().trim());
     }
-    if (maxFileSize && Number(maxFileSize) > 0) assignment.maxFileSize = Number(maxFileSize);
+    if (maxFileSize !== undefined) assignment.maxFileSize = Number(maxFileSize);
     if (maxGroupSize && Number(maxGroupSize) > 0) assignment.maxGroupSize = Number(maxGroupSize);
+    if (minGroupSize && Number(minGroupSize) > 0) assignment.minGroupSize = Number(minGroupSize);
     if (submissionType && ['Individual', 'Group'].includes(submissionType)) assignment.submissionType = submissionType;
     if (isActive !== undefined) assignment.isActive = Boolean(isActive);
 

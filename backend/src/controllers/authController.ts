@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import Admin from '../models/Admin.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { getJwtSecret } from '../config/security.js';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -25,10 +26,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const secret = process.env.JWT_SECRET || 'default_secret_key_change_in_production_12345';
     const token = jwt.sign(
-      { id: admin._id, email: admin.email, role: admin.role },
-      secret,
+      { id: admin._id, email: admin.email, role: admin.role, tokenVersion: admin.tokenVersion ?? 0 },
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 

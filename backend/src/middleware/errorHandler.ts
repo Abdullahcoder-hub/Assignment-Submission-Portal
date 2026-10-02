@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
+import { logError } from '../utils/logger.js';
 
 export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction): void => {
-  console.error('[Global Error Handler]:', err);
+  logError('[Global Error Handler]', err);
 
   // Multer error handling
   if (err.name === 'MulterError') {

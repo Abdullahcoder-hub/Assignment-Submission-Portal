@@ -10,6 +10,7 @@ export interface ILateRequest extends Document {
   rollNumber: string;
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
+  rejectionReason?: string;
   requestedAt: Date;
   decidedAt?: Date;
   decidedBy?: mongoose.Types.ObjectId;
@@ -28,6 +29,7 @@ const LateRequestSchema: Schema = new Schema(
     rollNumber: { type: String, required: true, trim: true },
     reason: { type: String, default: 'Late submission request' },
     status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending', index: true },
+    rejectionReason: { type: String, default: '' },
     requestedAt: { type: Date, default: Date.now },
     decidedAt: { type: Date },
     decidedBy: { type: Schema.Types.ObjectId, ref: 'Admin' },

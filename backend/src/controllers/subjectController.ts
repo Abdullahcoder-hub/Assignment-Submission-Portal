@@ -4,6 +4,7 @@ import Assignment from '../models/Assignment.js';
 import Submission from '../models/Submission.js';
 import Group from '../models/Group.js';
 import LateRequest from '../models/LateRequest.js';
+import Admin from '../models/Admin.js';
 import { AuthRequest } from '../middleware/auth.js';
 
 export const getSubjects = async (req: Request, res: Response): Promise<void> => {
@@ -20,11 +21,19 @@ export const getSubjects = async (req: Request, res: Response): Promise<void> =>
 
 export const createSubject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { name, code, description, isActive } = req.body;
+    const { name, code, description, crId, isActive } = req.body;
 
     if (!name || !code) {
       res.status(400).json({ success: false, message: 'Subject name and code are required.' });
       return;
+    }
+
+    if (crId) {
+      const cr = await Admin.findById(crId);
+      if (!cr) {
+        res.status(400).json({ success: false, message: 'Class Representative not found.' });
+        return;
+      }
     }
 
     const uppercaseCode = code.trim().toUpperCase();
@@ -42,6 +51,7 @@ export const createSubject = async (req: AuthRequest, res: Response): Promise<vo
       name: name.trim(),
       code: uppercaseCode,
       description: description ? description.trim() : '',
+      crId: crId || undefined,
       isActive: isActive !== undefined ? Boolean(isActive) : true,
     });
 
@@ -54,12 +64,21 @@ export const createSubject = async (req: AuthRequest, res: Response): Promise<vo
 export const updateSubject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, isActive } = req.body;
+    const { name, code, description, crId, isActive } = req.body;
 
     const subject = await Subject.findById(id);
     if (!subject) {
       res.status(404).json({ success: false, message: 'Subject not found.' });
       return;
+    }
+
+    if (crId) {
+      const cr = await Admin.findById(crId);
+      if (!cr) {
+        res.status(400).json({ success: false, message: 'Class Representative not found.' });
+        return;
+      }
+      subject.crId = crId;
     }
 
     if (name) subject.name = name.trim();

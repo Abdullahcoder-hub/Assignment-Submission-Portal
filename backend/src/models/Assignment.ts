@@ -9,6 +9,7 @@ export interface IAssignment extends Document {
   allowedFileTypes: string[];
   maxFileSize: number; // in Megabytes (MB)
   maxGroupSize: number;
+  minGroupSize: number;
   submissionType: 'Individual' | 'Group';
   groupDeadline?: Date;
   allowLateGroupRegistration?: boolean;
@@ -32,6 +33,7 @@ const AssignmentSchema: Schema = new Schema(
     },
     maxFileSize: { type: Number, default: 10 }, // Default 10 MB
     maxGroupSize: { type: Number, default: 4 }, // Default max 4 members
+    minGroupSize: { type: Number, default: 1 }, // Default min 1 member
     submissionType: { type: String, enum: ['Individual', 'Group'], default: 'Group' },
     isActive: { type: Boolean, default: true },
   },

@@ -3,21 +3,27 @@ import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import Admin from '../src/models/Admin.js';
 import { connectDB } from '../src/config/db.js';
+import { validatePasswordStrength } from '../src/utils/passwordValidator.js';
+import { logError } from '../src/utils/logger.js';
 
 dotenv.config();
 
 const seedAdmin = async () => {
   try {
-    await connectDB();
+    const name = process.env.ADMIN_NAME?.trim();
+    const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+    const password = process.env.ADMIN_PASSWORD;
 
-    const name = process.env.ADMIN_NAME || 'Class Representative';
-    const email = (process.env.ADMIN_EMAIL || 'admin@portal.com').toLowerCase().trim();
-    const password = process.env.ADMIN_PASSWORD || 'AdminSecurePassword123!';
-
-    if (!email || !password) {
-      console.error('Error: ADMIN_EMAIL and ADMIN_PASSWORD must be defined in environment variables.');
-      process.exit(1);
+    if (!name || !email || !password) {
+      throw new Error('ADMIN_NAME, ADMIN_EMAIL, and ADMIN_PASSWORD must be configured.');
     }
+
+    const passwordValidation = validatePasswordStrength(password);
+    if (!passwordValidation.isValid) {
+      throw new Error(`ADMIN_PASSWORD is not strong enough: ${passwordValidation.message}`);
+    }
+
+    await connectDB();
 
     const existingAdmin = await Admin.findOne({ email });
     const salt = await bcrypt.genSalt(10);
@@ -26,8 +32,9 @@ const seedAdmin = async () => {
     if (existingAdmin) {
       existingAdmin.name = name;
       existingAdmin.passwordHash = passwordHash;
+      existingAdmin.tokenVersion = (existingAdmin.tokenVersion ?? 0) + 1;
       await existingAdmin.save();
-      console.log(`✅ Admin account updated successfully: ${email}`);
+      console.log('Admin account updated successfully.');
     } else {
       await Admin.create({
         name,
@@ -35,13 +42,13 @@ const seedAdmin = async () => {
         passwordHash,
         role: 'ADMIN',
       });
-      console.log(`✅ Admin account seeded successfully: ${email}`);
+      console.log('Admin account seeded successfully.');
     }
 
     await mongoose.connection.close();
     process.exit(0);
   } catch (error) {
-    console.error('❌ Failed to seed admin account:', error);
+    logError('Failed to seed admin account.', error);
     process.exit(1);
   }
 };

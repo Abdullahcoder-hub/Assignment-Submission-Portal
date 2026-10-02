@@ -107,7 +107,8 @@ export const AdminDashboard: React.FC = () => {
   });
   const [subjectModalOpen, setSubjectModalOpen] = useState<boolean>(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
-  const [subjectForm, setSubjectForm] = useState({ name: '', code: '', description: '', isActive: true });
+  const [subjectForm, setSubjectForm] = useState({ name: '', code: '', description: '', crId: '', isActive: true });
+  const [admins, setAdmins] = useState<any[]>([]);
 
   // Assignments state with instant cache rehydration
   const [assignments, setAssignments] = useState<Assignment[]>(() => {
@@ -138,6 +139,7 @@ export const AdminDashboard: React.FC = () => {
     allowedFileTypes: 'pdf, doc, docx, ppt, pptx, zip',
     maxFileSize: 10,
     maxGroupSize: 4,
+    minGroupSize: 1,
     submissionType: 'Group' as 'Individual' | 'Group',
     isActive: true,
   });
@@ -179,6 +181,8 @@ export const AdminDashboard: React.FC = () => {
   const [lateFilterSubject, setLateFilterSubject] = useState<string>('');
   const [lateFilterStatus, setLateFilterStatus] = useState<string>('');
   const [lateSearch, setLateSearch] = useState<string>('');
+  const [rejectingRequestId, setRejectingRequestId] = useState<string | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState<string>('');
 
   // Registered Students State
   const [registeredStudents, setRegisteredStudents] = useState<RegisteredStudent[]>([]);
@@ -375,9 +379,13 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleLateDecision = async (id: string, decision: 'Approved' | 'Rejected') => {
+  const handleLateDecision = async (id: string, decision: 'Approved' | 'Rejected', rejectionReason?: string) => {
     try {
-      const res = await api.patch(`/late-requests/${id}/decision`, { decision });
+      const payload: any = { decision };
+      if (decision === 'Rejected' && rejectionReason) {
+        payload.rejectionReason = rejectionReason;
+      }
+      const res = await api.patch(`/late-requests/${id}/decision`, payload);
       if (res.data.success) {
         showToast('success', res.data.message);
         fetchLateRequests();
@@ -558,11 +566,23 @@ export const AdminDashboard: React.FC = () => {
     await Promise.all([fetchDashboardStats(), fetchSubjects(), fetchAssignments()]);
   };
 
+  const fetchAdmins = async () => {
+    try {
+      const res = await api.get('/admin/admins');
+      if (res.data.success) {
+        setAdmins(res.data.admins || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch admins:', err);
+    }
+  };
+
   useEffect(() => {
     fetchDashboardStats();
     fetchSubjects();
     fetchAssignments();
     fetchJoinCode();
+    fetchAdmins();
   }, []);
 
   useEffect(() => {
@@ -636,6 +656,7 @@ export const AdminDashboard: React.FC = () => {
         allowedFileTypes: allowedArray,
         maxFileSize: Number(assignmentForm.maxFileSize),
         maxGroupSize: Number(assignmentForm.maxGroupSize),
+        minGroupSize: Number(assignmentForm.minGroupSize),
       };
 
       if (editingAssignment) {
@@ -1101,7 +1122,7 @@ export const AdminDashboard: React.FC = () => {
               <button
                 onClick={() => {
                   setEditingSubject(null);
-                  setSubjectForm({ name: '', code: '', description: '', isActive: true });
+                  setSubjectForm({ name: '', code: '', description: '', crId: '', isActive: true });
                   setSubjectModalOpen(true);
                 }}
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow transition"
@@ -1155,6 +1176,7 @@ export const AdminDashboard: React.FC = () => {
                                 name: sub.name,
                                 code: sub.code,
                                 description: sub.description || '',
+                                crId: (sub as any).crId || '',
                                 isActive: sub.isActive,
                               });
                               setSubjectModalOpen(true);
@@ -1193,7 +1215,7 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                         <div><span className="text-slate-500">Deadline</span><p className="font-semibold text-slate-700 break-words">{formatDate(ass.deadline)}</p></div>
-                        <div><span className="text-slate-500">Mode</span><p className="font-semibold text-slate-700">{ass.submissionType === 'Individual' ? 'Individual' : `Group (${ass.maxGroupSize || 4} max)`}</p></div>
+                        <div><span className="text-slate-500">Mode</span><p className="font-semibold text-slate-700">{ass.submissionType === 'Individual' ? 'Individual' : `Group (${(ass as any).minGroupSize || 1}-${ass.maxGroupSize || 4} members)`}</p></div>
                         <div><span className="text-slate-500">Late allowed</span><p className={`font-bold ${ass.allowLateSubmission ? 'text-emerald-700' : 'text-red-700'}`}>{ass.allowLateSubmission ? 'Yes' : 'No'}</p></div>
                         <div><span className="text-slate-500">Max file</span><p className="font-semibold text-slate-700">{ass.maxFileSize} MB</p></div>
                       </div>
@@ -1221,6 +1243,7 @@ export const AdminDashboard: React.FC = () => {
                             allowedFileTypes: ass.allowedFileTypes.join(', '),
                             maxFileSize: ass.maxFileSize,
                             maxGroupSize: ass.maxGroupSize || 4,
+                            minGroupSize: (ass as any).minGroupSize || 1,
                             submissionType: ass.submissionType || 'Group',
                             isActive: ass.isActive,
                           });
@@ -1259,6 +1282,7 @@ export const AdminDashboard: React.FC = () => {
                     allowedFileTypes: 'pdf, doc, docx, ppt, pptx, zip',
                     maxFileSize: 10,
                     maxGroupSize: 4,
+                    minGroupSize: 1,
                     submissionType: 'Group',
                     isActive: true,
                   });
@@ -1361,6 +1385,7 @@ export const AdminDashboard: React.FC = () => {
                                 allowedFileTypes: ass.allowedFileTypes.join(', '),
                                 maxFileSize: ass.maxFileSize,
                                 maxGroupSize: ass.maxGroupSize || 4,
+                                minGroupSize: (ass as any).minGroupSize || 1,
                                 submissionType: ass.submissionType || 'Group',
                                 isActive: ass.isActive,
                               });
@@ -1836,7 +1861,7 @@ export const AdminDashboard: React.FC = () => {
                             <Check className="w-3 h-3" /> {req.requestType === 'GroupRegistration' ? 'Allow Group Registration' : 'Allow Submission'}
                           </button>
                           <button
-                            onClick={() => handleLateDecision(req._id, 'Rejected')}
+                            onClick={() => { setRejectingRequestId(req._id); setRejectionReasonInput(''); }}
                             disabled={req.status === 'Rejected'}
                             className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white font-bold text-xs rounded-lg transition inline-flex items-center gap-1"
                           >
@@ -1856,11 +1881,48 @@ export const AdminDashboard: React.FC = () => {
                     <p className="text-xs text-slate-700 break-words">{(req.subjectId as any)?.name || 'Subject'} · {(req.assignmentId as any)?.title || 'Assignment'}</p>
                     <p className="text-xs text-slate-600 break-words">Reason: {req.reason || 'No reason provided'}</p>
                     <p className="text-[11px] text-slate-500">Requested: {formatDate(req.requestedAt)}</p>
-                    <div className="grid grid-cols-2 gap-2 pt-1"><button onClick={() => handleLateDecision(req._id, 'Approved')} disabled={req.status === 'Approved'} className="py-2 bg-emerald-600 disabled:bg-emerald-300 text-white text-xs font-bold rounded-lg">{req.requestType === 'GroupRegistration' ? 'Allow Group Registration' : 'Allow Submission'}</button><button onClick={() => handleLateDecision(req._id, 'Rejected')} disabled={req.status === 'Rejected'} className="py-2 bg-red-600 disabled:bg-red-300 text-white text-xs font-bold rounded-lg">Reject</button></div>
+                    <div className="grid grid-cols-2 gap-2 pt-1"><button onClick={() => handleLateDecision(req._id, 'Approved')} disabled={req.status === 'Approved'} className="py-2 bg-emerald-600 disabled:bg-emerald-300 text-white text-xs font-bold rounded-lg">{req.requestType === 'GroupRegistration' ? 'Allow Group Registration' : 'Allow Submission'}</button><button onClick={() => { setRejectingRequestId(req._id); setRejectionReasonInput(''); }} disabled={req.status === 'Rejected'} className="py-2 bg-red-600 disabled:bg-red-300 text-white text-xs font-bold rounded-lg">Reject</button></div>
                   </article>
                 ))}
               </div>
             </div>
+
+            {/* Rejection Reason Modal */}
+            {rejectingRequestId && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+                  <h3 className="text-lg font-bold text-slate-900">Reject Late Request</h3>
+                  <p className="text-sm text-slate-600">Please provide a reason for rejecting this request (optional):</p>
+                  <textarea
+                    value={rejectionReasonInput}
+                    onChange={(e) => setRejectionReasonInput(e.target.value)}
+                    placeholder="Enter rejection reason..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500"
+                    rows={3}
+                  />
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => { setRejectingRequestId(null); setRejectionReasonInput(''); }}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (rejectingRequestId) {
+                          handleLateDecision(rejectingRequestId, 'Rejected', rejectionReasonInput);
+                          setRejectingRequestId(null);
+                          setRejectionReasonInput('');
+                        }
+                      }}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition"
+                    >
+                      Reject Request
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -2074,6 +2136,21 @@ export const AdminDashboard: React.FC = () => {
                     className="w-full px-3 py-2 border rounded-xl text-sm"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Class Representative (CR)</label>
+                  <select
+                    value={subjectForm.crId}
+                    onChange={(e) => setSubjectForm({ ...subjectForm, crId: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl text-sm"
+                  >
+                    <option value="">No CR Assigned (Uses Default Admin)</option>
+                    {admins.map((admin) => (
+                      <option key={admin._id} value={admin._id}>
+                        {admin.name} ({admin.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -2182,20 +2259,35 @@ export const AdminDashboard: React.FC = () => {
                     </select>
                   </div>
                   {assignmentForm.submissionType === 'Group' ? (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Max Group Limit
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={assignmentForm.maxGroupSize}
-                        onChange={(e) => setAssignmentForm({ ...assignmentForm, maxGroupSize: Number(e.target.value) })}
-                        className="w-full px-3 py-2 border rounded-xl text-xs font-bold"
-                        placeholder="e.g. 4"
-                      />
-                      <p className="text-[10px] text-slate-500 mt-0.5">Fewer members allowed, not more.</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Min Group Limit
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={assignmentForm.minGroupSize}
+                          onChange={(e) => setAssignmentForm({ ...assignmentForm, minGroupSize: Number(e.target.value) })}
+                          className="w-full px-3 py-2 border rounded-xl text-xs font-bold"
+                          placeholder="e.g. 1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Max Group Limit
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={assignmentForm.maxGroupSize}
+                          onChange={(e) => setAssignmentForm({ ...assignmentForm, maxGroupSize: Number(e.target.value) })}
+                          className="w-full px-3 py-2 border rounded-xl text-xs font-bold"
+                          placeholder="e.g. 4"
+                        />
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center text-xs text-slate-500 pt-5">
@@ -2252,6 +2344,8 @@ export const AdminDashboard: React.FC = () => {
                     <label className="block text-xs font-bold text-slate-700 mb-1">Max File Size (MB)</label>
                     <input
                       type="number"
+                      min={1}
+                      max={50}
                       value={assignmentForm.maxFileSize}
                       onChange={(e) => setAssignmentForm({ ...assignmentForm, maxFileSize: Number(e.target.value) })}
                       className="w-full px-3 py-2 border rounded-xl text-xs font-bold"

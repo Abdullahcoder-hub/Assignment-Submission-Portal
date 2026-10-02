@@ -6,6 +6,9 @@ const storage = multer.memoryStorage();
 export const uploadMiddleware = multer({
   storage,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB absolute upper bound for multer buffer (specific assignment limits checked in controller)
+    fileSize: 50 * 1024 * 1024,
+    files: 1,
+    fields: 20,
+    parts: 21,
   },
 });
