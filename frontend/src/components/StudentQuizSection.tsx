@@ -57,7 +57,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
 
   const handleStartQuiz = async (quiz: Quiz) => {
     try {
-      const res = await api.get(`/quizzes/${quiz._id}`);
+      const res = await api.post(`/quizzes/${quiz._id}/start`);
       if (res.data.success) {
         setActiveQuiz(res.data.quiz);
         setSubmissionReceipt(res.data.mySubmission || null);
@@ -65,8 +65,45 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
       }
     } catch (err: any) {
       setFeedback({ success: false, message: err.response?.data?.message || 'Failed to open quiz.' });
+      await fetchQuizzes();
     }
   };
+
+  const leaveQuiz = async () => {
+    if (!activeQuiz || submissionReceipt) {
+      setActiveQuiz(null);
+      setSubmissionReceipt(null);
+      return;
+    }
+    try {
+      await api.post(`/quizzes/${activeQuiz._id}/interrupt`);
+      setFeedback({ success: false, message: 'Quiz locked because it was closed. Request your CR or teacher to unblock it.' });
+    } catch {
+      setFeedback({ success: false, message: 'Quiz closed. It will be locked when you try to reopen it.' });
+    } finally {
+      setActiveQuiz(null);
+      setSubmissionReceipt(null);
+      await fetchQuizzes();
+    }
+  };
+
+  useEffect(() => {
+    if (!activeQuiz || submissionReceipt) return;
+    const interruptOnPageExit = () => {
+      const token = localStorage.getItem('portalToken');
+      if (!token) return;
+      void fetch(`${api.defaults.baseURL}/quizzes/${activeQuiz._id}/interrupt`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        keepalive: true,
+      });
+    };
+    window.addEventListener('pagehide', interruptOnPageExit);
+    return () => {
+      window.removeEventListener('pagehide', interruptOnPageExit);
+      interruptOnPageExit();
+    };
+  }, [activeQuiz?._id, submissionReceipt]);
 
   const handleSelectOption = (questionId: string, optionIndex: number) => {
     setStudentAnswers((prev) => ({
@@ -289,18 +326,32 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                         DOCX
                       </button>
                     </div>
-                  ) : isPastDeadline ? (
+                  ) : q.myAttemptStatus === 'locked' ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-red-600">Quiz locked — request an unblock from your CR or teacher.</p>
+                      {q.myLateRequestStatus === 'Pending' ? (
+                        <span className="text-xs font-semibold text-amber-700">Unblock request pending</span>
+                      ) : q.myLateRequestStatus === 'Approved' ? (
+                        <button onClick={() => handleStartQuiz(q)} className="w-full py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl">
+                          Resume Quiz
+                        </button>
+                      ) : (
+                        <button onClick={() => setLateModalQuiz(q)} className="w-full py-2 bg-amber-50 text-amber-800 text-xs font-semibold rounded-xl border border-amber-200">
+                          Request Unblock
+                        </button>
+                      )}
+                    </div>
+                  ) : isPastDeadline && q.myLateRequestStatus !== 'Approved' && !q.allowLateSubmission ? (
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
                         <AlertTriangle className="w-3.5 h-3.5" />
                         Deadline Passed
                       </span>
-                      <button
-                        onClick={() => setLateModalQuiz(q)}
-                        className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold rounded-xl border border-amber-200 transition"
-                      >
-                        Request Late
-                      </button>
+                      {q.myLateRequestStatus === 'Pending' ? <span className="text-xs text-amber-700">Request pending</span> : (
+                        <button onClick={() => setLateModalQuiz(q)} className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold rounded-xl border border-amber-200 transition">
+                          Request Access
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <button
@@ -327,10 +378,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                 <h3 className="font-bold text-slate-900 text-lg">{activeQuiz.title}</h3>
               </div>
               <button
-                onClick={() => {
-                  setActiveQuiz(null);
-                  setSubmissionReceipt(null);
-                }}
+                onClick={leaveQuiz}
                 className="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-lg"
               >
                 ✕
@@ -375,10 +423,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                     Download Official DOCX Receipt
                   </button>
                   <button
-                    onClick={() => {
-                      setActiveQuiz(null);
-                      setSubmissionReceipt(null);
-                    }}
+                    onClick={leaveQuiz}
                     className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
                   >
                     Close
@@ -451,7 +496,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                 <div className="pt-4 flex items-center justify-end gap-2 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setActiveQuiz(null)}
+                    onClick={leaveQuiz}
                     className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
                   >
                     Cancel

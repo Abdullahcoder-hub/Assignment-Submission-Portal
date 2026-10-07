@@ -121,16 +121,49 @@ button:not(:disabled):active {
     max-width: 100%;
   }
 
-  table {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .overflow-x-auto {
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .overflow-x-auto > table {
     min-width: 640px;
   }
 
-  .admin-dashboard .assignment-table {
-    display: table;
-    min-width: 980px;
+  .fixed.inset-0 {
+    align-items: flex-start;
+    overflow-y: auto;
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    overscroll-behavior: contain;
   }
 
-  .admin-dashboard .assignment-cards {
-    display: none;
+  .fixed.inset-0 > * {
+    max-height: calc(100dvh - 1.5rem);
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-dashboard aside nav {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .admin-dashboard aside nav > button {
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 }

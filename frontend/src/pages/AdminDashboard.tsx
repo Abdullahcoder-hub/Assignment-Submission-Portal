@@ -2312,7 +2312,7 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'staff' && <StaffManagementSection />}
 
         {/* QUIZZES TAB */}
-        {activeTab === 'quizzes' && <QuizManagementSection />}
+        {activeTab === 'quizzes' && <QuizManagementSection userRole={role || undefined} />}
 
         {/* SHARED ASSIGNMENTS TAB (TEACHER VIEW) */}
         {activeTab === 'shared-assignments' && <TeacherSharedAssignmentsSection />}

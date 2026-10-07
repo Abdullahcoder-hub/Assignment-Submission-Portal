@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import crypto from 'crypto';
 import Quiz, { IQuizQuestion } from '../models/Quiz.js';
 import QuizSubmission from '../models/QuizSubmission.js';
+import QuizAttempt from '../models/QuizAttempt.js';
 import Class from '../models/Class.js';
 import Subject from '../models/Subject.js';
 import Student from '../models/Student.js';
@@ -204,11 +205,26 @@ export const getQuizzes = async (req: AuthRequest, res: Response): Promise<void>
       }).lean();
 
       const submissionMap = new Map(studentSubmissions.map((s) => [s.quizId.toString(), s]));
+      const [studentAttempts, lateRequests] = await Promise.all([
+        QuizAttempt.find({ quizId: { $in: quizIds }, studentId: req.student.id }).select('quizId status').lean(),
+        LateRequest.find({ quizId: { $in: quizIds }, studentId: req.student.id, requestType: 'Quiz' })
+          .select('quizId status')
+          .sort({ requestedAt: -1 })
+          .lean(),
+      ]);
+      const attemptMap = new Map(studentAttempts.map((attempt) => [attempt.quizId.toString(), attempt.status]));
+      const lateRequestMap = new Map<string, string>();
+      lateRequests.forEach((request) => {
+        const quizId = request.quizId?.toString();
+        if (quizId && !lateRequestMap.has(quizId)) lateRequestMap.set(quizId, request.status);
+      });
 
       const sanitized = quizzes.map((q) => {
         const sub = submissionMap.get(q._id.toString());
         return {
           ...sanitizeQuizForStudent(q),
+          myAttemptStatus: attemptMap.get(q._id.toString()) || null,
+          myLateRequestStatus: lateRequestMap.get(q._id.toString()) || null,
           mySubmission: sub
             ? {
                 submissionId: sub.submissionId,
@@ -295,6 +311,11 @@ export const getQuizById = async (req: AuthRequest, res: Response): Promise<void
         quizId: quiz._id,
         studentId: req.student.id,
       }).lean();
+      const attempt = await QuizAttempt.findOne({ quizId: quiz._id, studentId: req.student.id });
+      if (!attempt || attempt.status !== 'in_progress') {
+        res.status(403).json({ success: false, message: 'Start or request approval to resume this quiz.' });
+        return;
+      }
 
       res.status(200).json({
         success: true,
@@ -334,6 +355,147 @@ export const getQuizById = async (req: AuthRequest, res: Response): Promise<void
   }
 };
 
+export const startQuiz = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.student) {
+      res.status(401).json({ success: false, message: 'Student authentication required.' });
+      return;
+    }
+    const quiz = await Quiz.findById(req.params.id)
+      .populate('classId', 'name semester section')
+      .populate('subjectId', 'name code')
+      .populate('teacherId', 'name');
+    if (!quiz || !quiz.isActive) {
+      res.status(404).json({ success: false, message: 'Quiz not found.' });
+      return;
+    }
+    if (!req.student.classId || req.student.classId !== (quiz.classId as any)._id.toString()) {
+      res.status(403).json({ success: false, message: 'You can only take quizzes for your own class.' });
+      return;
+    }
+    if (await QuizSubmission.exists({ quizId: quiz._id, studentId: req.student.id })) {
+      res.status(400).json({ success: false, message: 'You have already submitted this quiz.' });
+      return;
+    }
+
+    const lateRequest = await LateRequest.findOne({
+      quizId: quiz._id,
+      studentId: req.student.id,
+      requestType: 'Quiz',
+      status: 'Approved',
+    });
+    if (new Date() > quiz.deadline && !quiz.allowLateSubmission && !lateRequest) {
+      res.status(403).json({ success: false, message: 'The deadline passed. Request access from your CR or teacher.' });
+      return;
+    }
+
+    let attempt = await QuizAttempt.findOne({ quizId: quiz._id, studentId: req.student.id });
+    if (attempt) {
+      if (attempt.status === 'in_progress') {
+        attempt.status = 'locked';
+        attempt.lockedAt = new Date();
+        await attempt.save();
+        res.status(423).json({ success: false, message: 'This quiz was interrupted and is locked. Request your CR or teacher to unblock it.' });
+        return;
+      }
+      if (attempt.status === 'locked' || attempt.status === 'submitted') {
+        res.status(attempt.status === 'locked' ? 423 : 400).json({
+          success: false,
+          message: attempt.status === 'locked'
+            ? 'This quiz is locked. Request your CR or teacher to unblock it.'
+            : 'This quiz attempt has already been submitted.',
+        });
+        return;
+      }
+      attempt.status = 'in_progress';
+      attempt.unlockedAt = undefined;
+      attempt.startedAt = new Date();
+      await attempt.save();
+    } else {
+      attempt = await QuizAttempt.create({
+        quizId: quiz._id,
+        studentId: req.student.id,
+        classId: (quiz.classId as any)._id,
+        status: 'in_progress',
+        startedAt: new Date(),
+      });
+    }
+
+    res.status(200).json({ success: true, quiz: sanitizeQuizForStudent(quiz) });
+  } catch (error: any) {
+    if (error?.code === 11000) {
+      res.status(423).json({ success: false, message: 'This quiz attempt is locked. Request your CR or teacher to unblock it.' });
+      return;
+    }
+    res.status(500).json({ success: false, message: 'Failed to start quiz.' });
+  }
+};
+
+export const interruptQuizAttempt = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.student) {
+      res.status(401).json({ success: false, message: 'Student authentication required.' });
+      return;
+    }
+    const quiz = await Quiz.findById(req.params.id).select('classId');
+    if (!quiz || quiz.classId.toString() !== req.student.classId) {
+      res.status(403).json({ success: false, message: 'You can only lock your own class quiz attempt.' });
+      return;
+    }
+    const attempt = await QuizAttempt.findOneAndUpdate(
+      { quizId: quiz._id, studentId: req.student.id, status: 'in_progress' },
+      { $set: { status: 'locked', lockedAt: new Date() } },
+      { new: true }
+    );
+    res.status(200).json({ success: true, locked: Boolean(attempt) });
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to lock interrupted quiz.' });
+  }
+};
+
+export const unlockQuizAttempt = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz || !req.admin) {
+      res.status(404).json({ success: false, message: 'Quiz not found.' });
+      return;
+    }
+    if (req.admin.role === 'TEACHER') {
+      const assigned = quiz.teacherId.toString() === req.admin.id || await TeacherAssignment.exists({
+        teacherId: req.admin.id,
+        classId: quiz.classId,
+        subjectId: quiz.subjectId,
+        isActive: true,
+      });
+      if (!assigned) {
+        res.status(403).json({ success: false, message: 'You are not assigned to manage this quiz.' });
+        return;
+      }
+    } else if (['CR', 'CR_ASSISTANT'].includes(req.admin.role)) {
+      if (req.admin.assignedClassId !== quiz.classId.toString()) {
+        res.status(403).json({ success: false, message: 'You can only manage quizzes for your assigned class.' });
+        return;
+      }
+    } else if (req.admin.role !== 'SUPER_ADMIN') {
+      res.status(403).json({ success: false, message: 'Not authorized to unblock quiz attempts.' });
+      return;
+    }
+
+    const attempt = await QuizAttempt.findOneAndUpdate(
+      { quizId: quiz._id, studentId: req.params.studentId, status: 'locked' },
+      { $set: { status: 'unlocked', unlockedAt: new Date() }, $unset: { lockedAt: 1 } },
+      { new: true }
+    );
+    if (!attempt) {
+      res.status(404).json({ success: false, message: 'No locked attempt found for this student.' });
+      return;
+    }
+    res.status(200).json({ success: true, message: 'Quiz attempt unblocked. Student can resume it now.' });
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to unblock quiz attempt.' });
+  }
+};
+
 /**
  * 4. STUDENT SUBMIT QUIZ ANSWERS (Auto-grades MCQ, generates DOCX for Written, validates deadline)
  */
@@ -367,6 +529,16 @@ export const submitQuiz = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
+    const attempt = await QuizAttempt.findOne({
+      quizId: quiz._id,
+      studentId: req.student.id,
+      status: 'in_progress',
+    });
+    if (!attempt) {
+      res.status(423).json({ success: false, message: 'This quiz attempt is locked. Request your CR or teacher to unblock it.' });
+      return;
+    }
+
     // Prevent duplicate submission
     const existingSubmission = await QuizSubmission.findOne({
       quizId: quiz._id,
@@ -386,6 +558,7 @@ export const submitQuiz = async (req: AuthRequest, res: Response): Promise<void>
       const lateReq = await LateRequest.findOne({
         quizId: quiz._id,
         studentId: req.student.id,
+        requestType: 'Quiz',
         status: 'Approved',
       });
       isLateApproved = Boolean(lateReq);
@@ -485,6 +658,8 @@ export const submitQuiz = async (req: AuthRequest, res: Response): Promise<void>
       isLate: isPastDeadline,
       status: submissionStatus,
     });
+    attempt.status = 'submitted';
+    await attempt.save();
 
     res.status(201).json({
       success: true,

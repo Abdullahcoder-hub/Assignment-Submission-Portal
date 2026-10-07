@@ -3,6 +3,9 @@ import {
   createQuiz,
   getQuizzes,
   getQuizById,
+  startQuiz,
+  interruptQuizAttempt,
+  unlockQuizAttempt,
   submitQuiz,
   getQuizSubmissions,
   gradeQuizSubmission,
@@ -20,6 +23,8 @@ const router = Router();
 
 // Student routes
 router.post('/:id/submit', authenticateStudent, submitQuiz);
+router.post('/:id/start', authenticateStudent, startQuiz);
+router.post('/:id/interrupt', authenticateStudent, interruptQuizAttempt);
 
 // Shared / Role-scoped routes
 router.get('/', authenticateStudentOrAdmin, getQuizzes);
@@ -29,6 +34,7 @@ router.get('/submission/:submissionId/docx', authenticateStudentOrAdmin, downloa
 // Staff / Teacher routes
 router.post('/', authenticateTeacher, createQuiz);
 router.get('/:id/submissions', authenticateStaff, getQuizSubmissions);
+router.patch('/:id/attempts/:studentId/unlock', authenticateStaff, unlockQuizAttempt);
 router.put('/submissions/:submissionId/grade', authenticateTeacher, gradeQuizSubmission);
 router.delete('/:id', authenticateTeacher, deleteQuiz);
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { Quiz, QuizQuestion, QuizSubmission, Class, Subject, TeacherAssignment, AdminUser } from '../types';
+import { Quiz, QuizQuestion, QuizSubmission, Class, Subject, TeacherAssignment, AdminUser, LateRequest } from '../types';
 import {
   FileCheck,
   Plus,
@@ -26,6 +26,7 @@ import {
 
 export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRole = 'TEACHER' }) => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [quizRequests, setQuizRequests] = useState<LateRequest[]>([]);
   const [myAssignments, setMyAssignments] = useState<TeacherAssignment[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -70,17 +71,19 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [resQuizzes, resMyClasses, resClasses, resSubjects] = await Promise.all([
+      const [resQuizzes, resMyClasses, resClasses, resSubjects, resRequests] = await Promise.all([
         api.get('/quizzes'),
         api.get('/teacher-assignments/my-classes'),
         api.get('/classes'),
         api.get('/subjects'),
+        api.get('/late-requests?requestType=Quiz&status=Pending'),
       ]);
 
       if (resQuizzes.data.success) setQuizzes(resQuizzes.data.quizzes || []);
       if (resMyClasses.data.success) setMyAssignments(resMyClasses.data.assignments || []);
       if (resClasses.data.success) setClasses(resClasses.data.classes || []);
       if (resSubjects.data.success) setSubjects(resSubjects.data.subjects || []);
+      if (resRequests.data.success) setQuizRequests(resRequests.data.requests || []);
     } catch (err) {
       setFeedback({ success: false, message: 'Failed to load quizzes.' });
     } finally {
@@ -93,6 +96,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
   }, []);
 
   const handleOpenCreateModal = () => {
+    if (userRole !== 'TEACHER') return;
     // Default to first assigned class and subject
     const defaultAssignment = myAssignments[0];
     const defaultClassId = defaultAssignment ? (typeof defaultAssignment.classId === 'object' ? (defaultAssignment.classId as any)._id : defaultAssignment.classId) : (classes[0]?._id || '');
@@ -121,6 +125,16 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
     ]);
     setFormError('');
     setShowCreateModal(true);
+  };
+
+  const handleQuizRequestDecision = async (requestId: string, decision: 'Approved' | 'Rejected') => {
+    try {
+      await api.patch(`/late-requests/${requestId}/decision`, { decision });
+      setFeedback({ success: true, message: `Quiz access request ${decision.toLowerCase()}.` });
+      await fetchData();
+    } catch (err: any) {
+      setFeedback({ success: false, message: err.response?.data?.message || 'Failed to update quiz access request.' });
+    }
   };
 
   const handleAddQuestion = (type: 'MCQ' | 'Written') => {
@@ -335,14 +349,38 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
           </p>
         </div>
 
-        <button
-          onClick={handleOpenCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition"
-        >
-          <Plus className="w-4 h-4" />
-          Create New Quiz
-        </button>
+        {userRole === 'TEACHER' && (
+          <button
+            onClick={handleOpenCreateModal}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition"
+          >
+            <Plus className="w-4 h-4" />
+            Create New Quiz
+          </button>
+        )}
       </div>
+
+      {quizRequests.length > 0 && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 sm:p-5 space-y-3">
+          <h3 className="font-bold text-slate-900">Quiz Access Requests ({quizRequests.length})</h3>
+          {quizRequests.map((request) => {
+            const quiz = request.quizId && typeof request.quizId === 'object' ? request.quizId as Quiz : null;
+            const requestClass = request.classId && typeof request.classId === 'object' ? request.classId as Class : null;
+            return (
+              <div key={request._id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-white p-3 border border-amber-100">
+                <div className="min-w-0 text-sm">
+                  <p className="font-semibold text-slate-900">{request.studentName} ({request.rollNumber}) · {quiz?.title || 'Quiz'}</p>
+                  <p className="text-xs text-slate-600">{requestClass?.name || 'Class'} · {request.reason}</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => handleQuizRequestDecision(request._id, 'Approved')} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Approve / Unblock</button>
+                  <button onClick={() => handleQuizRequestDecision(request._id, 'Rejected')} className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-bold">Reject</button>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       {feedback && (
         <div
@@ -421,13 +459,15 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                       </span>
                     </div>
 
-                    <button
-                      onClick={() => handleDeleteQuiz(q._id, q.title)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                      title="Delete quiz"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {userRole === 'TEACHER' && (
+                      <button
+                        onClick={() => handleDeleteQuiz(q._id, q.title)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                        title="Delete quiz"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
                   <h3 className="text-base font-bold text-slate-900 mt-3 line-clamp-1">{q.title}</h3>
@@ -558,7 +598,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                             )}
                           </td>
                           <td className="px-4 py-3 text-right space-x-2">
-                            {selectedQuizForSubmissions.quizType !== 'MCQ' && (
+                            {userRole === 'TEACHER' && selectedQuizForSubmissions.quizType !== 'MCQ' && (
                               <button
                                 onClick={() => handleOpenGradeModal(sub)}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition"

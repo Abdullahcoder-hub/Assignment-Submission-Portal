@@ -15,6 +15,8 @@ import { logError } from '../utils/logger.js';
 
 import Quiz from '../models/Quiz.js';
 import Class from '../models/Class.js';
+import QuizAttempt from '../models/QuizAttempt.js';
+import TeacherAssignment from '../models/TeacherAssignment.js';
 
 const decisionToken = (requestId: string, decision: 'Approved' | 'Rejected') => jwt.sign(
   { requestId, decision, purpose: 'late-request-decision' },
@@ -28,16 +30,17 @@ const getLateRequestDetails = async (requestId: string) => LateRequest.findById(
   .populate('quizId', 'title');
 
 const applyDecision = async (requestId: string, decision: 'Approved' | 'Rejected', adminId?: string, rejectionReason?: string) => {
-  const lateReq = await LateRequest.findById(requestId);
-  if (!lateReq) return null;
-  lateReq.status = decision;
-  lateReq.decidedAt = new Date();
-  if (adminId) lateReq.decidedBy = adminId as any;
-  if (decision === 'Rejected' && rejectionReason) {
-    lateReq.rejectionReason = rejectionReason;
-  }
-  await lateReq.save();
-  return lateReq;
+  const update: Record<string, unknown> = {
+    status: decision,
+    decidedAt: new Date(),
+  };
+  if (adminId) update.decidedBy = adminId;
+  if (decision === 'Rejected' && rejectionReason) update.rejectionReason = rejectionReason;
+  return LateRequest.findOneAndUpdate(
+    { _id: requestId, status: 'Pending' },
+    { $set: update },
+    { new: true }
+  );
 };
 
 const notifyStudentOfDecision = async (lateReq: any, decision: 'Approved' | 'Rejected') => {
@@ -55,6 +58,7 @@ const notifyStudentOfDecision = async (lateReq: any, decision: 'Approved' | 'Rej
     assignmentTitle: assignment?.title || 'Quiz / Assignment',
     reason: lateReq.reason,
     decision,
+    requestType: lateReq.requestType,
     rejectionReason: lateReq.rejectionReason,
   });
 };
@@ -86,6 +90,10 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
         res.status(400).json({ success: false, message: 'Quiz not available.' });
         return;
       }
+      if (!req.student.classId || quiz.classId.toString() !== req.student.classId) {
+        res.status(403).json({ success: false, message: 'You can only request access to quizzes for your own class.' });
+        return;
+      }
 
       // Check existing request
       const existingRequest = await LateRequest.findOne({
@@ -94,35 +102,80 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
         requestType: 'Quiz',
       });
 
-      if (existingRequest) {
+      if (existingRequest && existingRequest.status !== 'Rejected') {
         res.status(200).json({
           success: true,
           message: existingRequest.status === 'Approved'
-            ? 'Late quiz submission request has already been approved by CR.'
-            : existingRequest.status === 'Rejected'
-            ? 'Late quiz submission request was rejected by CR.'
-            : 'Late quiz submission request is pending CR approval.',
+            ? 'Quiz access has already been approved.'
+            : 'Your quiz access request is pending CR and teacher approval.',
           request: existingRequest,
         });
         return;
       }
 
-      const newRequest = await LateRequest.create({
-        studentId: req.student.id,
+      const newRequest = existingRequest || await LateRequest.create({
+          studentId: req.student.id,
+          requestType: 'Quiz',
+          subjectId: quiz.subjectId,
+          classId: quiz.classId,
+          quizId: quiz._id,
+          studentName: req.student.name,
+          rollNumber: req.student.rollNumber,
+          reason: reason ? reason.trim() : 'Quiz deadline passed or attempt interrupted.',
+          status: 'Pending',
+          requestedAt: new Date(),
+        });
+      if (existingRequest) {
+        existingRequest.reason = reason ? reason.trim() : 'Quiz deadline passed or attempt interrupted.';
+        existingRequest.status = 'Pending';
+        existingRequest.requestedAt = new Date();
+        existingRequest.decidedAt = undefined;
+        existingRequest.decidedBy = undefined;
+        await existingRequest.save();
+      }
+
+      const [student, subject, staffQuiz] = await Promise.all([
+        Student.findById(req.student.id).select('name email').lean(),
+        Subject.findById(quiz.subjectId).select('name code').lean(),
+        Quiz.findById(quiz._id).populate('teacherId', 'name email'),
+      ]);
+      const classDoc = await Class.findById(quiz.classId).populate('crId', 'name email');
+      const staffRecipients = new Map<string, string>();
+      const teacher = staffQuiz?.teacherId as any;
+      const cr = classDoc?.crId as any;
+      if (teacher?.email) staffRecipients.set(teacher.email, teacher.name || 'Teacher');
+      if (cr?.email) staffRecipients.set(cr.email, cr.name || 'Class Representative');
+      const configuredBackendUrl = (process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, '');
+      const apiBaseUrl = configuredBackendUrl.endsWith('/api') ? configuredBackendUrl : `${configuredBackendUrl}/api`;
+      await Promise.all([...staffRecipients].map(([toEmail, toName]) => sendLateRequestEmail({
+        toEmail,
+        toName,
+        studentName: req.student!.name,
+        rollNumber: req.student!.rollNumber,
+        subjectName: subject?.name || 'Subject',
+        assignmentTitle: quiz.title,
+        reason: newRequest.reason,
+        approveUrl: `${apiBaseUrl}/late-requests/email-decision/${newRequest._id}/Approved/${decisionToken(newRequest._id.toString(), 'Approved')}`,
+        rejectUrl: `${apiBaseUrl}/late-requests/email-decision/${newRequest._id}/Rejected/${decisionToken(newRequest._id.toString(), 'Rejected')}`,
         requestType: 'Quiz',
-        subjectId: quiz.subjectId,
-        classId: quiz.classId,
-        quizId: quiz._id,
-        studentName: req.student.name,
-        rollNumber: req.student.rollNumber,
-        reason: reason ? reason.trim() : 'Quiz deadline passed.',
-        status: 'Pending',
-        requestedAt: new Date(),
-      });
+      })));
+      if (student) {
+        await sendLateRequestEmail({
+          toEmail: student.email,
+          toName: student.name,
+          studentName: student.name,
+          rollNumber: req.student.rollNumber,
+          subjectName: subject?.name || 'Subject',
+          assignmentTitle: quiz.title,
+          reason: newRequest.reason,
+          isStudentNotification: true,
+          requestType: 'Quiz',
+        });
+      }
 
       res.status(201).json({
         success: true,
-        message: 'Your late quiz submission request has been submitted for CR approval.',
+        message: 'Your quiz access request has been sent to your CR and teacher.',
         request: newRequest,
       });
       return;
@@ -340,6 +393,17 @@ export const getLateRequests = async (req: AuthRequest, res: Response): Promise<
     if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId) {
       filter.classId = req.admin.assignedClassId;
     }
+    if (req.admin?.role === 'TEACHER') {
+      const assignments = await TeacherAssignment.find({ teacherId: req.admin.id, isActive: true }).select('classId subjectId').lean();
+      const teacherQuizFilter: Record<string, unknown>[] = [{ teacherId: req.admin.id }];
+      assignments.forEach((assignment) => teacherQuizFilter.push({
+        classId: assignment.classId,
+        subjectId: assignment.subjectId,
+      }));
+      const assignedQuizIds = await Quiz.find({ $or: teacherQuizFilter }).distinct('_id');
+      filter.quizId = { $in: assignedQuizIds };
+      filter.requestType = 'Quiz';
+    }
 
     if (subjectId) filter.subjectId = subjectId;
     if (assignmentId) filter.assignmentId = assignmentId;
@@ -351,15 +415,18 @@ export const getLateRequests = async (req: AuthRequest, res: Response): Promise<
 
     if (search) {
       const searchRegex = new RegExp(escapeRegex((search as string).trim()), 'i');
-      filter.$or = [
+      filter.$and = [{
+        $or: [
         { studentName: searchRegex },
         { rollNumber: searchRegex },
         { reason: searchRegex },
-      ];
+        ],
+      }];
     }
 
     const requests = await LateRequest.find(filter)
       .populate('subjectId', 'name code')
+      .populate('classId', 'name section')
       .populate('assignmentId', 'title deadline submissionType allowLateGroupRegistration')
       .populate('quizId', 'title deadline quizType')
       .populate('groupId', 'groupName leader members')
@@ -388,12 +455,57 @@ export const updateLateRequestDecision = async (req: AuthRequest, res: Response)
       return;
     }
 
-    const lateReq = await applyDecision(id, decision as 'Approved' | 'Rejected', req.admin?.id, rejectionReason);
-    if (!lateReq) {
+    const currentRequest = await LateRequest.findById(id);
+    if (!currentRequest) {
       res.status(404).json({ success: false, message: 'Late submission request not found.' });
       return;
     }
 
+    if (req.admin?.role === 'TEACHER') {
+      if (currentRequest.requestType !== 'Quiz' || !currentRequest.quizId) {
+        res.status(403).json({ success: false, message: 'Teachers can only decide quiz access requests.' });
+        return;
+      }
+      const quiz = await Quiz.findById(currentRequest.quizId);
+      const isAssigned = quiz && (
+        quiz.teacherId.toString() === req.admin.id ||
+        await TeacherAssignment.exists({
+          teacherId: req.admin.id,
+          classId: quiz.classId,
+          subjectId: quiz.subjectId,
+          isActive: true,
+        })
+      );
+      if (!isAssigned) {
+        res.status(403).json({ success: false, message: 'You are not assigned to this quiz.' });
+        return;
+      }
+    } else if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '')) {
+      if (currentRequest.requestType === 'Quiz' && currentRequest.classId?.toString() !== req.admin?.assignedClassId) {
+        res.status(403).json({ success: false, message: 'You can only decide requests for your assigned class.' });
+        return;
+      }
+      if (currentRequest.requestType !== 'Quiz' && currentRequest.requestType !== 'Submission' && currentRequest.requestType !== 'GroupRegistration') {
+        res.status(403).json({ success: false, message: 'Not authorized to decide this request.' });
+        return;
+      }
+    } else if (req.admin?.role !== 'SUPER_ADMIN') {
+      res.status(403).json({ success: false, message: 'Not authorized to decide this request.' });
+      return;
+    }
+
+    const lateReq = await applyDecision(id, decision as 'Approved' | 'Rejected', req.admin?.id, rejectionReason);
+    if (!lateReq) {
+      res.status(409).json({ success: false, message: 'This request has already been decided.' });
+      return;
+    }
+
+    if (lateReq.requestType === 'Quiz' && lateReq.quizId && decision === 'Approved') {
+      await QuizAttempt.findOneAndUpdate(
+        { quizId: lateReq.quizId, studentId: lateReq.studentId, status: 'locked' },
+        { $set: { status: 'unlocked', unlockedAt: new Date() }, $unset: { lockedAt: 1 } }
+      );
+    }
     await notifyStudentOfDecision(lateReq, decision as 'Approved' | 'Rejected');
 
     res.status(200).json({
@@ -456,6 +568,12 @@ export const completeLateRequestDecisionByEmail = async (req: Request, res: Resp
     if (!lateReq) {
       res.status(409).send('This late request has already been decided or no longer exists.');
       return;
+    }
+    if (lateReq.requestType === 'Quiz' && lateReq.quizId && decision === 'Approved') {
+      await QuizAttempt.findOneAndUpdate(
+        { quizId: lateReq.quizId, studentId: lateReq.studentId, status: 'locked' },
+        { $set: { status: 'unlocked', unlockedAt: new Date() }, $unset: { lockedAt: 1 } }
+      );
     }
     await notifyStudentOfDecision(lateReq, decision);
     res.send(`Late submission request ${decision.toLowerCase()} successfully. The student has been notified by email.`);

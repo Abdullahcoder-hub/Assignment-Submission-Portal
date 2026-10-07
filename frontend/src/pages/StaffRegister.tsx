@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, GraduationCap, Loader2, Mail, Send, ShieldCh
 import api from '../api/axios';
 
 export const StaffRegister: React.FC = () => {
+  const [role, setRole] = useState<'TEACHER' | 'CR' | 'CR_ASSISTANT'>('TEACHER');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +32,7 @@ export const StaffRegister: React.FC = () => {
       const response = await api.post('/auth/staff/register', {
         name: name.trim(),
         email: email.trim(),
-        role: 'TEACHER',
+        role,
         password,
         confirmPassword,
       });
@@ -70,9 +71,12 @@ export const StaffRegister: React.FC = () => {
           <div className="inline-flex p-3 bg-blue-50 text-blue-600 rounded-2xl">
             <GraduationCap className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-extrabold text-slate-900">Teacher Registration</h1>
+          <h1 className="text-2xl font-extrabold text-slate-900">
+            {role === 'TEACHER' ? 'Teacher Registration' : role === 'CR' ? 'CR Registration' : 'CR Assistant Registration'}
+          </h1>
           <p className="text-sm text-slate-500">
-            Verify your email. Super Admin approval is required before you can sign in. Students should sign in to apply for CR positions.
+            Verify your email. Super Admin approval is required before you can sign in.
+            {role !== 'TEACHER' && ' Use the same email as your enrolled student account.'}
           </p>
         </div>
 
@@ -118,6 +122,19 @@ export const StaffRegister: React.FC = () => {
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Account type</label>
+              <select
+                value={role}
+                onChange={(event) => setRole(event.target.value as 'TEACHER' | 'CR' | 'CR_ASSISTANT')}
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white"
+              >
+                <option value="TEACHER">Teacher</option>
+                <option value="CR">Class Representative (CR)</option>
+                <option value="CR_ASSISTANT">CR Assistant</option>
+              </select>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Full name</label>
               <div className="relative">

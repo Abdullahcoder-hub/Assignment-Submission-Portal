@@ -60,6 +60,8 @@ export interface Quiz {
   totalMarks: number;
   questions: QuizQuestion[];
   submissionCount?: number;
+  myAttemptStatus?: 'in_progress' | 'locked' | 'unlocked' | 'submitted' | null;
+  myLateRequestStatus?: 'Pending' | 'Approved' | 'Rejected' | null;
   mySubmission?: {
     submissionId: string;
     totalScore: number;

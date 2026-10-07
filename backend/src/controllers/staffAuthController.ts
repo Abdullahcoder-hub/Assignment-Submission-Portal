@@ -17,10 +17,10 @@ export const registerStaff = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    if (role !== 'TEACHER') {
+    if (!['TEACHER', 'CR', 'CR_ASSISTANT'].includes(role)) {
       res.status(400).json({
         success: false,
-        message: 'CR and CR Assistant requests must be submitted from the student portal under CR Applications.',
+        message: 'Choose Teacher, CR, or CR Assistant.',
       });
       return;
     }
@@ -57,13 +57,46 @@ export const registerStaff = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // If registering as TEACHER with an existing student email
+    // Teacher and student identities remain separate; CR roles use their enrolled student account.
     if (role === 'TEACHER' && existingStudent) {
       res.status(409).json({
         success: false,
         message: 'This email is registered as a student. Teacher accounts cannot share student emails.',
       });
       return;
+    }
+
+    let assignedClassId = existingStudent?.classId;
+    if (role === 'CR' || role === 'CR_ASSISTANT') {
+      if (!existingStudent || !existingStudent.classId) {
+        res.status(400).json({
+          success: false,
+          message: 'CR and CR Assistant registration requires an existing student account enrolled in a class. Use that student account email.',
+        });
+        return;
+      }
+      const classDoc = await Class.findOne({ _id: existingStudent.classId, isActive: true });
+      if (!classDoc) {
+        res.status(400).json({ success: false, message: 'Your enrolled class is not active.' });
+        return;
+      }
+      assignedClassId = classDoc._id;
+
+      const assignedStaffId = role === 'CR' ? classDoc.crId : classDoc.assistantId;
+      if (assignedStaffId) {
+        const activeStaff = await Admin.findOne({
+          _id: assignedStaffId,
+          isActive: true,
+          approvalStatus: 'Approved',
+        });
+        if (activeStaff) {
+          res.status(409).json({
+            success: false,
+            message: role === 'CR' ? 'Your class already has an active CR.' : 'Your class already has an active CR Assistant.',
+          });
+          return;
+        }
+      }
     }
 
     const passwordValidation = validatePasswordStrength(password);
@@ -84,8 +117,8 @@ export const registerStaff = async (req: Request, res: Response): Promise<void> 
       existingStaff.name = cleanName;
       existingStaff.passwordHash = passwordHash;
       existingStaff.role = role;
-      existingStaff.studentId = existingStudent?._id;
-      existingStaff.assignedClassId = (existingStudent?.classId as any) || existingStaff.assignedClassId;
+      existingStaff.studentId = role === 'TEACHER' ? undefined : existingStudent?._id;
+      existingStaff.assignedClassId = role === 'TEACHER' ? undefined : assignedClassId;
       existingStaff.approvalStatus = 'Pending';
       existingStaff.approvalToken = approvalToken;
       existingStaff.approvalTokenExpires = approvalTokenExpires;
@@ -102,8 +135,8 @@ export const registerStaff = async (req: Request, res: Response): Promise<void> 
         email: cleanEmail,
         passwordHash,
         role,
-        studentId: existingStudent?._id,
-        assignedClassId: (existingStudent?.classId as any) || undefined,
+        studentId: role === 'TEACHER' ? undefined : existingStudent?._id,
+        assignedClassId: role === 'TEACHER' ? undefined : assignedClassId,
         isActive: true,
         isEmailVerified: isStudentEmailVerified,
         verificationToken,
@@ -159,7 +192,7 @@ export const registerStaff = async (req: Request, res: Response): Promise<void> 
 
     res.status(201).json({
       success: true,
-      message: `${role === 'TEACHER' ? 'Teacher' : 'CR'} registration submitted successfully. Your request is now waiting for Super Admin approval.`,
+      message: `${role === 'TEACHER' ? 'Teacher' : role === 'CR' ? 'CR' : 'CR Assistant'} registration submitted successfully. Your request is now waiting for Super Admin approval.`,
     });
   } catch (error) {
     logError('[Staff Register Error]', error);

@@ -39,7 +39,7 @@ export const sendLateRequestEmail = async (params: {
   rejectUrl?: string;
   decision?: 'Approved' | 'Rejected';
   isStudentNotification?: boolean;
-  requestType?: 'Submission' | 'GroupRegistration';
+  requestType?: 'Submission' | 'GroupRegistration' | 'Quiz';
   groupName?: string;
   groupMembers?: string;
   rejectionReason?: string;
@@ -49,17 +49,27 @@ export const sendLateRequestEmail = async (params: {
   let emailSubject: string;
   let additionalInfo: string = '';
 
-  const requestTypeText = params.requestType === 'GroupRegistration' ? 'Late Group Registration' : 'Late Assignment Submission';
+  const requestTypeText = params.requestType === 'Quiz'
+    ? 'Quiz Access / Unblock'
+    : params.requestType === 'GroupRegistration'
+      ? 'Late Group Registration'
+      : 'Late Assignment Submission';
 
   if (params.isStudentNotification) {
-    decisionText = 'Your late submission request has been submitted successfully and is pending approval from the Class Representative.';
+    decisionText = params.requestType === 'Quiz'
+      ? 'Your quiz access / unblock request has been sent to your Class Representative and teacher and is awaiting a decision.'
+      : 'Your late submission request has been submitted successfully and is pending approval from the Class Representative.';
     actionHtml = '<p>You will receive an email notification once your request is reviewed. Please check the portal for updates.</p>';
     emailSubject = `Late Request Submitted — ${params.assignmentTitle}`;
   } else if (params.decision) {
     if (params.decision === 'Approved') {
-      decisionText = `Your late ${requestTypeText.toLowerCase()} request has been <strong>approved</strong> by the Class Representative. You can now continue with the requested action through the portal.`;
+      decisionText = params.requestType === 'Quiz'
+        ? `Your ${requestTypeText.toLowerCase()} request has been <strong>approved</strong>. You can now continue with the quiz through the portal.`
+        : `Your late ${requestTypeText.toLowerCase()} request has been <strong>approved</strong> by the Class Representative. You can now continue with the requested action through the portal.`;
     } else {
-      decisionText = `Your late ${requestTypeText.toLowerCase()} request has been <strong>rejected</strong> by the Class Representative.`;
+      decisionText = params.requestType === 'Quiz'
+        ? `Your ${requestTypeText.toLowerCase()} request has been <strong>rejected</strong>.`
+        : `Your late ${requestTypeText.toLowerCase()} request has been <strong>rejected</strong> by the Class Representative.`;
       if (params.rejectionReason) {
         decisionText += `<br><br><strong>Rejection Reason:</strong> ${escapeHtml(params.rejectionReason)}`;
       }
@@ -77,6 +87,8 @@ export const sendLateRequestEmail = async (params: {
     if (params.groupMembers) {
       additionalInfo += `<br><strong>Group Members:</strong> ${escapeHtml(params.groupMembers)}`;
     }
+  } else if (params.requestType === 'Quiz') {
+    additionalInfo = '<br><strong>Request Type:</strong> Quiz Access / Unblock';
   } else if (params.requestType === 'Submission') {
     additionalInfo = `<br><strong>Request Type:</strong> Late Assignment Submission`;
   }
