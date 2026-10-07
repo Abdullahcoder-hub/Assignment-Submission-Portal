@@ -27,8 +27,8 @@ export const getClasses = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     const classes = await Class.find(filter)
-      .populate('crId', 'name email role')
-      .populate('assistantId', 'name email role')
+      .populate('crId', 'name email role isActive approvalStatus')
+      .populate('assistantId', 'name email role isActive approvalStatus')
       .sort({ semester: 1, section: 1 })
       .lean();
 

@@ -100,6 +100,13 @@ export const CRApplicationsTab: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
+  const isClassAvailable = (classItem: Class, roleType: PopulatedApplication['roleType']) => {
+    const assignedAccount = roleType === 'CR' ? classItem.crId : classItem.assistantId;
+    if (!assignedAccount) return true;
+    if (typeof assignedAccount === 'string') return false;
+    return assignedAccount.isActive === false || assignedAccount.approvalStatus !== 'Approved';
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -219,7 +226,7 @@ export const CRApplicationsTab: React.FC = () => {
                               className="max-w-56 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
                             >
                               <option value="">Select class</option>
-                              {classes.filter((classItem) => classItem.isActive).map((classItem) => (
+                              {classes.filter((classItem) => classItem.isActive && isClassAvailable(classItem, app.roleType)).map((classItem) => (
                                 <option key={classItem._id} value={classItem._id}>
                                   {classItem.name} (Sec: {classItem.section})
                                 </option>

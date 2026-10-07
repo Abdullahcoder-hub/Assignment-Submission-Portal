@@ -7,8 +7,8 @@ export interface Class {
   section: string;
   joinCode: string;
   isJoinCodeActive: boolean;
-  crId?: AdminUser | string;
-  assistantId?: AdminUser | string;
+  crId?: (AdminUser & { _id?: string }) | string;
+  assistantId?: (AdminUser & { _id?: string }) | string;
   studentCount?: number;
   isActive: boolean;
   createdAt: string;
