@@ -5,6 +5,7 @@ export interface ISubmission extends Document {
   studentId: mongoose.Types.ObjectId;
   assignmentId: mongoose.Types.ObjectId;
   subjectId: mongoose.Types.ObjectId;
+  classId?: mongoose.Types.ObjectId;
   studentName: string;
   rollNumber: string;
   email: string;
@@ -39,6 +40,7 @@ const SubmissionSchema: Schema = new Schema(
     studentId: { type: Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
     assignmentId: { type: Schema.Types.ObjectId, ref: 'Assignment', required: true, index: true },
     subjectId: { type: Schema.Types.ObjectId, ref: 'Subject', required: true, index: true },
+    classId: { type: Schema.Types.ObjectId, ref: 'Class', index: true },
     studentName: { type: String, required: true, trim: true },
     rollNumber: { type: String, required: true, trim: true },
     email: { type: String, required: true, lowercase: true, trim: true },

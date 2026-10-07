@@ -25,6 +25,11 @@ const seedAdmin = async () => {
 
     await connectDB();
 
+    const otherSuperAdmin = await Admin.findOne({ email: { $ne: email }, role: 'SUPER_ADMIN' });
+    if (otherSuperAdmin) {
+      throw new Error('A Super Admin account already exists. Use its configured email to update that account.');
+    }
+
     const existingAdmin = await Admin.findOne({ email });
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
@@ -32,17 +37,26 @@ const seedAdmin = async () => {
     if (existingAdmin) {
       existingAdmin.name = name;
       existingAdmin.passwordHash = passwordHash;
+      existingAdmin.role = 'SUPER_ADMIN';
+      existingAdmin.isActive = true;
+      existingAdmin.isEmailVerified = true;
+      existingAdmin.approvalStatus = 'Approved';
+      existingAdmin.verificationToken = undefined;
+      existingAdmin.verificationTokenExpires = undefined;
       existingAdmin.tokenVersion = (existingAdmin.tokenVersion ?? 0) + 1;
       await existingAdmin.save();
-      console.log('Admin account updated successfully.');
+      console.log('Super Admin account updated successfully with role SUPER_ADMIN.');
     } else {
       await Admin.create({
         name,
         email,
         passwordHash,
-        role: 'ADMIN',
+        role: 'SUPER_ADMIN',
+        isActive: true,
+        isEmailVerified: true,
+        approvalStatus: 'Approved',
       });
-      console.log('Admin account seeded successfully.');
+      console.log('Super Admin account seeded successfully with role SUPER_ADMIN.');
     }
 
     await mongoose.connection.close();

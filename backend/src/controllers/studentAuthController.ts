@@ -4,8 +4,9 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import Student from '../models/Student.js';
+import Admin from '../models/Admin.js';
 import Submission from '../models/Submission.js';
-import { verifyClassJoinCode } from '../utils/joinCode.js';
+import { findAndVerifyClassByJoinCode, verifyClassJoinCode } from '../utils/joinCode.js';
 import { validatePasswordStrength } from '../utils/passwordValidator.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
 import { sendStudentVerificationEmail, sendPasswordResetEmail } from '../config/brevo.js';
@@ -40,9 +41,9 @@ export const registerStudent = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Validate Class Join Code
-    const isValidCode = await verifyClassJoinCode(joinCode);
-    if (!isValidCode) {
+    // Validate Class Join Code & Resolve Class
+    const matchedClass = await findAndVerifyClassByJoinCode(joinCode);
+    if (!matchedClass) {
       res.status(400).json({ success: false, message: 'Invalid or inactive Class Join Code.' });
       return;
     }
@@ -57,8 +58,11 @@ export const registerStudent = async (req: Request, res: Response): Promise<void
     const cleanEmail = email.trim().toLowerCase();
 
     // Check existing email or roll number
-    const existingEmail = await Student.findOne({ email: cleanEmail });
-    if (existingEmail) {
+    const [existingEmail, existingStaffEmail] = await Promise.all([
+      Student.exists({ email: cleanEmail }),
+      Admin.exists({ email: cleanEmail }),
+    ]);
+    if (existingEmail || existingStaffEmail) {
       res.status(400).json({ success: false, message: 'An account with this email already exists.' });
       return;
     }
@@ -73,20 +77,30 @@ export const registerStudent = async (req: Request, res: Response): Promise<void
     const passwordHash = await bcrypt.hash(password, salt);
 
     const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 Hours
+    const verificationTokenExpires = new Date(Date.now() + 5 * 60 * 1000);
 
     const student = await Student.create({
       name: name.trim(),
       email: cleanEmail,
       rollNumber: cleanRoll,
+      classId: matchedClass._id,
       passwordHash,
       isEmailVerified: false,
       verificationToken,
       verificationTokenExpires,
     });
 
+
     // Send verification email via Brevo
-    await sendStudentVerificationEmail(student.email, student.name, verificationToken);
+    const emailResult = await sendStudentVerificationEmail(student.email, student.name, verificationToken);
+    if (!emailResult.success) {
+      logError('[Student Register Email Error]', emailResult.error);
+      res.status(502).json({
+        success: false,
+        message: 'Account created, but the verification email could not be sent. Use Resend Verification to try again.',
+      });
+      return;
+    }
 
     res.status(201).json({
       success: true,
@@ -110,24 +124,35 @@ export const verifyEmail = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const student = await Student.findOne({
-      verificationToken: token as string,
-      verificationTokenExpires: { $gt: new Date() },
-    });
+    const [student, staff] = await Promise.all([
+      Student.findOne({
+        verificationToken: token,
+        verificationTokenExpires: { $gt: new Date() },
+      }),
+      Admin.findOne({
+        verificationToken: token,
+        verificationTokenExpires: { $gt: new Date() },
+      }),
+    ]);
 
-    if (!student) {
+    const account = student || staff;
+    if (!account) {
       res.status(400).json({ success: false, message: 'Invalid or expired verification link.' });
       return;
     }
 
-    student.isEmailVerified = true;
-    student.verificationToken = undefined;
-    student.verificationTokenExpires = undefined;
-    await student.save();
+    account.isEmailVerified = true;
+    account.verificationToken = undefined;
+    account.verificationTokenExpires = undefined;
+    await account.save();
 
+    const isStaff = Boolean(staff);
     res.status(200).json({
       success: true,
-      message: 'Email verified successfully! You can now log in to your account.',
+      role: isStaff ? staff!.role : 'STUDENT',
+      message: isStaff
+        ? 'Email verified. Your account is now waiting for Super Admin approval.'
+        : 'Email verified successfully! You can now log in to your account.',
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to verify email address.' });
@@ -145,8 +170,13 @@ export const resendVerificationEmail = async (req: Request, res: Response): Prom
       return;
     }
 
-    const student = await Student.findOne({ email: email.trim().toLowerCase() });
-    if (!student) {
+    const cleanEmail = email.trim().toLowerCase();
+    const [student, staff] = await Promise.all([
+      Student.findOne({ email: cleanEmail }),
+      Admin.findOne({ email: cleanEmail }),
+    ]);
+    const account = student || staff;
+    if (!account) {
       res.status(200).json({
         success: true,
         message: 'If an unverified account exists with this email, a new verification link has been sent.',
@@ -154,17 +184,22 @@ export const resendVerificationEmail = async (req: Request, res: Response): Prom
       return;
     }
 
-    if (student.isEmailVerified) {
-      res.status(400).json({ success: false, message: 'This email is already verified. You can log in.' });
+    if (account.isEmailVerified) {
+      res.status(400).json({ success: false, message: 'This email is already verified.' });
       return;
     }
 
     const verificationToken = crypto.randomBytes(32).toString('hex');
-    student.verificationToken = verificationToken;
-    student.verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await student.save();
+    account.verificationToken = verificationToken;
+    account.verificationTokenExpires = new Date(Date.now() + 5 * 60 * 1000);
+    await account.save();
 
-    await sendStudentVerificationEmail(student.email, student.name, verificationToken);
+    const emailResult = await sendStudentVerificationEmail(account.email, account.name, verificationToken);
+    if (!emailResult.success) {
+      logError('[Verification Email Error]', emailResult.error);
+      res.status(502).json({ success: false, message: 'Failed to send verification email. Please try again later.' });
+      return;
+    }
 
     res.status(200).json({
       success: true,
@@ -207,8 +242,25 @@ export const loginStudent = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
+    // Check if student has an approved CR or CR_ASSISTANT role
+    const staffRecord = await Admin.findOne({
+      email: student.email,
+      isActive: true,
+      approvalStatus: 'Approved',
+      role: { $in: ['CR', 'CR_ASSISTANT'] },
+    }).lean();
+
+    const effectiveRole = staffRecord ? staffRecord.role : 'STUDENT';
+    const effectiveStaffId = staffRecord ? staffRecord._id.toString() : undefined;
+
     const token = jwt.sign(
-      { id: student._id, email: student.email, role: 'STUDENT', tokenVersion: student.tokenVersion ?? 0 },
+      {
+        id: staffRecord ? staffRecord._id : student._id,
+        email: student.email,
+        role: effectiveRole,
+        classId: (student as any).classId?.toString(),
+        tokenVersion: (staffRecord ? staffRecord.tokenVersion : student.tokenVersion) ?? 0,
+      },
       getJwtSecret(),
       { expiresIn: '7d' }
     );
@@ -222,7 +274,10 @@ export const loginStudent = async (req: Request, res: Response): Promise<void> =
         name: student.name,
         email: student.email,
         rollNumber: student.rollNumber,
+        classId: (student as any).classId,
         role: student.role,
+        staffRole: staffRecord ? staffRecord.role : null,
+        staffId: effectiveStaffId,
       },
     });
   } catch (error) {
@@ -278,6 +333,11 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
     let student = await Student.findOne({ email });
 
     if (!student) {
+      if (await Admin.exists({ email })) {
+        res.status(409).json({ success: false, message: 'An account with this email already exists.' });
+        return;
+      }
+
       // New Google registration requires Class Join Code and Roll Number
       if (!joinCode || !rollNumber) {
         res.status(202).json({
@@ -298,8 +358,8 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
         return;
       }
 
-      const isValidCode = await verifyClassJoinCode(joinCode);
-      if (!isValidCode) {
+      const matchedClass = await findAndVerifyClassByJoinCode(joinCode);
+      if (!matchedClass) {
         res.status(400).json({ success: false, message: 'Invalid or inactive Class Join Code.' });
         return;
       }
@@ -314,6 +374,7 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
         name,
         email,
         rollNumber: cleanRoll,
+        classId: matchedClass._id,
         googleId,
         isEmailVerified: true, // Google OAuth automatically verifies email
       });
@@ -329,7 +390,13 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
     }
 
     const token = jwt.sign(
-      { id: student._id, email: student.email, role: 'STUDENT', tokenVersion: student.tokenVersion ?? 0 },
+      {
+        id: student._id,
+        email: student.email,
+        role: 'STUDENT',
+        classId: student.classId?.toString(),
+        tokenVersion: student.tokenVersion ?? 0,
+      },
       getJwtSecret(),
       { expiresIn: '7d' }
     );
@@ -343,9 +410,11 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
         name: student.name,
         email: student.email,
         rollNumber: student.rollNumber,
+        classId: student.classId,
         role: student.role,
       },
     });
+
   } catch (error: any) {
     logError('[Google Auth Error]', error);
     res.status(500).json({ success: false, message: 'Server error during Google authentication.' });
@@ -364,8 +433,13 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const student = await Student.findOne({ email: email.trim().toLowerCase() });
-    if (!student) {
+    const cleanEmail = email.trim().toLowerCase();
+    const [student, staff] = await Promise.all([
+      Student.findOne({ email: cleanEmail }),
+      Admin.findOne({ email: cleanEmail }),
+    ]);
+    const account = student || staff;
+    if (!account) {
       // Don't leak whether email exists
       res.status(200).json({
         success: true,
@@ -375,11 +449,16 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    student.resetPasswordToken = resetToken;
-    student.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 Hour
-    await student.save();
+    account.resetPasswordToken = resetToken;
+    account.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 Hour
+    await account.save();
 
-    await sendPasswordResetEmail(student.email, student.name, resetToken);
+    const emailResult = await sendPasswordResetEmail(account.email, account.name, resetToken);
+    if (!emailResult.success) {
+      logError('[Password Reset Email Error]', emailResult.error);
+      res.status(502).json({ success: false, message: 'Failed to send password reset email. Please try again later.' });
+      return;
+    }
 
     res.status(200).json({
       success: true,
@@ -413,25 +492,27 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const student = await Student.findOne({
-      resetPasswordToken: token,
-      resetPasswordExpires: { $gt: new Date() },
-    });
+    const [student, staff] = await Promise.all([
+      Student.findOne({ resetPasswordToken: token, resetPasswordExpires: { $gt: new Date() } }),
+      Admin.findOne({ resetPasswordToken: token, resetPasswordExpires: { $gt: new Date() } }),
+    ]);
+    const account = student || staff;
 
-    if (!student) {
+    if (!account) {
       res.status(400).json({ success: false, message: 'Invalid or expired password reset link.' });
       return;
     }
 
     const salt = await bcrypt.genSalt(10);
-    student.passwordHash = await bcrypt.hash(newPassword, salt);
-    student.resetPasswordToken = undefined;
-    student.resetPasswordExpires = undefined;
-    student.tokenVersion = (student.tokenVersion ?? 0) + 1;
-    await student.save();
+    account.passwordHash = await bcrypt.hash(newPassword, salt);
+    account.resetPasswordToken = undefined;
+    account.resetPasswordExpires = undefined;
+    account.tokenVersion = (account.tokenVersion ?? 0) + 1;
+    await account.save();
 
     res.status(200).json({
       success: true,
+      role: student ? 'STUDENT' : staff!.role,
       message: 'Password reset successfully! You can now log in with your new password.',
     });
   } catch (error) {
@@ -450,7 +531,8 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
     }
 
     const student = await Student.findById(req.student.id)
-      .select('name email rollNumber isEmailVerified role')
+      .select('name email rollNumber isEmailVerified role classId')
+      .populate('classId', 'name semester section')
       .lean();
     if (!student) {
       res.status(404).json({ success: false, message: 'Student profile not found.' });
@@ -464,6 +546,14 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
       .sort({ submittedAt: -1 })
       .lean();
 
+    // Check if student is also an approved CR or Assistant
+    const staffRecord = await Admin.findOne({
+       email: student.email,
+       isActive: true,
+       approvalStatus: 'Approved',
+       role: { $in: ['CR', 'CR_ASSISTANT'] },
+    }).lean();
+
     res.status(200).json({
       success: true,
       student: {
@@ -472,10 +562,14 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
         email: (student as any).email,
         rollNumber: (student as any).rollNumber,
         isEmailVerified: (student as any).isEmailVerified,
+        classId: (student as any).classId,
+        class: (student as any).classId,
         role: (student as any).role,
+        staffRole: staffRecord ? staffRecord.role : null,
       },
       submissions: mySubmissions,
     });
+
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch student profile.' });
   }
@@ -575,4 +669,3 @@ export const checkRollNumberAvailability = async (req: Request, res: Response): 
     res.status(500).json({ success: false, message: 'Failed to verify roll number.' });
   }
 };
-

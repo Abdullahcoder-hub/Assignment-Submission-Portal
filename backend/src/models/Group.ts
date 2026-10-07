@@ -10,6 +10,7 @@ export interface IGroupMember {
 export interface IGroup extends Document {
   groupName: string;
   subjectId: mongoose.Types.ObjectId;
+  classId?: mongoose.Types.ObjectId;
   assignmentId?: mongoose.Types.ObjectId;
   leader: IGroupMember;
   members: IGroupMember[];
@@ -32,6 +33,7 @@ const GroupSchema: Schema = new Schema(
   {
     groupName: { type: String, required: true, trim: true },
     subjectId: { type: Schema.Types.ObjectId, ref: 'Subject', required: true, index: true },
+    classId: { type: Schema.Types.ObjectId, ref: 'Class', index: true },
     assignmentId: { type: Schema.Types.ObjectId, ref: 'Assignment', index: true },
     leader: { type: MemberSchema, required: true },
     members: { type: [MemberSchema], required: true },

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api, { openSubmissionFile } from '../api/axios';
-import { Subject, Assignment, Submission, StudentUser, SubmissionReceipt, Group, LateRequest } from '../types';
+import { Subject, Assignment, Submission, StudentUser, SubmissionReceipt, Group, LateRequest, CRApplication, Class } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { StudentQuizSection } from '../components/StudentQuizSection';
 import {
   User,
   BookOpen,
@@ -34,7 +35,7 @@ export const StudentDashboard: React.FC = () => {
   const { user, replaceToken } = useAuth();
   const student = user as StudentUser;
 
-  const validTabs = ['submit', 'groups', 'history', 'security'] as const;
+  const validTabs = ['submit', 'quizzes', 'groups', 'history', 'security', 'cr-application'] as const;
   type TabType = typeof validTabs[number];
 
   const [activeTab, setActiveTabState] = useState<TabType>(() => {
@@ -165,6 +166,16 @@ export const StudentDashboard: React.FC = () => {
   const [passMsg, setPassMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deadlineTick, setDeadlineTick] = useState(() => Date.now());
   const [sequenceNumber, setSequenceNumber] = useState<number>(1);
+
+  // CR Application State
+  const [crAppStatus, setCRAppStatus] = useState<CRApplication | null>(null);
+  const [crAppLoading, setCRAppLoading] = useState(false);
+  const [crAppClasses, setCRAppClasses] = useState<Class[]>([]);
+  const [crAppClassId, setCRAppClassId] = useState('');
+  const [crAppRoleType, setCRAppRoleType] = useState<'CR' | 'CR_ASSISTANT'>('CR');
+  const [crAppReason, setCRAppReason] = useState('');
+  const [crAppSubmitting, setCRAppSubmitting] = useState(false);
+  const [crAppMsg, setCRAppMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setDeadlineTick(Date.now()), 60000);
@@ -305,6 +316,59 @@ export const StudentDashboard: React.FC = () => {
       refreshSubmissionHistory();
     }
   }, [activeTab, receipt]);
+
+  const fetchCRAppData = async () => {
+    try {
+      setCRAppLoading(true);
+      const [statusRes, classesRes] = await Promise.allSettled([
+        api.get('/cr-applications/my-status'),
+        api.get('/classes'),
+      ]);
+      if (statusRes.status === 'fulfilled' && statusRes.value.data.success) {
+        setCRAppStatus(statusRes.value.data.application || null);
+      }
+      if (classesRes.status === 'fulfilled' && classesRes.value.data.success) {
+        setCRAppClasses(classesRes.value.data.classes || []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setCRAppLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'cr-application') {
+      fetchCRAppData();
+    }
+  }, [activeTab]);
+
+  const handleCRAppSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCRAppMsg(null);
+    if (!crAppClassId) {
+      setCRAppMsg({ type: 'error', text: 'Please select a class.' });
+      return;
+    }
+    try {
+      setCRAppSubmitting(true);
+      const res = await api.post('/cr-applications/apply', {
+        classId: crAppClassId,
+        roleType: crAppRoleType,
+        reason: crAppReason.trim() || undefined,
+      });
+      if (res.data.success) {
+        setCRAppMsg({ type: 'success', text: res.data.message });
+        await fetchCRAppData();
+      }
+    } catch (err: any) {
+      setCRAppMsg({ type: 'error', text: err.response?.data?.message || 'Failed to submit application.' });
+    } finally {
+      setCRAppSubmitting(false);
+    }
+  };
+
+
 
   // Fetch assignments when subject changes with instant cache rehydration
   useEffect(() => {
@@ -888,6 +952,15 @@ export const StudentDashboard: React.FC = () => {
               <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold rounded-full shrink-0">
                 Verified Student
               </span>
+              {student?.staffRole && (
+                <a
+                  href="/admin/dashboard"
+                  className="px-2.5 py-0.5 bg-purple-500/30 text-purple-200 border border-purple-400/40 text-xs font-bold rounded-full shrink-0 hover:bg-purple-500/50 transition flex items-center gap-1"
+                >
+                  <Crown className="w-3 h-3 text-amber-300" />
+                  {student.staffRole === 'CR_ASSISTANT' ? 'CR Assistant' : 'Class CR'} Portal &rarr;
+                </a>
+              )}
             </div>
             <p className="text-xs sm:text-sm text-slate-400 mt-1 break-words">
               Roll Number: <span className="font-mono font-bold text-white">{student?.rollNumber}</span>
@@ -898,38 +971,55 @@ export const StudentDashboard: React.FC = () => {
       </div>
 
       {/* DASHBOARD TAB NAVIGATION BAR */}
-      <div className="glass-panel-dark p-1.5 rounded-2xl border border-white/10 shadow-xl grid grid-cols-1 sm:grid-cols-4 gap-1.5 backdrop-blur-xl">
+      <div className="glass-panel-dark p-1.5 rounded-2xl border border-white/10 shadow-xl grid grid-cols-3 sm:grid-cols-6 gap-1.5 backdrop-blur-xl">
         <button
           onClick={() => handleTabChange('submit')}
-          className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
+          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
             activeTab === 'submit' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
-          <Upload className="w-4 h-4" /> Submit Assignment
+          <Upload className="w-4 h-4" /> Submit
+        </button>
+        <button
+          onClick={() => handleTabChange('quizzes')}
+          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+            activeTab === 'quizzes' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <FileText className="w-4 h-4" /> Quizzes
         </button>
         <button
           onClick={() => handleTabChange('groups')}
-          className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
+          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
             activeTab === 'groups' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
-          <Users className="w-4 h-4" /> Group Registration
+          <Users className="w-4 h-4" /> Groups
         </button>
         <button
           onClick={() => handleTabChange('history')}
-          className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
+          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
             activeTab === 'history' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
-          <History className="w-4 h-4" /> My Submissions ({mySubmissions.length})
+          <History className="w-4 h-4" /> <span className="hidden sm:inline">Submissions ({mySubmissions.length})</span><span className="sm:hidden">History</span>
         </button>
         <button
           onClick={() => handleTabChange('security')}
-          className={`py-3 px-4 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 ${
+          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
             activeTab === 'security' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
-          <KeyRound className="w-4 h-4" /> Change Password
+          <KeyRound className="w-4 h-4" /> Security
+        </button>
+        <button
+          onClick={() => handleTabChange('cr-application')}
+          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+            activeTab === 'cr-application' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
+          }`}
+          title="Apply to become Class Representative or CR Assistant"
+        >
+          <Crown className="w-4 h-4" /> <span className="hidden sm:inline">CR Apply</span><span className="sm:hidden">CR</span>
         </button>
       </div>
 
@@ -1996,6 +2086,231 @@ export const StudentDashboard: React.FC = () => {
               )}
             </button>
           </form>
+        </div>
+      )}
+
+      {/* QUIZZES TAB */}
+      {activeTab === 'quizzes' && (
+        <StudentQuizSection
+          studentClassId={typeof student?.classId === 'object' ? student.classId?._id : student?.classId}
+          studentName={student?.name || ''}
+          rollNumber={student?.rollNumber || ''}
+        />
+      )}
+
+      {/* CR APPLICATION TAB */}
+      {activeTab === 'cr-application' && (
+        <div className="space-y-6">
+          <div className="glass-panel rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200/80 dark:border-white/10 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 pb-6">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2.5">
+                  <Crown className="w-6 h-6 text-purple-600" />
+                  Class Representative & Assistant Application
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  Apply to become your class representative or CR assistant. Super Admin approval is required.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={fetchCRAppData}
+                className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+              >
+                <Loader2 className={`w-3.5 h-3.5 ${crAppLoading ? 'animate-spin' : 'hidden'}`} />
+                Refresh Status
+              </button>
+            </div>
+
+            {/* Current Application Status Card */}
+            {crAppLoading ? (
+              <div className="py-12 text-center">
+                <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto" />
+                <p className="text-xs text-slate-500 mt-2 font-medium">Checking application status...</p>
+              </div>
+            ) : crAppStatus ? (
+              <div className="space-y-5">
+                <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-5 sm:p-6 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-xs uppercase font-bold text-slate-400">Current Application</span>
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+                        {crAppStatus.roleType === 'CR_ASSISTANT' ? 'CR Assistant Position' : 'Class Representative (CR) Position'}
+                      </h3>
+                    </div>
+                    <div>
+                      <span
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border ${
+                          crAppStatus.status === 'APPROVED'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : crAppStatus.status === 'REJECTED'
+                            ? 'bg-red-100 text-red-800 border-red-300'
+                            : 'bg-amber-100 text-amber-800 border-amber-300'
+                        }`}
+                      >
+                        {crAppStatus.status === 'APPROVED' && '✓ Approved'}
+                        {crAppStatus.status === 'REJECTED' && '✕ Rejected'}
+                        {crAppStatus.status === 'PENDING' && '⏳ Under Review (Pending)'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2 border-t border-slate-200 dark:border-white/10">
+                    <div>
+                      <span className="text-slate-400 font-medium">Class:</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
+                        {(crAppStatus.classId as any)?.name
+                          ? `${(crAppStatus.classId as any).name} (Sec: ${(crAppStatus.classId as any).section || 'A'}, Sem: ${(crAppStatus.classId as any).semester || '1'})`
+                          : 'Class Assigned'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium">Applied On:</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
+                        {new Date(crAppStatus.appliedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    {crAppStatus.reason && (
+                      <div className="sm:col-span-2">
+                        <span className="text-slate-400 font-medium">Your Reason/Note:</span>
+                        <p className="text-slate-700 dark:text-slate-300 mt-0.5 italic">"{crAppStatus.reason}"</p>
+                      </div>
+                    )}
+                    {crAppStatus.status === 'REJECTED' && crAppStatus.rejectionReason && (
+                      <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-xl p-3 text-red-800">
+                        <span className="font-bold">Super Admin Feedback:</span>
+                        <p className="mt-0.5">{crAppStatus.rejectionReason}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {crAppStatus.status === 'APPROVED' && (
+                    <div className="pt-3 border-t border-emerald-200">
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-bold text-emerald-900">
+                            🎉 Your application was approved!
+                          </p>
+                          <p className="text-[11px] text-emerald-700 mt-0.5">
+                            You now have access to staff management features. Sign in with your student credentials on the staff login portal.
+                          </p>
+                        </div>
+                        <a
+                          href="/admin/dashboard"
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shrink-0 shadow"
+                        >
+                          Go to Staff Portal &rarr;
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {crAppStatus.status === 'REJECTED' && (
+                  <p className="text-xs text-slate-500 text-center">
+                    You can submit a new application below if you would like to apply again.
+                  </p>
+                )}
+              </div>
+            ) : null}
+
+            {/* Application Form — shown if no active application or if previous was rejected */}
+            {(!crAppStatus || crAppStatus.status === 'REJECTED') && !crAppLoading && (
+              <form onSubmit={handleCRAppSubmit} className="space-y-5 pt-2">
+                <div className="border-t border-slate-200 dark:border-white/10 pt-6">
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    {crAppStatus ? 'Submit a New Application' : 'New CR / Assistant Application'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Fill out the form below to apply. Note that each class can only have one active CR and one active Assistant.
+                  </p>
+                </div>
+
+                {crAppMsg && (
+                  <div
+                    className={`p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2 border ${
+                      crAppMsg.type === 'success'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-red-50 text-red-800 border-red-200'
+                    }`}
+                  >
+                    {crAppMsg.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    )}
+                    <span>{crAppMsg.text}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      Position Applying For <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={crAppRoleType}
+                      onChange={(e) => setCRAppRoleType(e.target.value as 'CR' | 'CR_ASSISTANT')}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value="CR">Class Representative (CR)</option>
+                      <option value="CR_ASSISTANT">CR Assistant</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      Select Your Class <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={crAppClassId}
+                      onChange={(e) => setCRAppClassId(e.target.value)}
+                      required
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value="">-- Choose Class --</option>
+                      {crAppClasses.map((cls) => (
+                        <option key={cls._id} value={cls._id}>
+                          {cls.name} (Section: {cls.section}, Sem: {cls.semester})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                    Reason / Statement (Optional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Briefly state why you want to become CR/Assistant or any relevant experience..."
+                    value={crAppReason}
+                    onChange={(e) => setCRAppReason(e.target.value)}
+                    maxLength={500}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-purple-500"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1 text-right">{crAppReason.length}/500</p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={crAppSubmitting}
+                  className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2"
+                >
+                  {crAppSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Submitting Application...
+                    </>
+                  ) : (
+                    <>
+                      <Crown className="w-4 h-4" /> Submit CR Application
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       )}
 

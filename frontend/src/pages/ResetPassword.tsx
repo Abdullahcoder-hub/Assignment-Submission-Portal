@@ -14,6 +14,7 @@ export const ResetPassword: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [loginPath, setLoginPath] = useState('/student/login');
 
   useEffect(() => {
     sessionStorage.removeItem('portalResetToken');
@@ -35,12 +36,15 @@ export const ResetPassword: React.FC = () => {
     setErrorMsg(null);
 
     try {
-      const res = await api.post('/auth/student/reset-password', {
+      const res = await api.post('/auth/reset-password', {
         token,
         newPassword,
         confirmPassword,
       });
       setSuccessMsg(res.data.message || 'Password reset successfully!');
+      if (res.data.role === 'TEACHER' || res.data.role === 'CR' || res.data.role === 'SUPER_ADMIN') {
+        setLoginPath('/admin/login');
+      }
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || 'Failed to reset password.');
     } finally {
@@ -56,7 +60,7 @@ export const ResetPassword: React.FC = () => {
             <Lock className="w-10 h-10" />
           </div>
           <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Set New Password</h2>
-          <p className="text-sm text-slate-500">Enter a new secure password for your student account.</p>
+          <p className="text-sm text-slate-500">Enter a new secure password for your account.</p>
         </div>
 
         {errorMsg && (
@@ -71,7 +75,7 @@ export const ResetPassword: React.FC = () => {
             <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
             <p className="text-sm text-emerald-900 font-medium">{successMsg}</p>
             <Link
-              to="/student/login"
+              to={loginPath}
               className="inline-block px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition"
             >
               Proceed to Login

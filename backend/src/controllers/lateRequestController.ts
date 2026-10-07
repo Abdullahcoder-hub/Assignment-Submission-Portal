@@ -13,6 +13,9 @@ import { escapeRegex } from '../utils/fileValidation.js';
 import { escapeHtml } from '../utils/fileValidation.js';
 import { logError } from '../utils/logger.js';
 
+import Quiz from '../models/Quiz.js';
+import Class from '../models/Class.js';
+
 const decisionToken = (requestId: string, decision: 'Approved' | 'Rejected') => jwt.sign(
   { requestId, decision, purpose: 'late-request-decision' },
   getJwtSecret(),
@@ -21,7 +24,8 @@ const decisionToken = (requestId: string, decision: 'Approved' | 'Rejected') => 
 
 const getLateRequestDetails = async (requestId: string) => LateRequest.findById(requestId)
   .populate('subjectId', 'name code')
-  .populate('assignmentId', 'title');
+  .populate('assignmentId', 'title')
+  .populate('quizId', 'title');
 
 const applyDecision = async (requestId: string, decision: 'Approved' | 'Rejected', adminId?: string, rejectionReason?: string) => {
   const lateReq = await LateRequest.findById(requestId);
@@ -41,14 +45,14 @@ const notifyStudentOfDecision = async (lateReq: any, decision: 'Approved' | 'Rej
   const student = await Student.findById(lateReq.studentId);
   if (!student || !details) return;
   const subject = details.subjectId as any;
-  const assignment = details.assignmentId as any;
+  const assignment = (details.assignmentId as any) || (details.quizId as any);
   await sendLateRequestEmail({
     toEmail: student.email,
     toName: student.name,
     studentName: student.name,
     rollNumber: student.rollNumber,
-    subjectName: subject.name,
-    assignmentTitle: assignment.title,
+    subjectName: subject?.name || 'Subject',
+    assignmentTitle: assignment?.title || 'Quiz / Assignment',
     reason: lateReq.reason,
     decision,
     rejectionReason: lateReq.rejectionReason,
@@ -65,15 +69,67 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const { subjectId, assignmentId, reason, requestType = 'Submission' } = req.body;
+    const { subjectId, assignmentId, quizId, reason, requestType = 'Submission' } = req.body;
 
-    if (!subjectId || !assignmentId) {
-      res.status(400).json({ success: false, message: 'Subject ID and Assignment ID are required.' });
+    if (!['Submission', 'GroupRegistration', 'Quiz'].includes(requestType)) {
+      res.status(400).json({ success: false, message: 'Invalid late request type.' });
       return;
     }
 
-    if (!['Submission', 'GroupRegistration'].includes(requestType)) {
-      res.status(400).json({ success: false, message: 'Invalid late request type.' });
+    if (requestType === 'Quiz') {
+      if (!quizId) {
+        res.status(400).json({ success: false, message: 'Quiz ID is required for quiz late request.' });
+        return;
+      }
+      const quiz = await Quiz.findById(quizId);
+      if (!quiz || !quiz.isActive) {
+        res.status(400).json({ success: false, message: 'Quiz not available.' });
+        return;
+      }
+
+      // Check existing request
+      const existingRequest = await LateRequest.findOne({
+        quizId,
+        studentId: req.student.id,
+        requestType: 'Quiz',
+      });
+
+      if (existingRequest) {
+        res.status(200).json({
+          success: true,
+          message: existingRequest.status === 'Approved'
+            ? 'Late quiz submission request has already been approved by CR.'
+            : existingRequest.status === 'Rejected'
+            ? 'Late quiz submission request was rejected by CR.'
+            : 'Late quiz submission request is pending CR approval.',
+          request: existingRequest,
+        });
+        return;
+      }
+
+      const newRequest = await LateRequest.create({
+        studentId: req.student.id,
+        requestType: 'Quiz',
+        subjectId: quiz.subjectId,
+        classId: quiz.classId,
+        quizId: quiz._id,
+        studentName: req.student.name,
+        rollNumber: req.student.rollNumber,
+        reason: reason ? reason.trim() : 'Quiz deadline passed.',
+        status: 'Pending',
+        requestedAt: new Date(),
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Your late quiz submission request has been submitted for CR approval.',
+        request: newRequest,
+      });
+      return;
+    }
+
+    if (!subjectId || !assignmentId) {
+      res.status(400).json({ success: false, message: 'Subject ID and Assignment ID are required.' });
       return;
     }
 
@@ -136,6 +192,7 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
       status: 'Pending',
       requestedAt: new Date(),
     });
+
 
     const student = await Student.findById(studentId).select('name email').lean();
     const subject = await Subject.findById(assignment.subjectId).select('name code crId').populate('crId', 'name email').lean();
@@ -277,11 +334,16 @@ export const getMyLateRequestStatus = async (req: AuthRequest, res: Response): P
  */
 export const getLateRequests = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { subjectId, assignmentId, status, search, requestType } = req.query;
+    const { subjectId, assignmentId, quizId, status, search, requestType } = req.query;
     const filter: any = {};
+
+    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId) {
+      filter.classId = req.admin.assignedClassId;
+    }
 
     if (subjectId) filter.subjectId = subjectId;
     if (assignmentId) filter.assignmentId = assignmentId;
+    if (quizId) filter.quizId = quizId;
     if (status) filter.status = status;
     if (requestType) {
       filter.requestType = requestType === 'Submission' ? { $in: ['Submission', null] } : requestType;
@@ -299,6 +361,7 @@ export const getLateRequests = async (req: AuthRequest, res: Response): Promise<
     const requests = await LateRequest.find(filter)
       .populate('subjectId', 'name code')
       .populate('assignmentId', 'title deadline submissionType allowLateGroupRegistration')
+      .populate('quizId', 'title deadline quizType')
       .populate('groupId', 'groupName leader members')
       .sort({ requestedAt: -1 });
 

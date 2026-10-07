@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest, RegisteredStudent } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { ClassManagementSection } from '../components/ClassManagementSection';
+import { TeacherAssignmentSection } from '../components/TeacherAssignmentSection';
+import { StaffManagementSection } from '../components/StaffManagementSection';
+import { QuizManagementSection } from '../components/QuizManagementSection';
+import { CRApplicationsTab } from '../components/CRApplicationsTab';
+import { TeacherSharedAssignmentsSection } from '../components/TeacherSharedAssignmentsSection';
+import { ShareAssignmentModal } from '../components/ShareAssignmentModal';
 import {
   LayoutDashboard,
   BookOpen,
@@ -36,12 +43,38 @@ import {
   UserX,
   User,
   Copy,
+  GraduationCap,
+  Shield,
+  ShieldCheck,
+  Share2,
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
-  const { logout } = useAuth();
-  const validTabs = ['dashboard', 'subjects', 'assignments', 'submissions', 'groups', 'late-requests', 'students', 'settings'] as const;
+  const { user, role, logout } = useAuth();
+  const isSuperAdmin = role === 'SUPER_ADMIN';
+  const isTeacher = role === 'TEACHER';
+  const isCR = role === 'CR';
+  const isCRAssistant = role === 'CR_ASSISTANT';
+  const isCROrAssistant = isCR || isCRAssistant;
+
+  const validTabs = [
+    'dashboard',
+    'classes',
+    'teachers',
+    'staff',
+    'cr-applications',
+    'quizzes',
+    'shared-assignments',
+    'subjects',
+    'assignments',
+    'submissions',
+    'groups',
+    'late-requests',
+    'students',
+    'settings',
+  ] as const;
   type TabType = typeof validTabs[number];
+
 
   const [activeTab, setActiveTabState] = useState<TabType>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -63,6 +96,7 @@ export const AdminDashboard: React.FC = () => {
   // Join Code state
   const [joinCode, setJoinCode] = useState<string>('');
   const [isJoinCodeActive, setIsJoinCodeActive] = useState<boolean>(true);
+  const [sharingAssignment, setSharingAssignment] = useState<Assignment | null>(null);
 
   // Stats state with instant cache rehydration
   const [stats, setStats] = useState<DashboardStats | null>(() => {
@@ -820,7 +854,7 @@ export const AdminDashboard: React.FC = () => {
       {/* SIDEBAR */}
       <aside className="w-full md:w-64 glass-panel-dark text-slate-300 shrink-0 border-r border-white/10 backdrop-blur-xl">
         <div className="p-6 border-b border-white/10">
-          <h2 className="text-xs uppercase tracking-wider text-blue-400 font-bold">CR Admin Portal</h2>
+          <h2 className="text-xs uppercase tracking-wider text-blue-400 font-bold">Staff Portal</h2>
           <p className="text-sm font-semibold text-white mt-1">Management Suite</p>
         </div>
 
@@ -837,89 +871,173 @@ export const AdminDashboard: React.FC = () => {
             Dashboard
           </button>
 
-          <button
-            onClick={() => setActiveTab('subjects')}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
-              activeTab === 'subjects'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'hover:bg-white/5 text-slate-400 hover:text-white'
-            }`}
-          >
-            <BookOpen className="w-5 h-5" />
-            Subjects ({subjects.length})
-          </button>
+          {isSuperAdmin && (
+            <>
+              <button
+                onClick={() => setActiveTab('classes')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'classes'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <GraduationCap className="w-5 h-5" />
+                Classes &amp; Sections
+              </button>
 
-          <button
-            onClick={() => setActiveTab('assignments')}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
-              activeTab === 'assignments'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'hover:bg-white/5 text-slate-400 hover:text-white'
-            }`}
-          >
-            <FileCheck className="w-5 h-5" />
-            Assignments ({assignments.length})
-          </button>
+              <button
+                onClick={() => setActiveTab('teachers')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'teachers'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <ShieldCheck className="w-5 h-5" />
+                Teacher Assignments
+              </button>
 
-          <button
-            onClick={() => setActiveTab('submissions')}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
-              activeTab === 'submissions'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'hover:bg-white/5 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Inbox className="w-5 h-5" />
-            Submissions
-          </button>
+              <button
+                onClick={() => setActiveTab('staff')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'staff'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Shield className="w-5 h-5" />
+                Staff Management
+              </button>
 
-          <button
-            onClick={() => setActiveTab('groups')}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
-              activeTab === 'groups'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'hover:bg-white/5 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Users className="w-5 h-5" />
-            Group Registrations
-          </button>
+              <button
+                onClick={() => setActiveTab('cr-applications')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'cr-applications'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Crown className="w-5 h-5" />
+                CR Applications
+              </button>
+            </>
+          )}
 
-          <button
-            onClick={() => setActiveTab('late-requests')}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
-              activeTab === 'late-requests'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'hover:bg-white/5 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Clock className="w-5 h-5" />
-            Late Requests
-          </button>
+          {!isSuperAdmin && (
+            <button
+              onClick={() => setActiveTab('quizzes')}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                activeTab === 'quizzes'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                  : 'hover:bg-white/5 text-slate-400 hover:text-white'
+              }`}
+            >
+              <FileText className="w-5 h-5" />
+              Quizzes (MCQ &amp; Written)
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveTab('students')}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
-              activeTab === 'students'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'hover:bg-white/5 text-slate-400 hover:text-white'
-            }`}
-          >
-            <UserCheck className="w-5 h-5" />
-            Registered Students
-          </button>
+          {isTeacher && (
+            <button
+              onClick={() => setActiveTab('shared-assignments')}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                activeTab === 'shared-assignments'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                  : 'hover:bg-white/5 text-slate-400 hover:text-white'
+              }`}
+            >
+              <Archive className="w-5 h-5" />
+              Shared Assignments
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
-              activeTab === 'settings'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'hover:bg-white/5 text-slate-400 hover:text-white'
-            }`}
-          >
-            <KeyRound className="w-5 h-5" />
-            Class Join Code
-          </button>
+          {isCROrAssistant && (
+            <>
+              <button
+                onClick={() => setActiveTab('subjects')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'subjects'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <BookOpen className="w-5 h-5" />
+                Subjects ({subjects.length})
+              </button>
+
+              <button
+                onClick={() => setActiveTab('assignments')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'assignments'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <FileCheck className="w-5 h-5" />
+                Assignments ({assignments.length})
+              </button>
+
+              <button
+                onClick={() => setActiveTab('submissions')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'submissions'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Inbox className="w-5 h-5" />
+                Submissions
+              </button>
+
+              <button
+                onClick={() => setActiveTab('groups')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'groups'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Users className="w-5 h-5" />
+                Group Registrations
+              </button>
+
+              <button
+                onClick={() => setActiveTab('late-requests')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'late-requests'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Clock className="w-5 h-5" />
+                Late Requests
+              </button>
+
+              <button
+                onClick={() => setActiveTab('students')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'students'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <UserCheck className="w-5 h-5" />
+                Registered Students
+              </button>
+
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'settings'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <KeyRound className="w-5 h-5" />
+                Class Join Code
+              </button>
+            </>
+          )}
         </nav>
       </aside>
 
@@ -946,170 +1064,297 @@ export const AdminDashboard: React.FC = () => {
         {/* 1. DASHBOARD OVERVIEW TAB */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard Overview</h1>
-              <p className="text-slate-500 text-sm">Real-time statistics for class assignment submissions.</p>
-            </div>
+            {isSuperAdmin ? (
+              <div className="space-y-6">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Super Admin Control Center</h1>
+                  <p className="text-slate-500 text-sm">
+                    Manage classes, teacher subject assignments, staff approvals, and CR applications.
+                  </p>
+                </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-              <button
-                type="button"
-                onClick={() => setActiveTab('subjects')}
-                className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-blue-300 transition group"
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-blue-600 transition">Subjects</span>
-                  <div className="p-2 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white rounded-xl text-blue-600 transition shadow-sm">
-                    <BookOpen className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="text-3xl font-extrabold text-slate-900 mt-2">
-                  {stats ? stats.totalSubjects : 0}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('assignments')}
-                className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-indigo-300 transition group"
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-indigo-600 transition">Assignments</span>
-                  <div className="p-2 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white rounded-xl text-indigo-600 transition shadow-sm">
-                    <FileCheck className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="text-3xl font-extrabold text-slate-900 mt-2">
-                  {stats ? stats.totalAssignments : 0}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterStatus('');
-                  setActiveTab('submissions');
-                }}
-                className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-emerald-300 transition group"
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-emerald-600 transition">Total Submissions</span>
-                  <div className="p-2 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white rounded-xl text-emerald-600 transition shadow-sm">
-                    <Inbox className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="text-3xl font-extrabold text-slate-900 mt-2">
-                  {stats ? stats.totalSubmissions : 0}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterStatus('');
-                  setActiveTab('submissions');
-                }}
-                className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-amber-300 transition group"
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-amber-600 transition">Today</span>
-                  <div className="p-2 bg-amber-50 group-hover:bg-amber-600 group-hover:text-white rounded-xl text-amber-600 transition shadow-sm">
-                    <Calendar className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="text-3xl font-extrabold text-slate-900 mt-2">
-                  {stats ? stats.todaysSubmissions : 0}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterStatus('Late');
-                  setActiveTab('submissions');
-                }}
-                className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-red-300 transition group"
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-red-600 transition">Late Submissions</span>
-                  <div className="p-2 bg-red-50 group-hover:bg-red-600 group-hover:text-white rounded-xl text-red-600 transition shadow-sm">
-                    <Clock className="w-5 h-5" />
-                  </div>
-                </div>
-                <div className="text-3xl font-extrabold text-slate-900 mt-2">
-                  {stats ? stats.lateSubmissions : 0}
-                </div>
-              </button>
-            </div>
-
-            {/* Recent Submissions Table */}
-            <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-slate-900">Recent Submissions</h3>
-                <button
-                  onClick={() => setActiveTab('submissions')}
-                  className="text-xs font-bold text-blue-600 hover:underline"
-                >
-                  View All Submissions →
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="hidden sm:table w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
-                      <th className="p-3">Student</th>
-                      <th className="p-3">Roll #</th>
-                      <th className="p-3">Subject</th>
-                      <th className="p-3">Assignment</th>
-                      <th className="p-3">Submitted At</th>
-                      <th className="p-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {recentSubmissions.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-6 text-slate-400 text-sm">
-                          No recent submissions recorded yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      recentSubmissions.map((sub) => (
-                        <tr key={sub._id} className="hover:bg-slate-50/80">
-                          <td className="p-3 font-semibold text-slate-900">{sub.studentName}</td>
-                          <td className="p-3 font-mono font-medium text-slate-700">{sub.rollNumber}</td>
-                          <td className="p-3 font-medium text-slate-700">
-                            {(sub.subjectId as any)?.name || 'Subject'}
-                          </td>
-                          <td className="p-3 font-medium text-slate-700">
-                            {(sub.assignmentId as any)?.title || 'Assignment'}
-                          </td>
-                          <td className="p-3 text-slate-500 text-xs">{formatDate(sub.submittedAt)}</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 rounded-md">
-                              {sub.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-                <div className="sm:hidden divide-y divide-slate-100">
-                  {recentSubmissions.length === 0 ? <p className="py-6 text-center text-sm text-slate-400">No recent submissions recorded yet.</p> : recentSubmissions.map((sub) => (
-                    <div key={sub._id} className="p-3 space-y-1.5">
-                      <div className="flex justify-between gap-2"><p className="font-bold text-slate-900 break-words">{sub.studentName}</p><span className="shrink-0 px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded-md">{sub.status}</span></div>
-                      <p className="text-xs text-slate-600 break-words">{sub.rollNumber} · {(sub.subjectId as any)?.name || 'Subject'}</p>
-                      <p className="text-xs font-semibold text-slate-700 break-words">{(sub.assignmentId as any)?.title || 'Assignment'}</p>
-                      <p className="text-[11px] text-slate-500">{formatDate(sub.submittedAt)}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('classes')}
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-blue-300 transition group"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-blue-600 transition">Classes</span>
+                      <div className="p-2 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white rounded-xl text-blue-600 transition shadow-sm">
+                        <GraduationCap className="w-5 h-5" />
+                      </div>
                     </div>
-                  ))}
+                    <div className="mt-4">
+                      <p className="text-xs text-slate-500">Manage semesters &amp; sections</p>
+                      <p className="text-sm font-bold text-blue-600 mt-1">Open Classes &rarr;</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('teachers')}
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-indigo-300 transition group"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-indigo-600 transition">Teacher Assignments</span>
+                      <div className="p-2 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white rounded-xl text-indigo-600 transition shadow-sm">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-xs text-slate-500">Link teachers to class + subject</p>
+                      <p className="text-sm font-bold text-indigo-600 mt-1">Assign Teachers &rarr;</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('staff')}
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-purple-300 transition group"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-purple-600 transition">Staff &amp; CR Accounts</span>
+                      <div className="p-2 bg-purple-50 group-hover:bg-purple-600 group-hover:text-white rounded-xl text-purple-600 transition shadow-sm">
+                        <Shield className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-xs text-slate-500">Approve &amp; manage staff accounts</p>
+                      <p className="text-sm font-bold text-purple-600 mt-1">Manage Staff &rarr;</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('cr-applications')}
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-amber-300 transition group"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-amber-600 transition">CR Requests</span>
+                      <div className="p-2 bg-amber-50 group-hover:bg-amber-600 group-hover:text-white rounded-xl text-amber-600 transition shadow-sm">
+                        <Crown className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-xs text-slate-500">Review student CR applications</p>
+                      <p className="text-sm font-bold text-amber-600 mt-1">Review Requests &rarr;</p>
+                    </div>
+                  </button>
                 </div>
               </div>
-            </div>
+            ) : isTeacher ? (
+              <div className="space-y-6">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Teacher Portal</h1>
+                  <p className="text-slate-500 text-sm">
+                    Manage quizzes and grading for your assigned subjects and classes.
+                  </p>
+                </div>
+
+                <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900">Quiz &amp; Examination Management</h2>
+                      <p className="text-xs text-slate-500">Create MCQs, Written quizzes, and grade student submissions.</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('quizzes')}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow transition"
+                  >
+                    Go to Quizzes &rarr;
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Class CR Dashboard</h1>
+                  <p className="text-slate-500 text-sm">Real-time statistics for class assignment submissions.</p>
+                </div>
+
+                {/* Stats Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('subjects')}
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-blue-300 transition group"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-blue-600 transition">Subjects</span>
+                      <div className="p-2 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white rounded-xl text-blue-600 transition shadow-sm">
+                        <BookOpen className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="text-3xl font-extrabold text-slate-900 mt-2">
+                      {stats ? stats.totalSubjects : 0}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('assignments')}
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-indigo-300 transition group"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-indigo-600 transition">Assignments</span>
+                      <div className="p-2 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white rounded-xl text-indigo-600 transition shadow-sm">
+                        <FileCheck className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="text-3xl font-extrabold text-slate-900 mt-2">
+                      {stats ? stats.totalAssignments : 0}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterStatus('');
+                      setActiveTab('submissions');
+                    }}
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-emerald-300 transition group"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-emerald-600 transition">Total Submissions</span>
+                      <div className="p-2 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white rounded-xl text-emerald-600 transition shadow-sm">
+                        <Inbox className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="text-3xl font-extrabold text-slate-900 mt-2">
+                      {stats ? stats.totalSubmissions : 0}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterStatus('');
+                      setActiveTab('submissions');
+                    }}
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-amber-300 transition group"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-amber-600 transition">Today</span>
+                      <div className="p-2 bg-amber-50 group-hover:bg-amber-600 group-hover:text-white rounded-xl text-amber-600 transition shadow-sm">
+                        <Calendar className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="text-3xl font-extrabold text-slate-900 mt-2">
+                      {stats ? stats.todaysSubmissions : 0}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterStatus('Late');
+                      setActiveTab('submissions');
+                    }}
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-red-300 transition group"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-red-600 transition">Late Submissions</span>
+                      <div className="p-2 bg-red-50 group-hover:bg-red-600 group-hover:text-white rounded-xl text-red-600 transition shadow-sm">
+                        <Clock className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="text-3xl font-extrabold text-slate-900 mt-2">
+                      {stats ? stats.lateSubmissions : 0}
+                    </div>
+                  </button>
+                </div>
+
+                {/* Recent Submissions Table */}
+                <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-slate-900">Recent Submissions</h3>
+                    <button
+                      onClick={() => setActiveTab('submissions')}
+                      className="text-xs font-bold text-blue-600 hover:underline"
+                    >
+                      View All Submissions &rarr;
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="hidden sm:table w-full text-left text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
+                          <th className="p-3">Student</th>
+                          <th className="p-3">Roll #</th>
+                          <th className="p-3">Subject</th>
+                          <th className="p-3">Assignment</th>
+                          <th className="p-3">Submitted At</th>
+                          <th className="p-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {recentSubmissions.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="text-center py-6 text-slate-400">
+                              No recent submissions recorded yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          recentSubmissions.map((sub) => (
+                            <tr key={sub._id} className="hover:bg-slate-50/80">
+                              <td className="p-3 font-semibold text-slate-900">{sub.studentName}</td>
+                              <td className="p-3 font-mono font-medium text-slate-700">{sub.rollNumber}</td>
+                              <td className="p-3 font-medium text-slate-700">
+                                {(sub.subjectId as any)?.name || 'Subject'}
+                              </td>
+                              <td className="p-3 font-medium text-slate-700">
+                                {(sub.assignmentId as any)?.title || 'Assignment'}
+                              </td>
+                              <td className="p-3 text-slate-500 text-xs">{formatDate(sub.submittedAt)}</td>
+                              <td className="p-3">
+                                <span className="px-2 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 rounded-md">
+                                  {sub.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                    <div className="sm:hidden divide-y divide-slate-100">
+                      {recentSubmissions.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-slate-400">No recent submissions recorded yet.</p>
+                      ) : (
+                        recentSubmissions.map((sub) => (
+                          <div key={sub._id} className="p-3 space-y-1.5">
+                            <div className="flex justify-between gap-2">
+                              <p className="font-bold text-slate-900 break-words">{sub.studentName}</p>
+                              <span className="shrink-0 px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded-md">
+                                {sub.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-600 break-words">
+                              {sub.rollNumber} &bull; {(sub.subjectId as any)?.name || 'Subject'}
+                            </p>
+                            <p className="text-xs font-semibold text-slate-700 break-words">
+                              {(sub.assignmentId as any)?.title || 'Assignment'}
+                            </p>
+                            <p className="text-[11px] text-slate-500">{formatDate(sub.submittedAt)}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
+
+        {/* CR APPLICATIONS TAB */}
+        {activeTab === 'cr-applications' && <CRApplicationsTab />}
 
         {/* 2. SUBJECTS TAB */}
         {activeTab === 'subjects' && (
@@ -1350,6 +1595,13 @@ export const AdminDashboard: React.FC = () => {
                           {renderStatusBadge(assignmentStatus(ass))}
                         </td>
                         <td className="p-4 text-right space-x-2">
+                          <button
+                            title="Share Submissions with Teacher"
+                            onClick={() => setSharingAssignment(ass)}
+                            className="p-1.5 hover:bg-indigo-100 text-indigo-600 rounded-lg transition"
+                          >
+                            <Share2 className="w-4 h-4" />
+                          </button>
                           <button
                             title="Download All as ZIP"
                             onClick={() => handleDownloadZip(ass._id)}
@@ -2050,6 +2302,21 @@ export const AdminDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* CLASSES & SECTIONS TAB */}
+        {activeTab === 'classes' && <ClassManagementSection />}
+
+        {/* TEACHER ASSIGNMENTS TAB */}
+        {activeTab === 'teachers' && <TeacherAssignmentSection />}
+
+        {/* STAFF MANAGEMENT TAB */}
+        {activeTab === 'staff' && <StaffManagementSection />}
+
+        {/* QUIZZES TAB */}
+        {activeTab === 'quizzes' && <QuizManagementSection />}
+
+        {/* SHARED ASSIGNMENTS TAB (TEACHER VIEW) */}
+        {activeTab === 'shared-assignments' && <TeacherSharedAssignmentsSection />}
+
         {defaultersModalOpen && selectedDefaulterAssignment && (
           <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="glass-panel rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 shadow-2xl border border-slate-200/80 dark:border-white/10 space-y-4">
@@ -2070,18 +2337,20 @@ export const AdminDashboard: React.FC = () => {
 
         {/* MODAL: ADD / EDIT SUBJECT */}
         {editingGroup && (
-          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <form onSubmit={handleAdminGroupSave} className="glass-panel rounded-3xl max-w-lg w-full p-6 space-y-4 border border-slate-200/80 shadow-2xl">
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-start sm:items-center justify-center overflow-y-auto p-3 sm:p-4">
+            <form onSubmit={handleAdminGroupSave} className="glass-panel rounded-3xl max-w-lg w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto p-4 sm:p-6 space-y-4 border border-slate-200/80 shadow-2xl">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Edit {editingGroup.groupName}</h3>
                 <p className="text-xs text-slate-500">Update members or select a new group leader.</p>
               </div>
               <div className="space-y-2">
                 {adminGroupMembers.map((member, index) => (
-                  <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                    <input value={member.name} onChange={(e) => setAdminGroupMembers((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: e.target.value } : item))} placeholder="Name" className="px-3 py-2 border rounded-xl text-sm" />
-                    <input value={member.rollNumber} onChange={(e) => setAdminGroupMembers((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, rollNumber: e.target.value } : item))} placeholder="Roll number" className="px-3 py-2 border rounded-xl text-sm font-mono" required />
-                    <button type="button" onClick={() => setAdminGroupMembers((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="px-2 text-red-600" title="Remove member"><X className="w-4 h-4" /></button>
+                  <div key={index} className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
+                    <input value={member.name} onChange={(e) => setAdminGroupMembers((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: e.target.value } : item))} placeholder="Name" className="w-full min-w-0 px-3 py-2 border rounded-xl text-sm" />
+                    <div className="flex min-w-0 gap-2">
+                      <input value={member.rollNumber} onChange={(e) => setAdminGroupMembers((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, rollNumber: e.target.value } : item))} placeholder="Roll number" className="w-full min-w-0 px-3 py-2 border rounded-xl text-sm font-mono" required />
+                      <button type="button" onClick={() => setAdminGroupMembers((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="shrink-0 px-2 text-red-600" title="Remove member"><X className="w-4 h-4" /></button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2090,9 +2359,9 @@ export const AdminDashboard: React.FC = () => {
                 <option value="">Select leader</option>
                 {adminGroupMembers.filter((member) => member.rollNumber.trim()).map((member) => <option key={member.rollNumber} value={member.rollNumber}>{member.name || member.rollNumber} ({member.rollNumber})</option>)}
               </select>
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setEditingGroup(null)} className="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl">Cancel</button>
-                <button type="submit" disabled={adminGroupSaving} className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl">{adminGroupSaving ? 'Saving...' : 'Save Group'}</button>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                <button type="button" onClick={() => setEditingGroup(null)} className="w-full sm:w-auto px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl">Cancel</button>
+                <button type="submit" disabled={adminGroupSaving} className="w-full sm:w-auto px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl">{adminGroupSaving ? 'Saving...' : 'Save Group'}</button>
               </div>
             </form>
           </div>
@@ -2400,6 +2669,15 @@ export const AdminDashboard: React.FC = () => {
               </form>
             </div>
           </div>
+        )}
+
+        {/* MODAL: SHARE ASSIGNMENT WITH TEACHER */}
+        {sharingAssignment && (
+          <ShareAssignmentModal
+            assignment={sharingAssignment}
+            onClose={() => setSharingAssignment(null)}
+            onSuccess={() => showToast('success', 'Assignment submissions shared with teacher successfully!')}
+          />
         )}
       </main>
     </div>

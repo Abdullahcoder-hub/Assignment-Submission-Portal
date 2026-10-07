@@ -6,6 +6,7 @@ export interface IStudent extends Document {
   passwordHash?: string;
   tokenVersion: number;
   rollNumber: string;
+  classId?: mongoose.Types.ObjectId;
   googleId?: string;
   isEmailVerified: boolean;
   verificationToken?: string;
@@ -24,6 +25,7 @@ const StudentSchema: Schema = new Schema(
     passwordHash: { type: String },
     tokenVersion: { type: Number, default: 0 },
     rollNumber: { type: String, required: true, unique: true, trim: true },
+    classId: { type: Schema.Types.ObjectId, ref: 'Class', index: true },
     googleId: { type: String, default: '' },
     isEmailVerified: { type: Boolean, default: false },
     verificationToken: { type: String },

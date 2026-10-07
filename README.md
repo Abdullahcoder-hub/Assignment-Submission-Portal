@@ -79,6 +79,8 @@ GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 
 The `seed:admin` command requires `ADMIN_NAME`, `ADMIN_EMAIL`, and a strong `ADMIN_PASSWORD`; it has no built-in credentials.
 
+This command creates or updates the single Super Admin account. Teachers and Class Representatives (CRs) register themselves at `/staff/register`, verify their email from the emailed link, and remain unable to sign in until the Super Admin approves them under **Staff Management**. Assign a class to each CR before approving. They sign in at `/admin/login`; only the Super Admin can approve, edit, or delete these staff accounts. There are no default staff or Super Admin credentials.
+
 Before releasing authenticated Cloudinary delivery, run `npm run secure:uploads` once from `backend/` with database and Cloudinary credentials configured. It converts existing submission assets and invalidates cached public URLs. Check the command's success counts before deploying; CDN invalidation can take a few minutes.
 
 For deployment, set `FRONTEND_URL` in the backend hosting environment to the deployed frontend URL (for example, `https://your-frontend.vercel.app`). This URL is used in email verification and password reset links.

@@ -13,13 +13,16 @@ import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { AdminLogin } from './pages/AdminLogin';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { StaffRegister } from './pages/StaffRegister';
 
 const HomeRedirect: React.FC = () => {
   const { isAuthenticated, role, isLoading } = useAuth();
   if (isLoading) return null;
   if (!isAuthenticated) return <Navigate to="/student/login" replace />;
-  return <Navigate to={role === 'ADMIN' ? '/admin/dashboard' : '/student/dashboard'} replace />;
+  const isStaff = role && ['SUPER_ADMIN', 'TEACHER', 'CR', 'CR_ASSISTANT'].includes(role);
+  return <Navigate to={isStaff ? '/admin/dashboard' : '/student/dashboard'} replace />;
 };
+
 
 export const App: React.FC = () => {
   return (
@@ -35,6 +38,7 @@ export const App: React.FC = () => {
               {/* Student Auth Routes */}
               <Route path="/student/login" element={<StudentLogin />} />
               <Route path="/register" element={<StudentRegister />} />
+              <Route path="/staff/register" element={<StaffRegister />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />

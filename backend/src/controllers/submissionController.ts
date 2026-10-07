@@ -216,6 +216,7 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
     // 8. Create MongoDB Submission
     const submissionIdStr = generateSubmissionId(subject.code);
     const submittedAtDate = new Date();
+    const submissionClassId = subject.classId || assignment.classId || (req.student?.classId as any);
 
     let newSubmission;
     try {
@@ -224,6 +225,7 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
         studentId,
         assignmentId: assignment._id,
         subjectId: subject._id,
+        classId: submissionClassId || undefined,
         studentName: studentName.trim(),
         rollNumber: cleanRollNumber,
         email: email.trim().toLowerCase(),
@@ -338,6 +340,10 @@ export const getSubmissions = async (req: AuthRequest, res: Response): Promise<v
 
     const filter: any = {};
 
+    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId) {
+      filter.classId = req.admin.assignedClassId;
+    }
+
     if (subjectId) filter.subjectId = subjectId;
     if (assignmentId) filter.assignmentId = assignmentId;
     if (status) filter.status = status;
@@ -379,24 +385,35 @@ export const getSubmissions = async (req: AuthRequest, res: Response): Promise<v
  */
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const totalSubjects = await Subject.countDocuments({ isActive: true });
-    const totalAssignments = await Assignment.countDocuments({ isActive: true });
-    const totalSubmissions = await Submission.countDocuments();
+    const classFilter: any = (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId)
+      ? { classId: req.admin.assignedClassId }
+      : {};
 
     const startOfToday = moment().tz(timezone).startOf('day').toDate();
     const endOfToday = moment().tz(timezone).endOf('day').toDate();
 
-    const todaysSubmissions = await Submission.countDocuments({
-      submittedAt: { $gte: startOfToday, $lte: endOfToday },
-    });
-
-    const lateSubmissions = await Submission.countDocuments({ isLate: true });
-
-    const recentSubmissions = await Submission.find()
-      .populate('subjectId', 'name code')
-      .populate('assignmentId', 'title')
-      .sort({ submittedAt: -1 })
-      .limit(5);
+    const [
+      totalSubjects,
+      totalAssignments,
+      totalSubmissions,
+      todaysSubmissions,
+      lateSubmissions,
+      recentSubmissions,
+    ] = await Promise.all([
+      Subject.countDocuments({ isActive: true, ...classFilter }),
+      Assignment.countDocuments({ isActive: true, ...classFilter }),
+      Submission.countDocuments(classFilter),
+      Submission.countDocuments({
+        submittedAt: { $gte: startOfToday, $lte: endOfToday },
+        ...classFilter,
+      }),
+      Submission.countDocuments({ isLate: true, ...classFilter }),
+      Submission.find(classFilter)
+        .populate('subjectId', 'name code')
+        .populate('assignmentId', 'title')
+        .sort({ submittedAt: -1 })
+        .limit(5),
+    ]);
 
     res.status(200).json({
       success: true,
@@ -410,6 +427,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       recentSubmissions,
     });
   } catch (error) {
+    logError('[Dashboard Stats Error]', error);
     res.status(500).json({ success: false, message: 'Failed to fetch dashboard statistics.' });
   }
 };

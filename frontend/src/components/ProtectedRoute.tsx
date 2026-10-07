@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { UserRole } from '../types';
 
 interface ProtectedRouteProps {
-  requiredRole?: UserRole;
+  requiredRole?: UserRole | UserRole[];
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole }) => {
@@ -22,12 +22,20 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole }) 
     );
   }
 
+  const isStaffRole = role && ['SUPER_ADMIN', 'TEACHER', 'CR', 'CR_ASSISTANT'].includes(role);
+
   if (!isAuthenticated) {
-    return <Navigate to={requiredRole === 'ADMIN' ? '/admin/login' : '/student/login'} replace />;
+    const isStaffRequired = requiredRole === 'ADMIN' || (Array.isArray(requiredRole) && requiredRole.some(r => ['ADMIN', 'SUPER_ADMIN', 'TEACHER', 'CR', 'CR_ASSISTANT'].includes(r)));
+    return <Navigate to={isStaffRequired ? '/admin/login' : '/student/login'} replace />;
   }
 
-  if (requiredRole && role !== requiredRole) {
-    return <Navigate to={role === 'ADMIN' ? '/admin/dashboard' : '/student/dashboard'} replace />;
+  if (requiredRole) {
+    const allowed = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
+    // The staff dashboard is shared by Super Admins, Teachers, and CRs.
+    const isAllowed = role !== 'ADMIN' && (allowed.includes(role!) || (allowed.includes('ADMIN') && isStaffRole));
+    if (!isAllowed) {
+      return <Navigate to={isStaffRole ? '/admin/dashboard' : '/student/dashboard'} replace />;
+    }
   }
 
   return <Outlet />;

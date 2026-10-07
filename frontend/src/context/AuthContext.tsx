@@ -10,7 +10,7 @@ interface AuthContextType {
   isLoading: boolean;
   adminLogin: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   studentLogin: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  studentRegister: (data: any) => Promise<{ success: boolean; message?: string }>;
+  studentRegister: (data: any) => Promise<{ success: boolean; message?: string; canResend?: boolean }>;
   googleLoginStudent: (data: { idToken: string; rollNumber?: string; joinCode?: string }) => Promise<{
     success: boolean;
     requiresJoinCode?: boolean;
@@ -53,12 +53,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       try {
-        if (storedRole === 'ADMIN') {
+        if (['SUPER_ADMIN', 'TEACHER', 'CR', 'CR_ASSISTANT'].includes(storedRole)) {
           const res = await api.get('/auth/me');
           if (res.data.success) {
             setUser(res.data.admin);
-            setRole('ADMIN');
+            setRole(res.data.admin.role || storedRole);
             setToken(storedToken);
+            localStorage.setItem('userRole', res.data.admin.role || storedRole);
             localStorage.setItem('portalUser', JSON.stringify(res.data.admin));
           } else {
             logout();
@@ -73,6 +74,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             logout();
           }
+        } else {
+          logout();
         }
       } catch (error: any) {
         if (error.response?.status === 401 || error.response?.status === 403) {
@@ -104,11 +107,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.data.success) {
         const jwtToken = res.data.token;
         const adminData = res.data.admin;
+        const assignedRole = adminData.role as UserRole;
+        if (!['SUPER_ADMIN', 'TEACHER', 'CR', 'CR_ASSISTANT'].includes(assignedRole)) {
+          return { success: false, message: 'This account role is not allowed to sign in.' };
+        }
         localStorage.setItem('portalToken', jwtToken);
-        localStorage.setItem('userRole', 'ADMIN');
+        localStorage.setItem('userRole', assignedRole);
         localStorage.setItem('portalUser', JSON.stringify(adminData));
         setToken(jwtToken);
-        setRole('ADMIN');
+        setRole(assignedRole);
         setUser(adminData);
         return { success: true };
       }
@@ -118,6 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message };
     }
   };
+
 
   const studentLogin = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
@@ -140,13 +148,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const studentRegister = async (formData: any): Promise<{ success: boolean; message?: string }> => {
+  const studentRegister = async (formData: any): Promise<{ success: boolean; message?: string; canResend?: boolean }> => {
     try {
       const res = await api.post('/auth/student/register', formData);
       return { success: res.data.success, message: res.data.message };
     } catch (error: any) {
       const message = error.response?.data?.message || 'Registration failed.';
-      return { success: false, message };
+      return { success: false, message, canResend: error.response?.status === 502 };
     }
   };
 

@@ -213,7 +213,7 @@ export const sendSubmissionConfirmationEmail = async (
 };
 
 /**
- * Send Student Account Email Verification Link via Brevo
+ * Send an account email verification link via Brevo
  */
 export const sendStudentVerificationEmail = async (
   toEmail: string,
@@ -232,9 +232,9 @@ export const sendStudentVerificationEmail = async (
     <html>
     <body style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 20px;">
       <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0;">
-        <h2 style="color: #1e293b; margin-top: 0;">Verify Your Student Account Email</h2>
+        <h2 style="color: #1e293b; margin-top: 0;">Verify Your Account Email</h2>
         <p style="color: #475569;">Hello <strong>${escapeHtml(toName)}</strong>,</p>
-        <p style="color: #475569;">Thank you for registering on the Class Assignment Submission Portal. Please click the button below to verify your email address and activate your account:</p>
+        <p style="color: #475569;">Thank you for registering on the Class Assignment Submission Portal. Please click below to verify your email address. This link expires in 5 minutes. Teacher and CR accounts also need Super Admin approval before sign-in.</p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${verifyUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; font-weight: bold; border-radius: 8px; text-decoration: none; display: inline-block;">Verify Email Address</a>
         </div>
@@ -275,7 +275,7 @@ export const sendPasswordResetEmail = async (
       <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0;">
         <h2 style="color: #1e293b; margin-top: 0;">Reset Your Password</h2>
         <p style="color: #475569;">Hello <strong>${escapeHtml(toName)}</strong>,</p>
-        <p style="color: #475569;">You requested a password reset for your Class Portal account. Click the button below to set a new password:</p>
+        <p style="color: #475569;">You requested a password reset for your Class Portal account. Click below to set a new password:</p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${resetUrl}" style="background-color: #dc2626; color: #ffffff; padding: 12px 24px; font-weight: bold; border-radius: 8px; text-decoration: none; display: inline-block;">Reset Password</a>
         </div>
@@ -291,5 +291,132 @@ export const sendPasswordResetEmail = async (
   } catch (error: any) {
     console.error('[Brevo Reset Email Error] Delivery failed.');
     return { success: false, error: 'Failed to send password reset email.' };
+  }
+};
+
+const backendUrl = (process.env.BACKEND_URL || 'http://localhost:5000').replace(/\/$/, '');
+
+/**
+ * Send email to Super Admin for staff registration approval with 1-click Approve / Reject action buttons
+ */
+export const sendStaffRegistrationApprovalEmail = async (params: {
+  superAdminEmail: string;
+  superAdminName: string;
+  applicantName: string;
+  applicantEmail: string;
+  applicantRole: string;
+  className?: string;
+  staffId: string;
+  approvalToken: string;
+}): Promise<{ success: boolean; error?: string }> => {
+  const roleLabel =
+    params.applicantRole === 'TEACHER'
+      ? 'Teacher'
+      : params.applicantRole === 'CR_ASSISTANT'
+      ? 'CR Assistant'
+      : 'Class Representative (CR)';
+
+  const approveUrl = `${backendUrl}/api/admin/staff/email-decision/${params.staffId}/approve/${params.approvalToken}`;
+  const rejectUrl = `${backendUrl}/api/admin/staff/email-decision/${params.staffId}/reject/${params.approvalToken}`;
+
+  if (!apiKey || apiKey === 'xkeysib-demo') {
+    console.info(`[Brevo Email Mock] Staff approval email for ${params.applicantName} (${roleLabel}) skipped.`);
+    return { success: true };
+  }
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 20px; color: #1e293b;">
+      <div style="max-width: 560px; margin: 0 auto; background: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <h2 style="color: #4f46e5; margin-top: 0; font-size: 20px;">Staff Account Approval Required</h2>
+        <p style="color: #475569;">Hello <strong>${escapeHtml(params.superAdminName)}</strong>,</p>
+        <p style="color: #475569;">A new staff account has registered on the Class Portal and is waiting for your Super Admin approval:</p>
+        
+        <div style="background: #f1f5f9; padding: 16px; border-radius: 12px; margin: 20px 0; font-size: 14px; line-height: 1.6;">
+          <p style="margin: 4px 0;"><strong>Name:</strong> ${escapeHtml(params.applicantName)}</p>
+          <p style="margin: 4px 0;"><strong>Email:</strong> ${escapeHtml(params.applicantEmail)}</p>
+          <p style="margin: 4px 0;"><strong>Requested Role:</strong> <span style="background: #e0e7ff; color: #3730a3; padding: 2px 8px; border-radius: 6px; font-weight: bold;">${roleLabel}</span></p>
+          ${params.className ? `<p style="margin: 4px 0;"><strong>Target Class:</strong> ${escapeHtml(params.className)}</p>` : ''}
+        </div>
+
+        <p style="color: #475569; font-size: 14px;">You can approve or reject this registration directly using the buttons below without signing into the portal:</p>
+        
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${approveUrl}" style="background-color: #16a34a; color: #ffffff; padding: 12px 24px; font-weight: bold; border-radius: 10px; text-decoration: none; display: inline-block; margin-right: 12px; font-size: 14px;">✓ Approve Account</a>
+          <a href="${rejectUrl}" style="background-color: #dc2626; color: #ffffff; padding: 12px 24px; font-weight: bold; border-radius: 10px; text-decoration: none; display: inline-block; font-size: 14px;">✕ Reject Account</a>
+        </div>
+
+        <p style="color: #94a3b8; font-size: 12px; text-align: center;">You can also manage staff accounts directly inside the Super Admin Dashboard under Staff Management.</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    await sendBrevoEmail(`New Staff Approval Required — ${params.applicantName} (${roleLabel})`, htmlContent, params.superAdminEmail, params.superAdminName);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Brevo Staff Approval Email Error] Delivery failed.');
+    return { success: false, error: 'Failed to send staff approval email to Super Admin.' };
+  }
+};
+
+/**
+ * Send email to Teacher when CR shares assignment submissions (ZIP & CSV)
+ */
+export const sendSharedAssignmentToTeacherEmail = async (params: {
+  teacherEmail: string;
+  teacherName: string;
+  crName: string;
+  assignmentTitle: string;
+  subjectName: string;
+  className: string;
+  submissionsCount: number;
+  note?: string;
+  hasZip: boolean;
+  hasCsv: boolean;
+}): Promise<{ success: boolean; error?: string }> => {
+  const portalUrl = `${frontendUrl}/admin/dashboard`;
+
+  if (!apiKey || apiKey === 'xkeysib-demo') {
+    console.info(`[Brevo Email Mock] Shared assignment notification for ${params.teacherName} skipped.`);
+    return { success: true };
+  }
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 20px; color: #1e293b;">
+      <div style="max-width: 560px; margin: 0 auto; background: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <h2 style="color: #2563eb; margin-top: 0; font-size: 20px;">📦 Assignment Submissions Shared With You</h2>
+        <p style="color: #475569;">Hello <strong>${escapeHtml(params.teacherName)}</strong>,</p>
+        <p style="color: #475569;">Class Representative <strong>${escapeHtml(params.crName)}</strong> has shared the student assignment submission files with you for review:</p>
+        
+        <div style="background: #f1f5f9; padding: 16px; border-radius: 12px; margin: 20px 0; font-size: 14px; line-height: 1.6;">
+          <p style="margin: 4px 0;"><strong>Assignment:</strong> ${escapeHtml(params.assignmentTitle)}</p>
+          <p style="margin: 4px 0;"><strong>Subject:</strong> ${escapeHtml(params.subjectName)}</p>
+          <p style="margin: 4px 0;"><strong>Class:</strong> ${escapeHtml(params.className)}</p>
+          <p style="margin: 4px 0;"><strong>Total Submissions:</strong> ${params.submissionsCount} student(s)</p>
+          <p style="margin: 4px 0;"><strong>Shared Files:</strong> ${params.hasZip ? '📦 All Submissions ZIP' : ''}${params.hasZip && params.hasCsv ? ' & ' : ''}${params.hasCsv ? '📊 Summary / Defaulters CSV' : ''}</p>
+          ${params.note ? `<p style="margin: 8px 0 0 0; border-top: 1px solid #cbd5e1; padding-top: 8px; color: #334155; font-style: italic;"><strong>CR Note:</strong> "${escapeHtml(params.note)}"</p>` : ''}
+        </div>
+
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${portalUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; font-weight: bold; border-radius: 10px; text-decoration: none; display: inline-block; font-size: 14px;">Open Teacher Portal &rarr;</a>
+        </div>
+
+        <p style="color: #94a3b8; font-size: 12px; text-align: center;">Sign in to your Teacher portal and navigate to the "Shared Assignments" tab to download the complete ZIP and CSV package.</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    await sendBrevoEmail(`Submissions Shared: ${params.assignmentTitle} (${params.className})`, htmlContent, params.teacherEmail, params.teacherName);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Brevo Shared Assignment Email Error] Delivery failed.');
+    return { success: false, error: 'Failed to send shared assignment notification email.' };
   }
 };

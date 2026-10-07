@@ -10,6 +10,7 @@ export const VerifyEmail: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [success, setSuccess] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
+  const [loginPath, setLoginPath] = useState('/student/login');
 
   const [resendEmail, setResendEmail] = useState<string>('');
   const [isResending, setIsResending] = useState<boolean>(false);
@@ -20,7 +21,7 @@ export const VerifyEmail: React.FC = () => {
     setIsResending(true);
     setResendMsg(null);
     try {
-      const res = await api.post('/auth/student/resend-verification', { email: resendEmail.trim() });
+      const res = await api.post('/auth/resend-verification', { email: resendEmail.trim() });
       setResendMsg(res.data.message);
     } catch (err: any) {
       setResendMsg(err.response?.data?.message || 'Failed to resend verification email.');
@@ -39,9 +40,12 @@ export const VerifyEmail: React.FC = () => {
       }
 
       try {
-        const res = await api.post('/auth/student/verify-email', { token });
+        const res = await api.post('/auth/verify-email', { token });
         setSuccess(res.data.success);
         setMessage(res.data.message || 'Email verified successfully!');
+        if (res.data.role === 'TEACHER' || res.data.role === 'CR' || res.data.role === 'SUPER_ADMIN') {
+          setLoginPath('/admin/login');
+        }
       } catch (err: any) {
         setSuccess(false);
         setMessage(err.response?.data?.message || 'Verification link is invalid or has expired.');
@@ -67,10 +71,10 @@ export const VerifyEmail: React.FC = () => {
             <h2 className="text-2xl font-extrabold text-slate-900">Email Verified!</h2>
             <p className="text-sm text-slate-600">{message}</p>
             <Link
-              to="/student/login"
+              to={loginPath}
               className="inline-block w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow transition"
             >
-              Proceed to Student Login
+              {loginPath === '/admin/login' ? 'Proceed to Staff Login' : 'Proceed to Student Login'}
             </Link>
           </div>
         ) : (
@@ -80,11 +84,11 @@ export const VerifyEmail: React.FC = () => {
             <p className="text-sm text-slate-600">{message}</p>
 
             <div className="pt-4 border-t border-slate-200 space-y-3">
-              <p className="text-xs text-slate-500 font-medium">Need a new verification link? Enter your email address below:</p>
+              <p className="text-xs text-slate-500 font-medium">Need a new verification link? Enter your account email address below:</p>
               <div className="flex gap-2">
                 <input
                   type="email"
-                  placeholder="student@example.com"
+                  placeholder="you@example.com"
                   value={resendEmail}
                   onChange={(e) => setResendEmail(e.target.value)}
                   className="flex-1 px-3 py-2 border rounded-xl text-xs"

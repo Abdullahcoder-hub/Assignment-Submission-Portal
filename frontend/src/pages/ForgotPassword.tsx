@@ -18,7 +18,7 @@ export const ForgotPassword: React.FC = () => {
     setSuccessMsg(null);
 
     try {
-      const res = await api.post('/auth/student/forgot-password', { email: email.trim() });
+      const res = await api.post('/auth/forgot-password', { email: email.trim() });
       setSuccessMsg(res.data.message || 'Reset instructions sent to your email.');
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || 'Failed to process password reset.');
@@ -35,7 +35,7 @@ export const ForgotPassword: React.FC = () => {
             <KeyRound className="w-10 h-10" />
           </div>
           <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Forgot Password</h2>
-          <p className="text-sm text-slate-500">Enter your registered student email address to receive password reset instructions.</p>
+          <p className="text-sm text-slate-500">Enter your account email to receive password reset instructions.</p>
         </div>
 
         {errorMsg && (

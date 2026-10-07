@@ -1,11 +1,13 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ILateRequest extends Document {
-  requestType: 'Submission' | 'GroupRegistration';
+  requestType: 'Submission' | 'GroupRegistration' | 'Quiz';
   studentId: mongoose.Types.ObjectId;
   groupId?: mongoose.Types.ObjectId;
   subjectId: mongoose.Types.ObjectId;
-  assignmentId: mongoose.Types.ObjectId;
+  classId?: mongoose.Types.ObjectId;
+  assignmentId?: mongoose.Types.ObjectId;
+  quizId?: mongoose.Types.ObjectId;
   studentName: string;
   rollNumber: string;
   reason: string;
@@ -20,11 +22,13 @@ export interface ILateRequest extends Document {
 
 const LateRequestSchema: Schema = new Schema(
   {
-    requestType: { type: String, enum: ['Submission', 'GroupRegistration'], default: 'Submission', index: true },
+    requestType: { type: String, enum: ['Submission', 'GroupRegistration', 'Quiz'], default: 'Submission', index: true },
     studentId: { type: Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
     groupId: { type: Schema.Types.ObjectId, ref: 'Group', index: true },
     subjectId: { type: Schema.Types.ObjectId, ref: 'Subject', required: true, index: true },
-    assignmentId: { type: Schema.Types.ObjectId, ref: 'Assignment', required: true, index: true },
+    classId: { type: Schema.Types.ObjectId, ref: 'Class', index: true },
+    assignmentId: { type: Schema.Types.ObjectId, ref: 'Assignment', index: true },
+    quizId: { type: Schema.Types.ObjectId, ref: 'Quiz', index: true },
     studentName: { type: String, required: true, trim: true },
     rollNumber: { type: String, required: true, trim: true },
     reason: { type: String, default: 'Late submission request' },

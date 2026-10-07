@@ -7,10 +7,18 @@ import LateRequest from '../models/LateRequest.js';
 import Admin from '../models/Admin.js';
 import { AuthRequest } from '../middleware/auth.js';
 
-export const getSubjects = async (req: Request, res: Response): Promise<void> => {
+export const getSubjects = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { includeInactive } = req.query;
-    const filter = includeInactive === 'true' ? {} : { isActive: true };
+    const { includeInactive, classId } = req.query;
+    const filter: any = includeInactive === 'true' ? {} : { isActive: true };
+
+    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId) {
+      filter.classId = req.admin.assignedClassId;
+    } else if (req.student?.classId) {
+      filter.classId = req.student.classId;
+    } else if (classId) {
+      filter.classId = classId;
+    }
 
     const subjects = await Subject.find(filter).sort({ name: 1 }).lean();
     res.status(200).json({ success: true, count: subjects.length, subjects });
@@ -21,7 +29,9 @@ export const getSubjects = async (req: Request, res: Response): Promise<void> =>
 
 export const createSubject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { name, code, description, crId, isActive } = req.body;
+    const { name, code, description, isActive } = req.body;
+    const classId = req.admin?.assignedClassId || req.body.classId;
+    const crId = req.admin?.id || req.body.crId;
 
     if (!name || !code) {
       res.status(400).json({ success: false, message: 'Subject name and code are required.' });
@@ -37,7 +47,10 @@ export const createSubject = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     const uppercaseCode = code.trim().toUpperCase();
-    const existing = await Subject.findOne({ code: uppercaseCode });
+    const existingFilter: any = { code: uppercaseCode };
+    if (classId) existingFilter.classId = classId;
+
+    const existing = await Subject.findOne(existingFilter);
     if (existing) {
       const statusText = existing.isActive ? '' : ' (currently inactive)';
       res.status(400).json({
@@ -51,6 +64,7 @@ export const createSubject = async (req: AuthRequest, res: Response): Promise<vo
       name: name.trim(),
       code: uppercaseCode,
       description: description ? description.trim() : '',
+      classId: classId || undefined,
       crId: crId || undefined,
       isActive: isActive !== undefined ? Boolean(isActive) : true,
     });

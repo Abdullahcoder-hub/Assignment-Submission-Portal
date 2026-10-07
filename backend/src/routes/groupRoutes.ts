@@ -10,9 +10,18 @@ import {
   getNextGroupNumber,
   updateGroup,
 } from '../controllers/groupController.js';
-import { authenticateStudent, authenticateAdmin, authenticateStudentOrAdmin } from '../middleware/auth.js';
+import {
+  authenticateStudent,
+  authenticateAdmin,
+  authenticateStudentOrAdmin,
+  forbidTeacher,
+  authenticateCR,
+} from '../middleware/auth.js';
 
 const router = Router();
+
+// Strict Teacher blocker: Teachers cannot access group routes
+router.use(forbidTeacher);
 
 // Student Group Routes
 router.post('/', authenticateStudent, createGroup);
@@ -22,9 +31,9 @@ router.get('/next-number', authenticateStudentOrAdmin, getNextGroupNumber);
 router.get('/my-group/:subjectId', authenticateStudent, getMyGroupForSubject);
 router.put('/:id', authenticateStudentOrAdmin, updateGroup);
 
-// Admin / CR Group Routes
-router.get('/', authenticateAdmin, getGroups);
-router.get('/export-csv', authenticateAdmin, exportGroupsCsv);
-router.delete('/:id', authenticateAdmin, deleteGroup);
+// CR / Assistant Group Routes
+router.get('/', authenticateCR, getGroups);
+router.get('/export-csv', authenticateCR, exportGroupsCsv);
+router.delete('/:id', authenticateCR, deleteGroup);
 
 export default router;

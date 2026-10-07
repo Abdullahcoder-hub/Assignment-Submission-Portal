@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { User, Lock, Mail, KeyRound, Loader2, AlertCircle, CheckCircle2, Shield, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, Mail, KeyRound, Loader2, AlertCircle, CheckCircle2, Shield, Eye, EyeOff, Send } from 'lucide-react';
 import api from '../api/axios';
 
 export const StudentRegister: React.FC = () => {
@@ -20,6 +20,9 @@ export const StudentRegister: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [canResendVerification, setCanResendVerification] = useState<boolean>(false);
+  const [isResending, setIsResending] = useState<boolean>(false);
+  const [resendMsg, setResendMsg] = useState<string | null>(null);
 
   const [rollCheckState, setRollCheckState] = useState<{
     loading: boolean;
@@ -91,6 +94,8 @@ export const StudentRegister: React.FC = () => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+    setCanResendVerification(false);
+    setResendMsg(null);
 
     const cleanRoll = rollNumber.trim();
     if (!/^\d{7}$/.test(cleanRoll)) {
@@ -128,8 +133,28 @@ export const StudentRegister: React.FC = () => {
 
     if (res.success) {
       setSuccessMsg(res.message || 'Registration successful! Check your email for verification.');
+      setCanResendVerification(true);
     } else {
       setErrorMsg(res.message || 'Registration failed.');
+      setCanResendVerification(Boolean(res.canResend));
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email.trim()) {
+      setResendMsg('Please enter your email address to resend verification.');
+      return;
+    }
+
+    setIsResending(true);
+    setResendMsg(null);
+    try {
+      const response = await api.post('/auth/student/resend-verification', { email: email.trim() });
+      setResendMsg(response.data.message || 'A new verification link has been sent. Please check your inbox.');
+    } catch (error: any) {
+      setResendMsg(error.response?.data?.message || 'Failed to resend verification email.');
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -154,11 +179,36 @@ export const StudentRegister: React.FC = () => {
           </div>
         )}
 
+        {canResendVerification && !successMsg && (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={isResending}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2"
+            >
+              {isResending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {isResending ? 'Sending...' : 'Resend Verification Email'}
+            </button>
+            {resendMsg && <p role="status" className="text-center text-xs font-semibold text-blue-700">{resendMsg}</p>}
+          </div>
+        )}
+
         {successMsg ? (
           <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-4">
             <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
             <h3 className="text-lg font-bold text-emerald-900">Registration Successful!</h3>
             <p className="text-sm text-emerald-800">{successMsg}</p>
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={isResending}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold text-xs rounded-xl shadow transition"
+            >
+              {isResending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {isResending ? 'Sending...' : 'Didn’t get the email? Resend'}
+            </button>
+            {resendMsg && <p role="status" className="text-xs font-semibold text-blue-700">{resendMsg}</p>}
             <Link
               to="/student/login"
               className="inline-block px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition"
@@ -369,6 +419,12 @@ export const StudentRegister: React.FC = () => {
           <Link to="/student/login" className="font-bold text-blue-600 hover:underline">
             Log in here
           </Link>
+          <p className="mt-3">
+            Teacher or CR?{' '}
+            <Link to="/staff/register" className="font-bold text-blue-600 hover:underline">
+              Register for a staff account
+            </Link>
+          </p>
         </div>
       </div>
     </div>

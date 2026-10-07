@@ -19,6 +19,7 @@
     "cloudinary": "^2.11.0",
     "compression": "^1.8.2",
     "cors": "^2.8.5",
+    "docx": "^9.8.1",
     "dotenv": "^16.6.1",
     "express": "^4.22.3",
     "express-rate-limit": "^7.5.0",

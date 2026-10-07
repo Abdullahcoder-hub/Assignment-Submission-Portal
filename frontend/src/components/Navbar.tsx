@@ -18,12 +18,20 @@ export const Navbar: React.FC = () => {
     '/student/login',
     '/admin/login',
     '/register',
+    '/staff/register',
     '/verify-email',
     '/forgot-password',
     '/reset-password',
   ].includes(location.pathname);
-  const isAdminRoute = location.pathname.startsWith('/admin');
-  const dashboardPath = role === 'ADMIN' ? '/admin/dashboard' : '/student/dashboard';
+  const isStaff = role && ['SUPER_ADMIN', 'TEACHER', 'CR'].includes(role);
+  const dashboardPath = isStaff ? '/admin/dashboard' : '/student/dashboard';
+
+  const getRoleLabel = () => {
+    if (role === 'SUPER_ADMIN') return 'Super Admin';
+    if (role === 'TEACHER') return 'Teacher';
+    if (role === 'CR') return 'CR';
+    return 'Student';
+  };
 
   return (
     <header className="bg-slate-950/80 backdrop-blur-xl text-white shadow-lg border-b border-white/10 sticky top-0 z-40">
@@ -33,21 +41,21 @@ export const Navbar: React.FC = () => {
             <GraduationCap className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-bold text-sm sm:text-lg leading-tight tracking-tight truncate">Assignment Portal</h1>
-            <p className="hidden sm:block text-xs text-slate-400">Class Submission System</p>
+            <h1 className="font-bold text-sm sm:text-lg leading-tight tracking-tight truncate">Assignment & Quiz Portal</h1>
+            <p className="hidden sm:block text-xs text-slate-400">Class & Examination Portal</p>
           </div>
         </Link>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           {isAuthenticated && !isAuthRoute ? (
             <div className="flex items-center gap-1.5 sm:gap-3">
-              {role === 'ADMIN' ? (
+              {isStaff ? (
                 <Link
                   to="/admin/dashboard"
                   className="hidden md:inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800/80 hover:bg-slate-800 text-slate-200 text-xs font-semibold rounded-full border border-slate-700 transition"
                 >
                   <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-                  CR: {(user as AdminUser)?.name}
+                  {getRoleLabel()}: {(user as AdminUser)?.name}
                 </Link>
               ) : (
                 <Link
@@ -58,6 +66,7 @@ export const Navbar: React.FC = () => {
                   {(user as StudentUser)?.name} (Roll #{(user as StudentUser)?.rollNumber})
                 </Link>
               )}
+
 
               <button
                 onClick={handleLogout}
@@ -77,14 +86,14 @@ export const Navbar: React.FC = () => {
                 <span className="hidden sm:inline">Student Login</span>
                 <span className="sm:hidden">Student</span>
               </Link>
-              {!isAdminRoute && (
+              {!location.pathname.startsWith('/admin') && (
                 <Link
                   to="/admin/login"
                   className="flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold text-slate-300 hover:text-white px-2 sm:px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
                 >
                   <ShieldCheck className="w-4 h-4 text-blue-400" />
-                  <span className="hidden sm:inline">CR Login</span>
-                  <span className="sm:hidden">CR</span>
+                  <span className="hidden sm:inline">Staff / CR Login</span>
+                  <span className="sm:hidden">Staff</span>
                 </Link>
               )}
             </div>

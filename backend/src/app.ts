@@ -15,6 +15,12 @@ import submissionRoutes from './routes/submissionRoutes.js';
 import groupRoutes from './routes/groupRoutes.js';
 import lateRequestRoutes from './routes/lateRequestRoutes.js';
 import adminStudentRoutes from './routes/adminStudentRoutes.js';
+import adminStaffRoutes from './routes/adminStaffRoutes.js';
+import classRoutes from './routes/classRoutes.js';
+import teacherAssignmentRoutes from './routes/teacherAssignmentRoutes.js';
+import quizRoutes from './routes/quizRoutes.js';
+import crApplicationRoutes from './routes/crApplicationRoutes.js';
+import sharedAssignmentRoutes from './routes/sharedAssignmentRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { validateStartupSecurityConfig } from './config/security.js';
 
@@ -127,8 +133,11 @@ app.use('/api', apiLimiter);
 app.use('/api/auth', authLimiter);
 app.use('/api/auth/student', authLimiter);
 app.use('/api/auth/student/register', accountCreationLimiter);
+app.use('/api/auth/staff/register', accountCreationLimiter);
 app.use('/api/auth/student/resend-verification', emailActionLimiter);
+app.use('/api/auth/resend-verification', emailActionLimiter);
 app.use('/api/auth/student/forgot-password', emailActionLimiter);
+app.use('/api/auth/forgot-password', emailActionLimiter);
 app.use('/api/submissions', uploadLimiter);
 
 // Body Parsing Middleware
@@ -143,11 +152,19 @@ app.use('/api/auth', authRoutes);
 app.use('/api/auth/student', studentAuthRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/admin/students', adminStudentRoutes);
+app.use('/api/admin/staff', adminStaffRoutes);
+app.use('/api/classes', classRoutes);
+app.use('/api/teacher-assignments', teacherAssignmentRoutes);
 app.use('/api/subjects', subjectRoutes);
 app.use('/api/assignments', assignmentRoutes);
+app.use('/api/quizzes', quizRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/late-requests', lateRequestRoutes);
+app.use('/api/cr-applications', crApplicationRoutes);
+app.use('/api/shared-assignments', sharedAssignmentRoutes);
+
+
 
 // 404 Route Handler
 app.use((req, res) => {

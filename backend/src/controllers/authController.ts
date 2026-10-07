@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import Admin from '../models/Admin.js';
+import TeacherAssignment from '../models/TeacherAssignment.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { getJwtSecret } from '../config/security.js';
 
@@ -14,7 +15,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const admin = await Admin.findOne({ email: email.toLowerCase().trim() }).lean();
+    const admin = await Admin.findOne({ email: email.toLowerCase().trim() })
+      .populate('assignedClassId', 'name semester section')
+      .lean();
     if (!admin) {
       res.status(401).json({ success: false, message: 'Incorrect email or password.' });
       return;
@@ -26,8 +29,60 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    if (admin.role === 'ADMIN') {
+      res.status(403).json({
+        success: false,
+        message: 'Admin accounts are no longer supported. Sign in with the Super Admin account or register as Teacher/CR.',
+      });
+      return;
+    }
+
+    if (admin.isEmailVerified === false) {
+      res.status(403).json({
+        success: false,
+        message: 'Please verify your email using the link we sent before signing in.',
+      });
+      return;
+    }
+
+    if (admin.approvalStatus === 'Pending') {
+      res.status(403).json({
+        success: false,
+        message: 'Your email is verified. Your account is waiting for Super Admin approval.',
+      });
+      return;
+    }
+
+    if (admin.approvalStatus === 'Rejected') {
+      res.status(403).json({
+        success: false,
+        message: 'Your staff account request was not approved. Please contact the Super Admin.',
+      });
+      return;
+    }
+
+    if (admin.isActive === false) {
+      res.status(403).json({ success: false, message: 'This account has been deactivated. Please contact Super Admin.' });
+      return;
+    }
+
+    // If TEACHER, fetch their active class + subject assignments from the database
+    let teacherAssignments: any[] = [];
+    if (admin.role === 'TEACHER') {
+      teacherAssignments = await TeacherAssignment.find({ teacherId: admin._id, isActive: true })
+        .populate('classId', 'name semester section')
+        .populate('subjectId', 'name code')
+        .lean();
+    }
+
     const token = jwt.sign(
-      { id: admin._id, email: admin.email, role: admin.role, tokenVersion: admin.tokenVersion ?? 0 },
+      {
+        id: admin._id,
+        email: admin.email,
+        role: admin.role,
+        assignedClassId: (admin as any).assignedClassId?._id?.toString(),
+        tokenVersion: admin.tokenVersion ?? 0,
+      },
       getJwtSecret(),
       { expiresIn: '7d' }
     );
@@ -41,6 +96,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         name: admin.name,
         email: admin.email,
         role: admin.role,
+        assignedClassId: (admin as any).assignedClassId,
+        teacherAssignments: admin.role === 'TEACHER' ? teacherAssignments : undefined,
       },
     });
   } catch (error: any) {
@@ -55,10 +112,21 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    const admin = await Admin.findById(req.admin.id).select('name email role').lean();
+    const admin = await Admin.findById(req.admin.id)
+      .select('name email role assignedClassId isActive isEmailVerified approvalStatus')
+      .populate('assignedClassId', 'name semester section')
+      .lean();
     if (!admin) {
-      res.status(404).json({ success: false, message: 'Admin profile not found.' });
+      res.status(404).json({ success: false, message: 'Staff profile not found.' });
       return;
+    }
+
+    let teacherAssignments: any[] = [];
+    if (admin.role === 'TEACHER') {
+      teacherAssignments = await TeacherAssignment.find({ teacherId: (admin as any)._id, isActive: true })
+        .populate('classId', 'name semester section')
+        .populate('subjectId', 'name code')
+        .lean();
     }
 
     res.status(200).json({
@@ -68,6 +136,10 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
         name: (admin as any).name,
         email: (admin as any).email,
         role: (admin as any).role,
+        assignedClassId: (admin as any).assignedClassId,
+        isEmailVerified: (admin as any).isEmailVerified !== false,
+        approvalStatus: (admin as any).approvalStatus || 'Approved',
+        teacherAssignments: admin.role === 'TEACHER' ? teacherAssignments : undefined,
       },
     });
   } catch (error) {

@@ -6,11 +6,19 @@ import Group from '../models/Group.js';
 import LateRequest from '../models/LateRequest.js';
 import { AuthRequest } from '../middleware/auth.js';
 
-export const getAssignments = async (req: Request, res: Response): Promise<void> => {
+export const getAssignments = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { subjectId, includeInactive } = req.query;
+    const { subjectId, includeInactive, classId } = req.query;
     const requestedSubmissionType = String(req.query.submissionType || '').trim();
     const filter: any = {};
+
+    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId) {
+      filter.classId = req.admin.assignedClassId;
+    } else if (req.student?.classId) {
+      filter.classId = req.student.classId;
+    } else if (classId) {
+      filter.classId = classId;
+    }
 
     if (subjectId) {
       filter.subjectId = subjectId;
@@ -83,8 +91,13 @@ export const createAssignment = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    const classId = subject.classId || req.admin?.assignedClassId || req.body.classId;
+    const crId = req.admin?.id || req.body.crId;
+
     const assignment = await Assignment.create({
       subjectId,
+      classId: classId || undefined,
+      crId: crId || undefined,
       title: title.trim(),
       description: description ? description.trim() : '',
       deadline: new Date(deadline),

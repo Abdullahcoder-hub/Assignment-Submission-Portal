@@ -254,6 +254,7 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       groupName: groupName.trim(),
       subjectId: subject._id,
       assignmentId: assignment ? assignment._id : undefined,
+      classId: subject.classId || assignment?.classId || req.student?.classId || undefined,
       leader: leaderDoc,
       members: membersDocs,
       maxGroupSize: maxLimit,
@@ -492,6 +493,10 @@ export const getGroups = async (req: AuthRequest, res: Response): Promise<void> 
   try {
     const { subjectId, assignmentId, search } = req.query;
     const filter: any = {};
+
+    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId) {
+      filter.classId = req.admin.assignedClassId;
+    }
 
     if (subjectId) filter.subjectId = subjectId;
     if (assignmentId) filter.assignmentId = assignmentId;

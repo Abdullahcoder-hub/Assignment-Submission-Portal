@@ -2,6 +2,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IAssignment extends Document {
   subjectId: mongoose.Types.ObjectId;
+  classId?: mongoose.Types.ObjectId;
+  crId?: mongoose.Types.ObjectId;
   title: string;
   description?: string;
   deadline: Date;
@@ -21,6 +23,8 @@ export interface IAssignment extends Document {
 const AssignmentSchema: Schema = new Schema(
   {
     subjectId: { type: Schema.Types.ObjectId, ref: 'Subject', required: true },
+    classId: { type: Schema.Types.ObjectId, ref: 'Class', index: true },
+    crId: { type: Schema.Types.ObjectId, ref: 'Admin', index: true },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
     deadline: { type: Date, required: true },
@@ -41,6 +45,7 @@ const AssignmentSchema: Schema = new Schema(
 );
 
 AssignmentSchema.index({ subjectId: 1, isActive: 1 });
+AssignmentSchema.index({ classId: 1, isActive: 1 });
 AssignmentSchema.index({ isActive: 1, deadline: 1 });
 
 export default mongoose.model<IAssignment>('Assignment', AssignmentSchema);
