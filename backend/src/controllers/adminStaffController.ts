@@ -1,10 +1,8 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import Admin, { StaffRole } from '../models/Admin.js';
 import Class from '../models/Class.js';
 import TeacherAssignment from '../models/TeacherAssignment.js';
 import { AuthRequest } from '../middleware/auth.js';
-import { validatePasswordStrength } from '../utils/passwordValidator.js';
 
 /**
  * 1. GET ALL STAFF ACCOUNTS (Super Admin)
@@ -101,7 +99,7 @@ export const updateStaffApproval = async (req: AuthRequest, res: Response): Prom
 export const updateStaffMember = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, role, assignedClassId, isActive, newPassword } = req.body;
+    const { name, role, assignedClassId, isActive } = req.body;
 
     const staff = await Admin.findById(id);
     if (!staff || !['TEACHER', 'CR', 'CR_ASSISTANT'].includes(staff.role)) {
@@ -145,17 +143,6 @@ export const updateStaffMember = async (req: AuthRequest, res: Response): Promis
         await Class.findOneAndUpdate({ _id: previousClassId, assistantId: staff._id }, { $unset: { assistantId: 1 } });
         staff.assignedClassId = undefined;
       }
-    }
-
-    if (newPassword) {
-      const passVal = validatePasswordStrength(newPassword);
-      if (!passVal.isValid) {
-        res.status(400).json({ success: false, message: passVal.message });
-        return;
-      }
-      const salt = await bcrypt.genSalt(10);
-      staff.passwordHash = await bcrypt.hash(newPassword, salt);
-      staff.tokenVersion = (staff.tokenVersion ?? 0) + 1;
     }
 
     await staff.save();

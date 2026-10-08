@@ -217,6 +217,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const replaceToken = (updatedToken: string) => {
     localStorage.setItem('portalToken', updatedToken);
+    if (role === 'CR' || role === 'CR_ASSISTANT') {
+      localStorage.setItem('staffPortalToken', updatedToken);
+    }
     setToken(updatedToken);
   };
 

@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import {
-  applyForCR,
   getMyCRApplicationStatus,
   getAllCRApplications,
   decideCRApplication,
@@ -9,8 +8,7 @@ import { authenticateStudent, authenticateAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
-// Student endpoints
-router.post('/apply', authenticateStudent, applyForCR);
+// Existing application status remains readable; new CR accounts register through /staff/register.
 router.get('/my-status', authenticateStudent, getMyCRApplicationStatus);
 
 // Super Admin endpoints

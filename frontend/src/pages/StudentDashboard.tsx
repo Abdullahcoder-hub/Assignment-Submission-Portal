@@ -43,9 +43,9 @@ export const StudentDashboard: React.FC = () => {
   const [activeTab, setActiveTabState] = useState<TabType>(() => {
     const params = new URLSearchParams(window.location.search);
     const tabFromUrl = params.get('tab') as TabType;
-    if (validTabs.includes(tabFromUrl)) return tabFromUrl;
+    if (tabFromUrl !== 'cr-application' && validTabs.includes(tabFromUrl)) return tabFromUrl;
     const savedTab = localStorage.getItem('student_active_tab') as TabType;
-    if (validTabs.includes(savedTab)) return savedTab;
+    if (savedTab !== 'cr-application' && validTabs.includes(savedTab)) return savedTab;
     return 'submit';
   });
 
@@ -1021,15 +1021,6 @@ export const StudentDashboard: React.FC = () => {
           }`}
         >
           <KeyRound className="w-4 h-4" /> Security
-        </button>
-        <button
-          onClick={() => handleTabChange('cr-application')}
-          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-            activeTab === 'cr-application' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
-          }`}
-          title="Apply to become Class Representative or CR Assistant"
-        >
-          <Crown className="w-4 h-4" /> <span className="hidden sm:inline">CR Apply</span><span className="sm:hidden">CR</span>
         </button>
       </div>
 

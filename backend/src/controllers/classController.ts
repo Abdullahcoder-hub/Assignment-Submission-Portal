@@ -22,8 +22,8 @@ const findAvailableClassStaff = (id: string, role: 'CR' | 'CR_ASSISTANT', classI
 export const getClasses = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const filter: any = {};
-    if (req.admin?.role === 'CR' && req.admin.assignedClassId) {
-      filter._id = req.admin.assignedClassId;
+    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '')) {
+      filter._id = req.admin?.assignedClassId || null;
     }
 
     const classes = await Class.find(filter)
@@ -91,7 +91,7 @@ export const getClassById = async (req: AuthRequest, res: Response): Promise<voi
  */
 export const createClass = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { semester, section, name, customJoinCode, crId } = req.body;
+    const { semester, section, name, crId } = req.body;
 
     if (!semester || !section) {
       res.status(400).json({ success: false, message: 'Semester and Section are required.' });
@@ -112,14 +112,10 @@ export const createClass = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    // Determine unique join code
-    let joinCode = customJoinCode ? customJoinCode.trim().toUpperCase() : generateRandomJoinCode();
+    // Generate class access codes here; assigned CRs manage them after creation.
+    let joinCode = generateRandomJoinCode();
     const codeExists = await Class.findOne({ joinCode });
     if (codeExists) {
-      if (customJoinCode) {
-        res.status(400).json({ success: false, message: `Join code "${joinCode}" is already in use by another class.` });
-        return;
-      }
       joinCode = generateRandomJoinCode();
     }
 
@@ -180,7 +176,7 @@ export const createClass = async (req: AuthRequest, res: Response): Promise<void
 export const updateClass = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { semester, section, name, joinCode, isJoinCodeActive, crId, assistantId, isActive } = req.body;
+    const { semester, section, name, crId, assistantId, isActive } = req.body;
 
     const classDoc = await Class.findById(id);
     if (!classDoc) {
@@ -205,17 +201,6 @@ export const updateClass = async (req: AuthRequest, res: Response): Promise<void
     }
 
     if (name) classDoc.name = name.trim();
-    if (joinCode) {
-      const cleanCode = joinCode.trim().toUpperCase();
-      const conflict = await Class.findOne({ _id: { $ne: id }, joinCode: cleanCode });
-      if (conflict) {
-        res.status(400).json({ success: false, message: `Join code "${cleanCode}" is already in use.` });
-        return;
-      }
-      classDoc.joinCode = cleanCode;
-    }
-
-    if (isJoinCodeActive !== undefined) classDoc.isJoinCodeActive = Boolean(isJoinCodeActive);
     if (isActive !== undefined) classDoc.isActive = Boolean(isActive);
 
     if (crId !== undefined) {
@@ -291,9 +276,8 @@ export const regenerateClassJoinCode = async (req: AuthRequest, res: Response): 
       return;
     }
 
-    // Permission check: Admin or the CR / Assistant assigned to this class
-    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId !== id) {
-      res.status(403).json({ success: false, message: 'You can only manage your own class join code.' });
+    if (!['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') || req.admin?.assignedClassId !== id) {
+      res.status(403).json({ success: false, message: 'Only the CR assigned to this class can manage its join code.' });
       return;
     }
 
@@ -317,6 +301,37 @@ export const regenerateClassJoinCode = async (req: AuthRequest, res: Response): 
   }
 };
 
+export const updateClassJoinCode = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const code = String(req.body.joinCode || '').trim().toUpperCase();
+    if (!['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') || req.admin?.assignedClassId !== id) {
+      res.status(403).json({ success: false, message: 'Only the CR assigned to this class can change its join code.' });
+      return;
+    }
+    if (!/^[A-Z0-9-]{4,32}$/.test(code)) {
+      res.status(400).json({ success: false, message: 'Join code must be 4–32 characters using letters, numbers, or hyphens.' });
+      return;
+    }
+    const existing = await Class.findOne({ joinCode: code, _id: { $ne: id } });
+    if (existing) {
+      res.status(400).json({ success: false, message: 'That join code is already used by another class.' });
+      return;
+    }
+    const classDoc = await Class.findById(id);
+    if (!classDoc) {
+      res.status(404).json({ success: false, message: 'Class not found.' });
+      return;
+    }
+    classDoc.joinCode = code;
+    classDoc.isJoinCodeActive = true;
+    await classDoc.save();
+    res.status(200).json({ success: true, message: 'Class join code updated.', joinCode: code, isJoinCodeActive: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to update class join code.' });
+  }
+};
+
 /**
  * 6. TOGGLE CLASS JOIN CODE ACTIVE STATUS
  */
@@ -329,8 +344,8 @@ export const toggleClassJoinCode = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId !== id) {
-      res.status(403).json({ success: false, message: 'You can only manage your own class.' });
+    if (!['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') || req.admin?.assignedClassId !== id) {
+      res.status(403).json({ success: false, message: 'Only the CR assigned to this class can manage its join code.' });
       return;
     }
 

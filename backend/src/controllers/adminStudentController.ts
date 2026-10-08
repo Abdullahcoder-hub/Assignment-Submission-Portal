@@ -2,6 +2,7 @@ import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import Student from '../models/Student.js';
 import Submission from '../models/Submission.js';
+import TeacherAssignment from '../models/TeacherAssignment.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { validatePasswordStrength } from '../utils/passwordValidator.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
@@ -14,6 +15,21 @@ export const getStudents = async (req: AuthRequest, res: Response): Promise<void
   try {
     const { search } = req.query;
     const filter: any = {};
+
+    if (req.admin?.role === 'CR' || req.admin?.role === 'CR_ASSISTANT') {
+      if (!req.admin.assignedClassId) {
+        res.status(200).json({ success: true, count: 0, students: [] });
+        return;
+      }
+      filter.classId = req.admin.assignedClassId;
+    } else if (req.admin?.role === 'TEACHER') {
+      const assignments = await TeacherAssignment.find({ teacherId: req.admin.id, isActive: true })
+        .distinct('classId');
+      filter.classId = { $in: assignments };
+    } else if (req.admin?.role !== 'SUPER_ADMIN') {
+      res.status(403).json({ success: false, message: 'Access denied.' });
+      return;
+    }
 
     if (search) {
       const searchRegex = new RegExp(escapeRegex((search as string).trim()), 'i');

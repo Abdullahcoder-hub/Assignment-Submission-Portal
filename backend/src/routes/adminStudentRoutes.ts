@@ -5,11 +5,11 @@ import {
   resetStudentPassword,
   deleteStudent,
 } from '../controllers/adminStudentController.js';
-import { authenticateAdmin } from '../middleware/auth.js';
+import { authenticateAdmin, authenticateStaff } from '../middleware/auth.js';
 
 const router = Router();
 
-router.get('/', authenticateAdmin, getStudents);
+router.get('/', authenticateStaff, getStudents);
 router.put('/:id', authenticateAdmin, updateStudent);
 router.patch('/:id/reset-password', authenticateAdmin, resetStudentPassword);
 router.delete('/:id', authenticateAdmin, deleteStudent);

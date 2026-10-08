@@ -26,7 +26,6 @@ export const StaffManagementSection: React.FC = () => {
   const [showModal, setShowModal] = useState<boolean>(false);
   const [editingStaff, setEditingStaff] = useState<AdminUser | null>(null);
   const [formName, setFormName] = useState<string>('');
-  const [formPassword, setFormPassword] = useState<string>('');
   const [formError, setFormError] = useState<string>('');
   const [saving, setSaving] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
@@ -53,7 +52,6 @@ export const StaffManagementSection: React.FC = () => {
   const handleOpenEdit = (s: AdminUser) => {
     setEditingStaff(s);
     setFormName(s.name);
-    setFormPassword('');
     setFormError('');
     setShowModal(true);
   };
@@ -67,7 +65,6 @@ export const StaffManagementSection: React.FC = () => {
     try {
       const res = await api.put(`/admin/staff/${editingStaff.id}`, {
         name: formName,
-        newPassword: formPassword || undefined,
       });
 
       if (res.data.success) {
@@ -307,19 +304,6 @@ export const StaffManagementSection: React.FC = () => {
                   placeholder="e.g. Dr. John Doe"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  New Password (leave empty to keep current)
-                </label>
-                <input
-                  type="password"
-                  placeholder="Minimum 8 characters"
-                  value={formPassword}
-                  onChange={(e) => setFormPassword(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>

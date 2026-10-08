@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest, RegisteredStudent } from '../types';
+import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest, RegisteredStudent, Class } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { ClassManagementSection } from '../components/ClassManagementSection';
 import { TeacherAssignmentSection } from '../components/TeacherAssignmentSection';
@@ -9,6 +9,7 @@ import { QuizManagementSection } from '../components/QuizManagementSection';
 import { CRApplicationsTab } from '../components/CRApplicationsTab';
 import { TeacherSharedAssignmentsSection } from '../components/TeacherSharedAssignmentsSection';
 import { ShareAssignmentModal } from '../components/ShareAssignmentModal';
+import { StaffPasswordSettings } from '../components/StaffPasswordSettings';
 import {
   LayoutDashboard,
   BookOpen,
@@ -56,6 +57,16 @@ export const AdminDashboard: React.FC = () => {
   const isCR = role === 'CR';
   const isCRAssistant = role === 'CR_ASSISTANT';
   const isCROrAssistant = isCR || isCRAssistant;
+  const canAccessTab = (tab: string) => {
+    if (isSuperAdmin) return true;
+    if (isCROrAssistant) {
+      return ['dashboard', 'quizzes', 'subjects', 'assignments', 'submissions', 'groups', 'late-requests', 'students', 'settings', 'account'].includes(tab);
+    }
+    if (isTeacher) {
+      return ['dashboard', 'quizzes', 'shared-assignments', 'subjects', 'assignments', 'submissions', 'groups', 'late-requests', 'account'].includes(tab);
+    }
+    return false;
+  };
 
   const validTabs = [
     'dashboard',
@@ -72,6 +83,7 @@ export const AdminDashboard: React.FC = () => {
     'late-requests',
     'students',
     'settings',
+    'account',
   ] as const;
   type TabType = typeof validTabs[number];
 
@@ -79,13 +91,16 @@ export const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTabState] = useState<TabType>(() => {
     const params = new URLSearchParams(window.location.search);
     const tabFromUrl = params.get('tab') as TabType;
-    if (validTabs.includes(tabFromUrl)) return tabFromUrl;
+    if (validTabs.includes(tabFromUrl) && canAccessTab(tabFromUrl)) return tabFromUrl;
     const savedTab = localStorage.getItem('admin_active_tab') as TabType;
-    if (validTabs.includes(savedTab)) return savedTab;
+    if (validTabs.includes(savedTab) && canAccessTab(savedTab)) return savedTab;
     return 'dashboard';
   });
 
   const setActiveTab = (tab: TabType) => {
+    if (!canAccessTab(tab)) {
+      tab = 'dashboard';
+    }
     setActiveTabState(tab);
     localStorage.setItem('admin_active_tab', tab);
     const url = new URL(window.location.href);
@@ -96,6 +111,7 @@ export const AdminDashboard: React.FC = () => {
   // Join Code state
   const [joinCode, setJoinCode] = useState<string>('');
   const [isJoinCodeActive, setIsJoinCodeActive] = useState<boolean>(true);
+  const [joinCodeClass, setJoinCodeClass] = useState<Class | null>(null);
   const [sharingAssignment, setSharingAssignment] = useState<Assignment | null>(null);
 
   // Stats state with instant cache rehydration
@@ -538,14 +554,19 @@ export const AdminDashboard: React.FC = () => {
 
   const fetchJoinCode = async () => {
     try {
-      const res = await api.get('/admin/settings/join-code');
-      if (res.data.success) {
-        setJoinCode(res.data.joinCode);
-        setCustomJoinInput(res.data.joinCode);
-        setIsJoinCodeActive(res.data.isJoinCodeActive);
+      const response = await api.get('/classes');
+      const assignedClass = (response.data.classes || [])[0] as Class | undefined;
+      if (!assignedClass) {
+        setJoinCodeClass(null);
+        showToast('error', 'No class is assigned to this CR account.');
+        return;
       }
-    } catch (err) {
-      console.error('Failed to fetch class join code:', err);
+      setJoinCodeClass(assignedClass);
+      setJoinCode(assignedClass.joinCode);
+      setCustomJoinInput(assignedClass.joinCode);
+      setIsJoinCodeActive(assignedClass.isJoinCodeActive);
+    } catch (error: any) {
+      showToast('error', error.response?.data?.message || 'Failed to fetch your class join code.');
     }
   };
 
@@ -556,7 +577,8 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
     try {
-      const res = await api.put('/admin/settings/join-code', { customCode: customJoinInput.trim() });
+      if (!joinCodeClass) return;
+      const res = await api.put(`/classes/${joinCodeClass._id}/join-code`, { joinCode: customJoinInput.trim() });
       if (res.data.success) {
         setJoinCode(res.data.joinCode);
         setCustomJoinInput(res.data.joinCode);
@@ -572,7 +594,8 @@ export const AdminDashboard: React.FC = () => {
   const handleRegenerateJoinCode = async () => {
     if (!window.confirm('Regenerate Class Join Code? Old code will stop working.')) return;
     try {
-      const res = await api.post('/admin/settings/join-code/regenerate');
+      if (!joinCodeClass) return;
+      const res = await api.post(`/classes/${joinCodeClass._id}/regenerate-code`);
       if (res.data.success) {
         setJoinCode(res.data.joinCode);
         setCustomJoinInput(res.data.joinCode);
@@ -586,7 +609,8 @@ export const AdminDashboard: React.FC = () => {
 
   const handleToggleJoinCode = async () => {
     try {
-      const res = await api.patch('/admin/settings/join-code/toggle');
+      if (!joinCodeClass) return;
+      const res = await api.post(`/classes/${joinCodeClass._id}/toggle-code`);
       if (res.data.success) {
         setIsJoinCodeActive(res.data.isJoinCodeActive);
         showToast('success', res.data.message);
@@ -615,9 +639,12 @@ export const AdminDashboard: React.FC = () => {
     fetchDashboardStats();
     fetchSubjects();
     fetchAssignments();
-    fetchJoinCode();
-    fetchAdmins();
-  }, []);
+    if (isSuperAdmin) fetchAdmins();
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (activeTab === 'settings' && isCROrAssistant) fetchJoinCode();
+  }, [activeTab, isCROrAssistant]);
 
   useEffect(() => {
     if (activeTab === 'submissions') {
@@ -1038,6 +1065,20 @@ export const AdminDashboard: React.FC = () => {
               </button>
             </>
           )}
+
+          {!isSuperAdmin && (
+            <button
+              onClick={() => setActiveTab('account')}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                activeTab === 'account'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                  : 'hover:bg-white/5 text-slate-400 hover:text-white'
+              }`}
+            >
+              <KeyRound className="w-5 h-5" />
+              My Password
+            </button>
+          )}
         </nav>
       </aside>
 
@@ -1354,7 +1395,7 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {/* CR APPLICATIONS TAB */}
-        {activeTab === 'cr-applications' && <CRApplicationsTab />}
+        {activeTab === 'cr-applications' && isSuperAdmin && <CRApplicationsTab />}
 
         {/* 2. SUBJECTS TAB */}
         {activeTab === 'subjects' && (
@@ -2185,11 +2226,11 @@ export const AdminDashboard: React.FC = () => {
               <input value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} placeholder="Search name, roll or email" className="w-full sm:w-72 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm" />
             </div>
             <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead><tr className="bg-slate-50 text-xs uppercase text-slate-600"><th className="p-4">Name</th><th className="p-4">Roll No</th><th className="p-4">Email</th><th className="p-4">Joined</th><th className="p-4">Actions</th></tr></thead>
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead><tr className="bg-slate-50 text-xs uppercase text-slate-600"><th className="p-4">Name</th><th className="p-4">Roll No</th><th className="p-4">Email</th><th className="p-4">Joined</th>{isSuperAdmin && <th className="p-4">Actions</th>}</tr></thead>
                 <tbody className="divide-y divide-slate-100">
-                  {loadingStudents ? <tr><td colSpan={5} className="p-8 text-center text-slate-500">Loading students...</td></tr> : registeredStudents.length === 0 ? <tr><td colSpan={5} className="p-8 text-center text-slate-400">No registered students.</td></tr> : registeredStudents.map((studentRecord) => (
-                    <tr key={studentRecord._id}><td className="p-4 font-semibold">{studentRecord.name}</td><td className="p-4 font-mono">{studentRecord.rollNumber}</td><td className="p-4 break-all">{studentRecord.email}</td><td className="p-4 text-xs text-slate-500">{formatDate(studentRecord.createdAt)}</td><td className="p-4"><div className="flex flex-wrap gap-2"><button onClick={() => { setEditingStudent(studentRecord); setStudentEditForm({ name: studentRecord.name, rollNumber: studentRecord.rollNumber }); setStudentEditModalOpen(true); }} className="px-2.5 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg">Edit</button><button onClick={() => { setResetPassStudent(studentRecord); setResetPassModalOpen(true); }} className="px-2.5 py-1.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg">Reset Password</button><button onClick={() => handleDeleteStudent(studentRecord._id, studentRecord.name, studentRecord.rollNumber)} className="px-2.5 py-1.5 bg-red-50 text-red-700 text-xs font-bold rounded-lg">Delete</button></div></td></tr>
+                  {loadingStudents ? <tr><td colSpan={isSuperAdmin ? 5 : 4} className="p-8 text-center text-slate-500">Loading students...</td></tr> : registeredStudents.length === 0 ? <tr><td colSpan={isSuperAdmin ? 5 : 4} className="p-8 text-center text-slate-400">No registered students.</td></tr> : registeredStudents.map((studentRecord) => (
+                    <tr key={studentRecord._id}><td className="p-4 font-semibold">{studentRecord.name}</td><td className="p-4 font-mono">{studentRecord.rollNumber}</td><td className="p-4 break-all">{studentRecord.email}</td><td className="p-4 text-xs text-slate-500">{formatDate(studentRecord.createdAt)}</td>{isSuperAdmin && <td className="p-4"><div className="flex flex-wrap gap-2"><button onClick={() => { setEditingStudent(studentRecord); setStudentEditForm({ name: studentRecord.name, rollNumber: studentRecord.rollNumber }); setStudentEditModalOpen(true); }} className="px-2.5 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg">Edit</button><button onClick={() => { setResetPassStudent(studentRecord); setResetPassModalOpen(true); }} className="px-2.5 py-1.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg">Reset Password</button><button onClick={() => handleDeleteStudent(studentRecord._id, studentRecord.name, studentRecord.rollNumber)} className="px-2.5 py-1.5 bg-red-50 text-red-700 text-xs font-bold rounded-lg">Delete</button></div></td>}</tr>
                   ))}
                 </tbody>
               </table>
@@ -2198,7 +2239,7 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {/* 7. SETTINGS TAB — CLASS JOIN CODE MANAGEMENT */}
-        {activeTab === 'settings' && (
+        {activeTab === 'settings' && isCROrAssistant && (
           <div className="space-y-6">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Class Access & Join Code Settings</h1>
@@ -2208,6 +2249,8 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl p-6 sm:p-8 space-y-6 max-w-2xl">
+              {joinCodeClass && <p className="text-sm text-slate-500">Managing {joinCodeClass.name} only.</p>}
+              {!joinCodeClass && <p className="text-sm text-amber-700">No assigned class was found for this account.</p>}
               <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                 <div>
                   <h3 className="text-lg font-bold text-slate-900">Active Class Join Code</h3>
@@ -2215,6 +2258,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 <button
                   onClick={handleToggleJoinCode}
+                  disabled={!joinCodeClass}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${
                     isJoinCodeActive
                       ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
@@ -2229,7 +2273,7 @@ export const AdminDashboard: React.FC = () => {
                 <form onSubmit={handleUpdateJoinCode} className="bg-slate-50 border border-blue-200 rounded-2xl p-6 space-y-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                      Set Custom Class Join Code (Edited by CR)
+                      Set Custom Class Join Code
                     </label>
                     <input
                       type="text"
@@ -2237,6 +2281,7 @@ export const AdminDashboard: React.FC = () => {
                       value={customJoinInput}
                       onChange={(e) => setCustomJoinInput(e.target.value.toUpperCase())}
                       required
+                      disabled={!joinCodeClass}
                       className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl font-mono text-xl font-extrabold uppercase text-blue-700 tracking-wider focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -2250,6 +2295,7 @@ export const AdminDashboard: React.FC = () => {
                     </button>
                     <button
                       type="submit"
+                      disabled={!joinCodeClass}
                       className="px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow"
                     >
                       Save Join Code
@@ -2261,13 +2307,14 @@ export const AdminDashboard: React.FC = () => {
                   <div>
                     <span className="text-xs font-bold uppercase text-slate-400">Class Join Code</span>
                     <div className="text-3xl font-extrabold font-mono text-blue-700 tracking-wider mt-1">
-                      {joinCode || 'CLASS-2026-PORTAL'}
+                      {joinCode || 'Loading class code...'}
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
+                      disabled={!joinCodeClass}
                       onClick={() => {
                         setCustomJoinInput(joinCode);
                         setIsEditingCode(true);
@@ -2279,6 +2326,7 @@ export const AdminDashboard: React.FC = () => {
 
                     <button
                       type="button"
+                      disabled={!joinCodeClass}
                       onClick={() => {
                         navigator.clipboard.writeText(joinCode);
                         showToast('success', 'Class Join Code copied to clipboard!');
@@ -2290,6 +2338,7 @@ export const AdminDashboard: React.FC = () => {
 
                     <button
                       type="button"
+                      disabled={!joinCodeClass}
                       onClick={handleRegenerateJoinCode}
                       className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-slate-200 font-bold text-xs rounded-xl transition flex items-center gap-1.5"
                     >
@@ -2298,18 +2347,21 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
               )}
+
             </div>
           </div>
         )}
 
+        {activeTab === 'account' && <StaffPasswordSettings />}
+
         {/* CLASSES & SECTIONS TAB */}
-        {activeTab === 'classes' && <ClassManagementSection />}
+        {activeTab === 'classes' && isSuperAdmin && <ClassManagementSection />}
 
         {/* TEACHER ASSIGNMENTS TAB */}
-        {activeTab === 'teachers' && <TeacherAssignmentSection />}
+        {activeTab === 'teachers' && isSuperAdmin && <TeacherAssignmentSection />}
 
         {/* STAFF MANAGEMENT TAB */}
-        {activeTab === 'staff' && <StaffManagementSection />}
+        {activeTab === 'staff' && isSuperAdmin && <StaffManagementSection />}
 
         {/* QUIZZES TAB */}
         {activeTab === 'quizzes' && <QuizManagementSection userRole={role || undefined} />}

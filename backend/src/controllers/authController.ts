@@ -5,6 +5,7 @@ import Admin from '../models/Admin.js';
 import TeacherAssignment from '../models/TeacherAssignment.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { getJwtSecret } from '../config/security.js';
+import { validatePasswordStrength } from '../utils/passwordValidator.js';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -111,7 +112,6 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       res.status(401).json({ success: false, message: 'Not authenticated.' });
       return;
     }
-
     const admin = await Admin.findById(req.admin.id)
       .select('name email role assignedClassId isActive isEmailVerified approvalStatus')
       .populate('assignedClassId', 'name semester section')
@@ -144,5 +144,67 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error fetching profile.' });
+  }
+};
+
+export const changeStaffPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.admin) {
+      res.status(401).json({ success: false, message: 'Not authenticated.' });
+      return;
+    }
+    if (!['TEACHER', 'CR', 'CR_ASSISTANT'].includes(req.admin.role)) {
+      res.status(403).json({ success: false, message: 'Use environment-managed credentials for Super Admin accounts.' });
+      return;
+    }
+
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      res.status(400).json({ success: false, message: 'Enter current password and confirm your new password.' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      res.status(400).json({ success: false, message: 'New passwords do not match.' });
+      return;
+    }
+
+    const validation = validatePasswordStrength(newPassword);
+    if (!validation.isValid) {
+      res.status(400).json({ success: false, message: validation.message });
+      return;
+    }
+
+    const admin = await Admin.findById(req.admin.id);
+    if (!admin) {
+      res.status(404).json({ success: false, message: 'Staff account not found.' });
+      return;
+    }
+    if (!(await bcrypt.compare(currentPassword, admin.passwordHash))) {
+      res.status(400).json({ success: false, message: 'Current password is incorrect.' });
+      return;
+    }
+
+    admin.passwordHash = await bcrypt.hash(newPassword, await bcrypt.genSalt(10));
+    admin.tokenVersion = (admin.tokenVersion ?? 0) + 1;
+    await admin.save();
+
+    const token = jwt.sign(
+      {
+        id: admin._id,
+        email: admin.email,
+        role: admin.role,
+        assignedClassId: admin.assignedClassId?.toString(),
+        tokenVersion: admin.tokenVersion,
+      },
+      getJwtSecret(),
+      { expiresIn: '7d' }
+    );
+    res.status(200).json({
+      success: true,
+      message: 'Password changed. Other sessions have been signed out.',
+      token,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to change password.' });
   }
 };
