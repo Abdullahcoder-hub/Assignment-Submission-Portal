@@ -448,6 +448,20 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleGrantFourthQuizAttempt = async (request: LateRequest) => {
+    const quizId = typeof request.quizId === 'object' && request.quizId ? request.quizId._id : request.quizId;
+    if (!quizId) return;
+    try {
+      const res = await api.patch(`/quizzes/${quizId}/attempts/${request.studentId}/unlock`);
+      if (res.data.success) {
+        showToast('success', 'Fourth quiz attempt allowed. The student can resume the quiz.');
+        fetchLateRequests();
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Failed to allow a fourth quiz attempt.');
+    }
+  };
+
   // FETCH REGISTERED STUDENTS
   const fetchStudents = async () => {
     try {
@@ -1821,7 +1835,7 @@ export const AdminDashboard: React.FC = () => {
                     <th className="p-4">Roll #</th>
                     <th className="p-4">Student Name</th>
                     <th className="p-4">Subject</th>
-                    <th className="p-4">Assignment</th>
+                    <th className="p-4">Quiz / Assignment</th>
                     <th className="p-4">File Name</th>
                     <th className="p-4">Submitted At</th>
                     <th className="p-4">Status</th>
@@ -2142,7 +2156,7 @@ export const AdminDashboard: React.FC = () => {
                           {(req.subjectId as any)?.code || 'N/A'}
                         </td>
                         <td className="p-4 text-xs font-semibold text-slate-800">
-                          {(req.assignmentId as any)?.title || 'N/A'}
+                          {(req.quizId as any)?.title || (req.assignmentId as any)?.title || 'N/A'}
                         </td>
                         <td className="p-4 text-xs text-slate-600 max-w-xs truncate">{req.reason}</td>
                         <td className="p-4 text-xs text-slate-500">{formatDate(req.requestedAt)}</td>
@@ -2164,18 +2178,23 @@ export const AdminDashboard: React.FC = () => {
                         <td className="p-4 text-right space-x-2">
                           <button
                             onClick={() => handleLateDecision(req._id, 'Approved')}
-                            disabled={req.status === 'Approved'}
+                            disabled={req.status !== 'Pending'}
                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-bold text-xs rounded-lg transition inline-flex items-center gap-1"
                           >
-                            <Check className="w-3 h-3" /> {req.requestType === 'GroupRegistration' ? 'Allow Group Registration' : 'Allow Submission'}
+                            <Check className="w-3 h-3" /> {req.requestType === 'GroupRegistration' ? 'Allow Group Registration' : req.requestType === 'Quiz' ? 'Allow Quiz Access' : 'Allow Submission'}
                           </button>
                           <button
                             onClick={() => { setRejectingRequestId(req._id); setRejectionReasonInput(''); }}
-                            disabled={req.status === 'Rejected'}
+                            disabled={req.status !== 'Pending'}
                             className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white font-bold text-xs rounded-lg transition inline-flex items-center gap-1"
                           >
                             <X className="w-3 h-3" /> Reject
                           </button>
+                          {req.requestType === 'Quiz' && req.requestCount === 3 && req.status !== 'Pending' && req.attemptStatus === 'locked' && (
+                            <button onClick={() => handleGrantFourthQuizAttempt(req)} className="px-3 py-1.5 bg-indigo-600 text-white font-bold text-xs rounded-lg">
+                              Allow 4th Attempt
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -2187,10 +2206,14 @@ export const AdminDashboard: React.FC = () => {
                   <article key={req._id} className="p-4 space-y-2">
                     <div className="flex justify-between gap-2"><p className="font-bold text-slate-900 break-words">{req.studentName}</p><span className={`shrink-0 px-2 py-1 text-[10px] font-bold rounded-full ${req.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' : req.status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{req.status}</span></div>
                     <p className="text-xs font-mono text-slate-600 break-all">Roll: {req.rollNumber}</p>
-                    <p className="text-xs text-slate-700 break-words">{(req.subjectId as any)?.name || 'Subject'} · {(req.assignmentId as any)?.title || 'Assignment'}</p>
+                    <p className="text-xs text-slate-700 break-words">{(req.subjectId as any)?.name || 'Subject'} · {(req.quizId as any)?.title || (req.assignmentId as any)?.title || 'Assignment'}</p>
                     <p className="text-xs text-slate-600 break-words">Reason: {req.reason || 'No reason provided'}</p>
                     <p className="text-[11px] text-slate-500">Requested: {formatDate(req.requestedAt)}</p>
-                    <div className="grid grid-cols-2 gap-2 pt-1"><button onClick={() => handleLateDecision(req._id, 'Approved')} disabled={req.status === 'Approved'} className="py-2 bg-emerald-600 disabled:bg-emerald-300 text-white text-xs font-bold rounded-lg">{req.requestType === 'GroupRegistration' ? 'Allow Group Registration' : 'Allow Submission'}</button><button onClick={() => { setRejectingRequestId(req._id); setRejectionReasonInput(''); }} disabled={req.status === 'Rejected'} className="py-2 bg-red-600 disabled:bg-red-300 text-white text-xs font-bold rounded-lg">Reject</button></div>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button onClick={() => handleLateDecision(req._id, 'Approved')} disabled={req.status !== 'Pending'} className="py-2 bg-emerald-600 disabled:bg-emerald-300 text-white text-xs font-bold rounded-lg">{req.requestType === 'GroupRegistration' ? 'Allow Group Registration' : req.requestType === 'Quiz' ? 'Allow Quiz Access' : 'Allow Submission'}</button>
+                      <button onClick={() => { setRejectingRequestId(req._id); setRejectionReasonInput(''); }} disabled={req.status !== 'Pending'} className="py-2 bg-red-600 disabled:bg-red-300 text-white text-xs font-bold rounded-lg">Reject</button>
+                      {req.requestType === 'Quiz' && req.requestCount === 3 && req.status !== 'Pending' && req.attemptStatus === 'locked' && <button onClick={() => handleGrantFourthQuizAttempt(req)} className="col-span-2 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg">Allow 4th Attempt</button>}
+                    </div>
                   </article>
                 ))}
               </div>
@@ -2243,10 +2266,10 @@ export const AdminDashboard: React.FC = () => {
             </div>
             <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-sm">
-                <thead><tr className="bg-slate-50 text-xs uppercase text-slate-600"><th className="p-4">Name</th><th className="p-4">Roll No</th><th className="p-4">Email</th><th className="p-4">Joined</th>{isSuperAdmin && <th className="p-4">Actions</th>}</tr></thead>
+                <thead><tr className="bg-slate-50 text-xs uppercase text-slate-600"><th className="p-4">Name</th><th className="p-4">Roll No</th><th className="p-4">Email</th><th className="p-4">Joined</th>{(isSuperAdmin || isCROrAssistant) && <th className="p-4">Actions</th>}</tr></thead>
                 <tbody className="divide-y divide-slate-100">
-                  {loadingStudents ? <tr><td colSpan={isSuperAdmin ? 5 : 4} className="p-8 text-center text-slate-500">Loading students...</td></tr> : registeredStudents.length === 0 ? <tr><td colSpan={isSuperAdmin ? 5 : 4} className="p-8 text-center text-slate-400">No registered students.</td></tr> : registeredStudents.map((studentRecord) => (
-                    <tr key={studentRecord._id}><td className="p-4 font-semibold">{studentRecord.name}</td><td className="p-4 font-mono">{studentRecord.rollNumber}</td><td className="p-4 break-all">{studentRecord.email}</td><td className="p-4 text-xs text-slate-500">{formatDate(studentRecord.createdAt)}</td>{isSuperAdmin && <td className="p-4"><div className="flex flex-wrap gap-2"><button onClick={() => { setEditingStudent(studentRecord); setStudentEditForm({ name: studentRecord.name, rollNumber: studentRecord.rollNumber }); setStudentEditModalOpen(true); }} className="px-2.5 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg">Edit</button><button onClick={() => { setResetPassStudent(studentRecord); setResetPassModalOpen(true); }} className="px-2.5 py-1.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg">Reset Password</button><button onClick={() => handleDeleteStudent(studentRecord._id, studentRecord.name, studentRecord.rollNumber)} className="px-2.5 py-1.5 bg-red-50 text-red-700 text-xs font-bold rounded-lg">Delete</button></div></td>}</tr>
+                  {loadingStudents ? <tr><td colSpan={(isSuperAdmin || isCROrAssistant) ? 5 : 4} className="p-8 text-center text-slate-500">Loading students...</td></tr> : registeredStudents.length === 0 ? <tr><td colSpan={(isSuperAdmin || isCROrAssistant) ? 5 : 4} className="p-8 text-center text-slate-400">No registered students.</td></tr> : registeredStudents.map((studentRecord) => (
+                    <tr key={studentRecord._id}><td className="p-4 font-semibold">{studentRecord.name}</td><td className="p-4 font-mono">{studentRecord.rollNumber}</td><td className="p-4 break-all">{studentRecord.email}</td><td className="p-4 text-xs text-slate-500">{formatDate(studentRecord.createdAt)}</td>{(isSuperAdmin || isCROrAssistant) && <td className="p-4"><div className="flex flex-wrap gap-2"><button onClick={() => { setEditingStudent(studentRecord); setStudentEditForm({ name: studentRecord.name, rollNumber: studentRecord.rollNumber }); setStudentEditModalOpen(true); }} className="px-2.5 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg">Edit</button><button onClick={() => { setResetPassStudent(studentRecord); setResetPassModalOpen(true); }} className="px-2.5 py-1.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg">Reset Password</button><button onClick={() => handleDeleteStudent(studentRecord._id, studentRecord.name, studentRecord.rollNumber)} className="px-2.5 py-1.5 bg-red-50 text-red-700 text-xs font-bold rounded-lg">Delete</button></div></td>}</tr>
                   ))}
                 </tbody>
               </table>

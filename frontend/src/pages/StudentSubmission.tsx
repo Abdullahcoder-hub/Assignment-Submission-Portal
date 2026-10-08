@@ -372,7 +372,7 @@ export const StudentSubmission: React.FC = () => {
         <div className="bg-slate-900 p-6 sm:p-8 text-white">
           <div className="flex items-center gap-3 mb-2">
             <BookOpen className="w-7 h-7 text-blue-400" />
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Assignment Submission Portal</h1>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Assignment &amp; Quiz Portal</h1>
           </div>
           <p className="text-slate-400 text-sm sm:text-base">
             Submit your class coursework securely. File and submission receipts are stored directly in the official class portal.

@@ -57,15 +57,19 @@ export interface Quiz {
   durationMinutes?: number;
   deadline: string;
   allowLateSubmission: boolean;
+  resultsPublished?: boolean;
   totalMarks: number;
   questions: QuizQuestion[];
   submissionCount?: number;
   myAttemptStatus?: 'in_progress' | 'locked' | 'unlocked' | 'submitted' | null;
   myLateRequestStatus?: 'Pending' | 'Approved' | 'Rejected' | null;
+  myLateRequestCount?: number;
   mySubmission?: {
     submissionId: string;
-    totalScore: number;
-    isGraded: boolean;
+    mcqScore?: number;
+    writtenScore?: number;
+    totalScore?: number;
+    isGraded?: boolean;
     submittedAt: string;
     isLate: boolean;
     status: string;
@@ -183,6 +187,8 @@ export interface LateRequest {
   rollNumber: string;
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
+  requestCount?: number;
+  attemptStatus?: 'in_progress' | 'locked' | 'unlocked' | 'submitted';
   requestedAt: string;
   decidedAt?: string;
   decidedBy?: string;

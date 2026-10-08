@@ -8,6 +8,13 @@ import { validatePasswordStrength } from '../utils/passwordValidator.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
 import { escapeRegex } from '../utils/fileValidation.js';
 
+const canManageStudent = (req: AuthRequest, student: { classId?: unknown }): boolean => {
+  if (req.admin?.role === 'SUPER_ADMIN') return true;
+  return ['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '')
+    && Boolean(req.admin?.assignedClassId)
+    && String(student.classId || '') === req.admin?.assignedClassId;
+};
+
 /**
  * 1. LIST ALL REGISTERED STUDENTS (WITH SEARCH & PAGINATION)
  */
@@ -65,6 +72,10 @@ export const updateStudent = async (req: AuthRequest, res: Response): Promise<vo
     const student = await Student.findById(id);
     if (!student) {
       res.status(404).json({ success: false, message: 'Student not found.' });
+      return;
+    }
+    if (!canManageStudent(req, student)) {
+      res.status(403).json({ success: false, message: 'You can only manage students in your assigned class.' });
       return;
     }
 
@@ -129,6 +140,10 @@ export const resetStudentPassword = async (req: AuthRequest, res: Response): Pro
       res.status(404).json({ success: false, message: 'Student not found.' });
       return;
     }
+    if (!canManageStudent(req, student)) {
+      res.status(403).json({ success: false, message: 'You can only manage students in your assigned class.' });
+      return;
+    }
 
     const salt = await bcrypt.genSalt(10);
     student.passwordHash = await bcrypt.hash(newPassword, salt);
@@ -154,6 +169,10 @@ export const deleteStudent = async (req: AuthRequest, res: Response): Promise<vo
     const student = await Student.findById(id);
     if (!student) {
       res.status(404).json({ success: false, message: 'Student not found.' });
+      return;
+    }
+    if (!canManageStudent(req, student)) {
+      res.status(403).json({ success: false, message: 'You can only manage students in your assigned class.' });
       return;
     }
 

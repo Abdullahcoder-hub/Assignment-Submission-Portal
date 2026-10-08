@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { Quiz, QuizSubmission, Subject, Class } from '../types';
 import {
@@ -31,7 +31,6 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
   const [studentAnswers, setStudentAnswers] = useState<Record<string, { selectedOptionIndex?: number; writtenAnswerText?: string }>>({});
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submissionReceipt, setSubmissionReceipt] = useState<any | null>(null);
-  const interruptedQuizId = useRef<string | null>(null);
 
   // Late Request Modal State
   const [lateModalQuiz, setLateModalQuiz] = useState<Quiz | null>(null);
@@ -56,71 +55,57 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
     fetchQuizzes();
   }, []);
 
+  const answerStorageKey = (quizId: string) => `quiz_answers_${rollNumber || studentClassId || 'student'}_${quizId}`;
+
   const handleStartQuiz = async (quiz: Quiz) => {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      void document.documentElement.requestFullscreen().catch(() => {
+        setFeedback({ success: false, message: 'Browser fullscreen was unavailable; the quiz remains open in full-screen view.' });
+      });
+    }
     try {
       const res = await api.post(`/quizzes/${quiz._id}/start`);
       if (res.data.success) {
-        interruptedQuizId.current = null;
         setActiveQuiz(res.data.quiz);
         setSubmissionReceipt(res.data.mySubmission || null);
-        setStudentAnswers({});
+        try {
+          const savedAnswers = localStorage.getItem(answerStorageKey(quiz._id));
+          setStudentAnswers(savedAnswers ? JSON.parse(savedAnswers) : {});
+        } catch (error) {
+          setStudentAnswers({});
+          setFeedback({ success: false, message: 'Saved quiz progress could not be restored.' });
+        }
       }
     } catch (err: any) {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
       setFeedback({ success: false, message: err.response?.data?.message || 'Failed to open quiz.' });
       await fetchQuizzes();
     }
   };
 
   const leaveQuiz = async () => {
-    if (!activeQuiz || submissionReceipt) {
-      setActiveQuiz(null);
-      setSubmissionReceipt(null);
-      return;
+    if (!submissionReceipt && !window.confirm('Exit this quiz? Your answers are saved and you can resume later.')) return;
+    if (activeQuiz && !submissionReceipt) {
+      setFeedback({ success: true, message: 'Quiz progress saved. You can resume it later, including after refreshing.' });
     }
-    try {
-      await api.post(`/quizzes/${activeQuiz._id}/interrupt`);
-      setFeedback({ success: false, message: 'Quiz locked because it was closed. Request your CR or teacher to unblock it.' });
-    } catch {
-      setFeedback({ success: false, message: 'Quiz closed. It will be locked when you try to reopen it.' });
-    } finally {
-      setActiveQuiz(null);
-      setSubmissionReceipt(null);
-      await fetchQuizzes();
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {
+        setFeedback({ success: false, message: 'Could not exit browser fullscreen. Use the browser fullscreen control.' });
+      });
     }
+    setActiveQuiz(null);
+    setSubmissionReceipt(null);
+    await fetchQuizzes();
   };
 
   useEffect(() => {
     if (!activeQuiz || submissionReceipt) return;
-    const interruptOnPageExit = () => {
-      if (interruptedQuizId.current === activeQuiz._id) return;
-      interruptedQuizId.current = activeQuiz._id;
-      setActiveQuiz(null);
-      setStudentAnswers({});
-      setFeedback({ success: false, message: 'Quiz locked because you left or refreshed. Request your CR or teacher to unblock it.' });
-      const token = localStorage.getItem('portalToken');
-      if (!token) return;
-      void fetch(`${api.defaults.baseURL}/quizzes/${activeQuiz._id}/interrupt`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        keepalive: true,
-      }).then((response) => {
-        if (!response.ok) throw new Error('Could not lock the interrupted quiz attempt.');
-        void fetchQuizzes();
-      }).catch(() => {
-        setFeedback({ success: false, message: 'Could not confirm quiz lock. Please contact your CR or teacher.' });
-      });
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') interruptOnPageExit();
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('pagehide', interruptOnPageExit);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('pagehide', interruptOnPageExit);
-    };
-  }, [activeQuiz?._id, submissionReceipt]);
-
+    try {
+      localStorage.setItem(answerStorageKey(activeQuiz._id), JSON.stringify(studentAnswers));
+    } catch (error) {
+      setFeedback({ success: false, message: 'Unable to save quiz progress on this device.' });
+    }
+  }, [activeQuiz?._id, studentAnswers, submissionReceipt]);
   const handleSelectOption = (questionId: string, optionIndex: number) => {
     setStudentAnswers((prev) => ({
       ...prev,
@@ -162,6 +147,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
       if (res.data.success) {
         setSubmissionReceipt(res.data.submission);
         setFeedback({ success: true, message: 'Quiz submitted successfully!' });
+        localStorage.removeItem(answerStorageKey(activeQuiz._id));
         fetchQuizzes();
       }
     } catch (err: any) {
@@ -197,13 +183,14 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
       const res = await api.post('/late-requests', {
         quizId: lateModalQuiz._id,
         requestType: 'Quiz',
-        reason: lateReason || 'Quiz deadline passed.',
+        reason: lateReason || (lateModalQuiz.myAttemptStatus === 'locked' ? 'Quiz attempt was blocked.' : 'Quiz deadline passed.'),
       });
 
       if (res.data.success) {
         setFeedback({ success: true, message: res.data.message });
         setLateModalQuiz(null);
         setLateReason('');
+        await fetchQuizzes();
       }
     } catch (err: any) {
       setFeedback({ success: false, message: err.response?.data?.message || 'Failed to submit late request.' });
@@ -329,9 +316,9 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                           <Check className="w-3.5 h-3.5" />
                           Submitted
                         </span>
-                        <p className="text-[11px] text-slate-500 mt-1">
-                          Score: <strong>{q.mySubmission?.totalScore} / {q.totalMarks}</strong>
-                        </p>
+                        {q.resultsPublished && q.mySubmission?.isGraded && q.mySubmission.totalScore !== undefined
+                          ? <p className="text-[11px] text-slate-500 mt-1">Your result: <strong>{q.mySubmission.totalScore} / {q.totalMarks}</strong></p>
+                          : <p className="text-[11px] text-slate-500 mt-1">{q.resultsPublished ? 'Result pending teacher grading.' : 'Result not declared yet.'}</p>}
                       </div>
 
                       <button
@@ -347,6 +334,8 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                       <p className="text-xs font-semibold text-red-600">Quiz locked — request an unblock from your CR or teacher.</p>
                       {q.myLateRequestStatus === 'Pending' ? (
                         <span className="text-xs font-semibold text-amber-700">Unblock request pending</span>
+                      ) : (q.myLateRequestCount || 0) >= 3 ? (
+                        <span className="text-xs text-slate-600">3 requests used. Contact your teacher or CR to allow a 4th attempt.</span>
                       ) : q.myLateRequestStatus === 'Approved' ? (
                         <button onClick={() => handleStartQuiz(q)} className="w-full py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl">
                           Resume Quiz
@@ -357,13 +346,22 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                         </button>
                       )}
                     </div>
+                  ) : q.myAttemptStatus === 'in_progress' || q.myAttemptStatus === 'unlocked' ? (
+                    <button
+                      onClick={() => handleStartQuiz(q)}
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                    >
+                      Resume Quiz
+                    </button>
                   ) : isPastDeadline && q.myLateRequestStatus !== 'Approved' && !q.allowLateSubmission ? (
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
                         <AlertTriangle className="w-3.5 h-3.5" />
                         Deadline Passed
                       </span>
-                      {q.myLateRequestStatus === 'Pending' ? <span className="text-xs text-amber-700">Request pending</span> : (
+                      {q.myLateRequestStatus === 'Pending' ? <span className="text-xs text-amber-700">Request pending</span> : (q.myLateRequestCount || 0) >= 3 ? (
+                        <span className="text-xs text-slate-600">3 requests used. Contact your teacher or CR for a 4th attempt.</span>
+                      ) : (
                         <button onClick={() => setLateModalQuiz(q)} className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold rounded-xl border border-amber-200 transition">
                           Request Access
                         </button>
@@ -386,19 +384,15 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
 
       {/* Taking Quiz Modal */}
       {activeQuiz && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl border border-slate-100 overflow-hidden max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60">
+          <div className="bg-white w-full h-full max-w-none max-h-none rounded-none shadow-xl overflow-hidden flex flex-col">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Active Examination</span>
                 <h3 className="font-bold text-slate-900 text-lg">{activeQuiz.title}</h3>
+                <p className="text-xs text-slate-500">Progress autosaves. Refreshing or leaving will not lock your attempt.</p>
               </div>
-              <button
-                onClick={leaveQuiz}
-                className="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-lg"
-              >
-                ✕
-              </button>
+              {!submissionReceipt && <button onClick={leaveQuiz} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg">Save &amp; Exit</button>}
             </div>
 
             {submissionReceipt ? (
@@ -414,20 +408,9 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                 </p>
 
                 <div className="max-w-sm mx-auto p-4 bg-slate-50 rounded-2xl border border-slate-200 text-left space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Auto MCQ Score:</span>
-                    <span className="font-bold text-slate-800">{submissionReceipt.mcqScore} Marks</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Total Awarded Score:</span>
-                    <span className="font-bold text-indigo-700 text-sm">{submissionReceipt.totalScore} Marks</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Grading Status:</span>
-                    <span className="font-semibold text-slate-800">
-                      {submissionReceipt.isGraded ? 'Completed' : 'Pending Teacher Written Grading'}
-                    </span>
-                  </div>
+                  {activeQuiz.resultsPublished && submissionReceipt.totalScore !== undefined
+                    ? <div className="flex justify-between"><span className="text-slate-500">Your result:</span><span className="font-bold text-indigo-700 text-sm">{submissionReceipt.totalScore} / {activeQuiz.totalMarks}</span></div>
+                    : <p className="text-center text-slate-600">Your result will appear here after your teacher declares it.</p>}
                 </div>
 
                 <div className="pt-4 flex items-center justify-center gap-3">
@@ -511,13 +494,6 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
 
                 <div className="pt-4 flex items-center justify-end gap-2 border-t border-slate-100">
                   <button
-                    type="button"
-                    onClick={leaveQuiz}
-                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
                     type="submit"
                     disabled={submitting}
                     className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition disabled:opacity-50"
@@ -537,7 +513,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h3 className="font-bold text-slate-900">Request Late Quiz Submission</h3>
+              <h3 className="font-bold text-slate-900">{lateModalQuiz.myAttemptStatus === 'locked' ? 'Request Quiz Unblock' : 'Request Late Quiz Access'}</h3>
               <button onClick={() => setLateModalQuiz(null)} className="text-slate-400 hover:text-slate-600 font-bold">
                 ✕
               </button>
@@ -545,11 +521,13 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
 
             <form onSubmit={handleSubmitLateRequest} className="p-5 space-y-4">
               <p className="text-xs text-slate-600">
-                The deadline for <strong>{lateModalQuiz.title}</strong> has passed. Enter a valid reason to request late submission approval from your Class Representative (CR).
+                {lateModalQuiz.myAttemptStatus === 'locked'
+                  ? <>Your attempt for <strong>{lateModalQuiz.title}</strong> is blocked. Enter a reason to request access from your teacher and CR.</>
+                  : <>The deadline for <strong>{lateModalQuiz.title}</strong> has passed. Enter a reason to request late access from your teacher and CR.</>}
               </p>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Reason for Late Submission</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{lateModalQuiz.myAttemptStatus === 'locked' ? 'Reason for unblock' : 'Reason for late access'}</label>
                 <textarea
                   required
                   rows={3}

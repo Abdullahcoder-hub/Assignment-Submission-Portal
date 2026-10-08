@@ -149,7 +149,7 @@ export const generateQuizSubmissionDocx = async (data: DocxQuizPayload): Promise
           new Paragraph({
             children: [
               new TextRun({
-                text: `Generated officially by Assignment Submission Portal on ${formattedDate}. Verified Submission ID: ${data.submissionId}.`,
+                text: `Generated officially by Assignment & Quiz Portal on ${formattedDate}. Verified Submission ID: ${data.submissionId}.`,
                 italics: true,
                 size: 18,
                 color: '6b7280',

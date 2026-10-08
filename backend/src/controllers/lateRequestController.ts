@@ -95,44 +95,48 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
         return;
       }
 
-      // Check existing request
-      const existingRequest = await LateRequest.findOne({
+      const previousRequestCount = await LateRequest.countDocuments({
         quizId,
         studentId: req.student.id,
         requestType: 'Quiz',
       });
-
-      if (existingRequest && existingRequest.status !== 'Rejected') {
+      const existingPendingRequest = await LateRequest.findOne({
+        quizId,
+        studentId: req.student.id,
+        requestType: 'Quiz',
+        status: 'Pending',
+      });
+      if (existingPendingRequest) {
         res.status(200).json({
           success: true,
-          message: existingRequest.status === 'Approved'
-            ? 'Quiz access has already been approved.'
-            : 'Your quiz access request is pending CR and teacher approval.',
-          request: existingRequest,
+          message: 'Your quiz access request is pending CR and teacher approval.',
+          request: existingPendingRequest,
+          requestCount: previousRequestCount,
+        });
+        return;
+      }
+      if (previousRequestCount >= 3) {
+        res.status(429).json({
+          success: false,
+          message: 'You have used all 3 quiz access requests. Contact your teacher or CR to request a 4th attempt.',
+          requestCount: previousRequestCount,
         });
         return;
       }
 
-      const newRequest = existingRequest || await LateRequest.create({
-          studentId: req.student.id,
-          requestType: 'Quiz',
-          subjectId: quiz.subjectId,
-          classId: quiz.classId,
-          quizId: quiz._id,
-          studentName: req.student.name,
-          rollNumber: req.student.rollNumber,
-          reason: reason ? reason.trim() : 'Quiz deadline passed or attempt interrupted.',
-          status: 'Pending',
-          requestedAt: new Date(),
-        });
-      if (existingRequest) {
-        existingRequest.reason = reason ? reason.trim() : 'Quiz deadline passed or attempt interrupted.';
-        existingRequest.status = 'Pending';
-        existingRequest.requestedAt = new Date();
-        existingRequest.decidedAt = undefined;
-        existingRequest.decidedBy = undefined;
-        await existingRequest.save();
-      }
+      const newRequest = await LateRequest.create({
+        studentId: req.student.id,
+        requestType: 'Quiz',
+        subjectId: quiz.subjectId,
+        classId: quiz.classId,
+        quizId: quiz._id,
+        studentName: req.student.name,
+        rollNumber: req.student.rollNumber,
+        reason: reason ? reason.trim() : 'Quiz access / unblock requested.',
+        status: 'Pending',
+        requestedAt: new Date(),
+      });
+      const requestCount = previousRequestCount + 1;
 
       const [student, subject, staffQuiz] = await Promise.all([
         Student.findById(req.student.id).select('name email').lean(),
@@ -177,6 +181,7 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
         success: true,
         message: 'Your quiz access request has been sent to your CR and teacher.',
         request: newRequest,
+        requestCount,
       });
       return;
     }
@@ -477,10 +482,43 @@ export const getLateRequests = async (req: AuthRequest, res: Response): Promise<
       .populate('groupId', 'groupName leader members')
       .sort({ requestedAt: -1 });
 
+    const quizRequestCounts = new Map<string, number>();
+    const quizAttemptStatuses = new Map<string, string>();
+    const quizRequests = requests.filter((request) => request.requestType === 'Quiz' && request.quizId);
+    if (quizRequests.length) {
+      const quizRequestPairs = quizRequests.map((request) => ({
+        quizId: (request.quizId as any)?._id || request.quizId,
+        studentId: request.studentId,
+      }));
+      const counts = await LateRequest.aggregate([
+        {
+          $match: {
+            requestType: 'Quiz',
+            $or: quizRequestPairs,
+          },
+        },
+        { $group: { _id: { quizId: '$quizId', studentId: '$studentId' }, count: { $sum: 1 } } },
+      ]);
+      counts.forEach((item) => quizRequestCounts.set(`${item._id.quizId}:${item._id.studentId}`, item.count));
+      const attempts = await QuizAttempt.find({ $or: quizRequestPairs }).select('quizId studentId status').lean();
+      attempts.forEach((attempt) => quizAttemptStatuses.set(
+        `${attempt.quizId.toString()}:${attempt.studentId.toString()}`,
+        attempt.status
+      ));
+    }
+
     res.status(200).json({
       success: true,
       count: requests.length,
-      requests,
+      requests: requests.map((request) => {
+        const quizId = (request.quizId as any)?._id?.toString() || request.quizId?.toString();
+        const requestKey = quizId ? `${quizId}:${request.studentId.toString()}` : '';
+        return {
+          ...request.toObject(),
+          requestCount: requestKey ? quizRequestCounts.get(requestKey) || 0 : undefined,
+          attemptStatus: requestKey ? quizAttemptStatuses.get(requestKey) : undefined,
+        };
+      }),
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch late submission requests.' });
@@ -590,8 +628,9 @@ export const decideLateRequestByEmail = async (req: Request, res: Response): Pro
       return;
     }
 
+    const requestLabel = lateReq.requestType === 'Quiz' ? 'quiz access / unblock' : 'late request';
     res.setHeader('Cache-Control', 'no-store');
-    res.type('html').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirm late request</title></head><body><main><h1>Confirm ${decision.toLowerCase()} decision</h1><p>This action will notify the student. Confirm only if you intend to proceed.</p><form method="post" action="${escapeHtml(`${req.baseUrl}/email-decision`)}"><input type="hidden" name="id" value="${escapeHtml(id)}"><input type="hidden" name="decision" value="${escapeHtml(decision)}"><input type="hidden" name="token" value="${escapeHtml(token)}"><button type="submit">Confirm ${decision.toLowerCase()}</button></form></main></body></html>`);
+    res.type('html').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirm ${requestLabel}</title><style>body{font:16px Arial,sans-serif;background:#f1f5f9;color:#0f172a;margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:white;border:1px solid #e2e8f0;border-radius:16px;padding:28px;box-shadow:0 12px 36px #0f172a18}button{border:0;border-radius:8px;background:${decision === 'Approved' ? '#16a34a' : '#dc2626'};color:white;font-weight:700;padding:12px 18px;cursor:pointer}</style></head><body><main><h1>Confirm ${decision.toLowerCase()} ${requestLabel}</h1><p>This action will notify the student. Confirm only if you intend to proceed.</p><form method="post" action="${escapeHtml(`${req.baseUrl}/email-decision`)}"><input type="hidden" name="id" value="${escapeHtml(id)}"><input type="hidden" name="decision" value="${escapeHtml(decision)}"><input type="hidden" name="token" value="${escapeHtml(token)}"><button type="submit">Confirm ${decision.toLowerCase()}</button></form></main></body></html>`);
   } catch {
     res.status(400).send('This late request link is invalid or expired.');
   }
@@ -626,7 +665,9 @@ export const completeLateRequestDecisionByEmail = async (req: Request, res: Resp
       );
     }
     await notifyStudentOfDecision(lateReq, decision);
-    res.send(`Late submission request ${decision.toLowerCase()} successfully. The student has been notified by email.`);
+    const requestLabel = lateReq.requestType === 'Quiz' ? 'Quiz access / unblock request' : 'Late submission request';
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('html').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Request ${decision.toLowerCase()}</title><style>body{font:16px Arial,sans-serif;background:#f1f5f9;color:#0f172a;margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:white;border:1px solid #e2e8f0;border-radius:16px;padding:28px;box-shadow:0 12px 36px #0f172a18}.status{color:${decision === 'Approved' ? '#15803d' : '#b91c1c'};font-weight:700}</style></head><body><main><h1>${escapeHtml(requestLabel)} ${decision.toLowerCase()}</h1><p class="status">The request was ${decision.toLowerCase()} successfully.</p><p>The student has been notified by email. You may close this page.</p></main></body></html>`);
   } catch {
     res.status(400).send('This late request link is invalid or expired.');
   }

@@ -54,13 +54,16 @@ export const sendLateRequestEmail = async (params: {
     : params.requestType === 'GroupRegistration'
       ? 'Late Group Registration'
       : 'Late Assignment Submission';
+  const isQuizRequest = params.requestType === 'Quiz';
+  const notificationHeading = isQuizRequest ? 'Quiz Access / Unblock Request' : 'Late Request Notification';
+  const actionName = isQuizRequest ? 'Quiz Access' : 'Late Request';
 
   if (params.isStudentNotification) {
     decisionText = params.requestType === 'Quiz'
       ? 'Your quiz access / unblock request has been sent to your Class Representative and teacher and is awaiting a decision.'
       : 'Your late submission request has been submitted successfully and is pending approval from the Class Representative.';
     actionHtml = '<p>You will receive an email notification once your request is reviewed. Please check the portal for updates.</p>';
-    emailSubject = `Late Request Submitted — ${params.assignmentTitle}`;
+    emailSubject = `${actionName} Submitted — ${params.assignmentTitle}`;
   } else if (params.decision) {
     if (params.decision === 'Approved') {
       decisionText = params.requestType === 'Quiz'
@@ -75,11 +78,13 @@ export const sendLateRequestEmail = async (params: {
       }
     }
     actionHtml = '<p>Please open the portal to submit again.</p>';
-    emailSubject = `Late Request ${params.decision} — ${params.assignmentTitle}`;
+    emailSubject = `${actionName} ${params.decision} — ${params.assignmentTitle}`;
   } else {
-    decisionText = 'A student has submitted a late permission request.';
+    decisionText = isQuizRequest
+      ? 'A student has requested quiz access or an unblock.'
+      : 'A student has submitted a late permission request.';
     actionHtml = `<p><a href="${escapeHtml(params.approveUrl)}" style="background:#16a34a;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">Approve</a> <a href="${escapeHtml(params.rejectUrl)}" style="background:#dc2626;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">Reject</a></p>`;
-    emailSubject = `New Late Request — ${params.assignmentTitle}`;
+    emailSubject = `New ${actionName} — ${params.assignmentTitle}`;
   }
 
   if (params.requestType === 'GroupRegistration' && params.groupName) {
@@ -93,7 +98,7 @@ export const sendLateRequestEmail = async (params: {
     additionalInfo = `<br><strong>Request Type:</strong> Late Assignment Submission`;
   }
 
-  const htmlContent = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:8px;background:#ffffff"><h2 style="color:#1f2937;margin-top:0">Late Request Notification</h2><p>Hello <strong>${escapeHtml(params.toName)}</strong>,</p><p>${decisionText}</p><div style="background:#f9fafb;padding:15px;border-radius:6px;margin:15px 0"><p style="margin:0"><strong>Student:</strong> ${escapeHtml(params.studentName)}<br><strong>Roll No:</strong> ${escapeHtml(params.rollNumber)}<br><strong>Subject:</strong> ${escapeHtml(params.subjectName)}<br><strong>Assignment:</strong> ${escapeHtml(params.assignmentTitle)}${additionalInfo}<br><strong>Reason:</strong> ${escapeHtml(params.reason)}</p></div>${actionHtml}</div>`;
+  const htmlContent = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:8px;background:#ffffff"><h2 style="color:#1f2937;margin-top:0">${notificationHeading}</h2><p>Hello <strong>${escapeHtml(params.toName)}</strong>,</p><p>${decisionText}</p><div style="background:#f9fafb;padding:15px;border-radius:6px;margin:15px 0"><p style="margin:0"><strong>Student:</strong> ${escapeHtml(params.studentName)}<br><strong>Roll No:</strong> ${escapeHtml(params.rollNumber)}<br><strong>Subject:</strong> ${escapeHtml(params.subjectName)}<br><strong>${isQuizRequest ? 'Quiz' : 'Assignment'}:</strong> ${escapeHtml(params.assignmentTitle)}${additionalInfo}<br><strong>Reason:</strong> ${escapeHtml(params.reason)}</p></div>${actionHtml}</div>`;
 
   try {
     if (!apiKey || apiKey === 'xkeysib-demo') {
@@ -166,7 +171,7 @@ export const sendSubmissionConfirmationEmail = async (
         </div>
         <div class="content">
           <p>Dear <strong>${escapeHtml(params.toName)}</strong>,</p>
-          <p>Your assignment submission has been recorded successfully in the Class Portal.</p>
+          <p>Your assignment submission has been recorded successfully in the Assignment &amp; Quiz Portal.</p>
 
           <div class="receipt-card">
             <div class="row">
@@ -208,7 +213,7 @@ export const sendSubmissionConfirmationEmail = async (
           <p>Please keep this email receipt for your records.</p>
         </div>
         <div class="footer">
-          Class Assignment Submission Portal &bull; Generated automatically by server
+          Assignment &amp; Quiz Portal &bull; Generated automatically by server
         </div>
       </div>
     </body>
@@ -246,7 +251,7 @@ export const sendStudentVerificationEmail = async (
       <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0;">
         <h2 style="color: #1e293b; margin-top: 0;">Verify Your Account Email</h2>
         <p style="color: #475569;">Hello <strong>${escapeHtml(toName)}</strong>,</p>
-        <p style="color: #475569;">Thank you for registering on the Class Assignment Submission Portal. Please click below to verify your email address. This link expires in 5 minutes. Teacher and CR accounts also need Super Admin approval before sign-in.</p>
+        <p style="color: #475569;">Thank you for registering on the Assignment &amp; Quiz Portal. Please click below to verify your email address. This link expires in 5 minutes. Teacher and CR accounts also need Super Admin approval before sign-in.</p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${verifyUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; font-weight: bold; border-radius: 8px; text-decoration: none; display: inline-block;">Verify Email Address</a>
         </div>
@@ -257,7 +262,7 @@ export const sendStudentVerificationEmail = async (
   `;
 
   try {
-    await sendBrevoEmail('Verify Your Email — Class Assignment Portal', htmlContent, toEmail, toName);
+    await sendBrevoEmail('Verify Your Email — Assignment & Quiz Portal', htmlContent, toEmail, toName);
     return { success: true };
   } catch (error: any) {
     console.error('[Brevo Verification Email Error] Delivery failed.');
@@ -287,7 +292,7 @@ export const sendPasswordResetEmail = async (
       <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0;">
         <h2 style="color: #1e293b; margin-top: 0;">Reset Your Password</h2>
         <p style="color: #475569;">Hello <strong>${escapeHtml(toName)}</strong>,</p>
-        <p style="color: #475569;">You requested a password reset for your Class Portal account. Click below to set a new password:</p>
+        <p style="color: #475569;">You requested a password reset for your Assignment &amp; Quiz Portal account. Click below to set a new password:</p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${resetUrl}" style="background-color: #dc2626; color: #ffffff; padding: 12px 24px; font-weight: bold; border-radius: 8px; text-decoration: none; display: inline-block;">Reset Password</a>
         </div>
@@ -298,7 +303,7 @@ export const sendPasswordResetEmail = async (
   `;
 
   try {
-    await sendBrevoEmail('Reset Password — Class Assignment Portal', htmlContent, toEmail, toName);
+    await sendBrevoEmail('Reset Password — Assignment & Quiz Portal', htmlContent, toEmail, toName);
     return { success: true };
   } catch (error: any) {
     console.error('[Brevo Reset Email Error] Delivery failed.');
@@ -343,7 +348,7 @@ export const sendStaffRegistrationApprovalEmail = async (params: {
       <div style="max-width: 560px; margin: 0 auto; background: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
         <h2 style="color: #4f46e5; margin-top: 0; font-size: 20px;">Staff Account Approval Required</h2>
         <p style="color: #475569;">Hello <strong>${escapeHtml(params.superAdminName)}</strong>,</p>
-        <p style="color: #475569;">A new staff account has registered on the Class Portal and is waiting for your Super Admin approval:</p>
+        <p style="color: #475569;">A new staff account has registered on the Assignment &amp; Quiz Portal and is waiting for your Super Admin approval:</p>
         
         <div style="background: #f1f5f9; padding: 16px; border-radius: 12px; margin: 20px 0; font-size: 14px; line-height: 1.6;">
           <p style="margin: 4px 0;"><strong>Name:</strong> ${escapeHtml(params.applicantName)}</p>

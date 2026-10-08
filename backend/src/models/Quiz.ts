@@ -23,6 +23,7 @@ export interface IQuiz extends Document {
   durationMinutes?: number;
   deadline: Date;
   allowLateSubmission: boolean;
+  resultsPublished: boolean;
   totalMarks: number;
   questions: IQuizQuestion[];
   isActive: boolean;
@@ -56,6 +57,7 @@ const QuizSchema: Schema = new Schema(
     durationMinutes: { type: Number, default: 30 },
     deadline: { type: Date, required: true },
     allowLateSubmission: { type: Boolean, default: false },
+    resultsPublished: { type: Boolean, default: false },
     totalMarks: { type: Number, required: true, default: 10 },
     questions: { type: [QuizQuestionSchema], required: true },
     isActive: { type: Boolean, default: true },

@@ -12,7 +12,8 @@ import TeacherAssignment from '../models/TeacherAssignment.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { generateQuizSubmissionDocx } from '../utils/docxGenerator.js';
 import { generateSubmissionId } from '../utils/submissionId.js';
-import { escapeRegex } from '../utils/fileValidation.js';
+import { escapeRegex, sanitizeCsvField } from '../utils/fileValidation.js';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 /**
  * Helper: Strip correct answers for students
@@ -26,6 +27,16 @@ const sanitizeQuizForStudent = (quiz: any) => {
   quizObj.questions = sanitizedQuestions;
   return quizObj;
 };
+
+const canTeacherManageQuiz = async (quiz: any, teacherId: string): Promise<boolean> => (
+  quiz.teacherId.toString() === teacherId ||
+  Boolean(await TeacherAssignment.exists({
+    teacherId,
+    classId: quiz.classId?._id || quiz.classId,
+    subjectId: quiz.subjectId?._id || quiz.subjectId,
+    isActive: true,
+  }))
+);
 
 /**
  * 1. CREATE QUIZ (Teacher assigned to Class+Subject OR Super Admin)
@@ -214,9 +225,13 @@ export const getQuizzes = async (req: AuthRequest, res: Response): Promise<void>
       ]);
       const attemptMap = new Map(studentAttempts.map((attempt) => [attempt.quizId.toString(), attempt.status]));
       const lateRequestMap = new Map<string, string>();
+      const lateRequestCountMap = new Map<string, number>();
       lateRequests.forEach((request) => {
         const quizId = request.quizId?.toString();
-        if (quizId && !lateRequestMap.has(quizId)) lateRequestMap.set(quizId, request.status);
+        if (quizId) {
+          lateRequestCountMap.set(quizId, (lateRequestCountMap.get(quizId) || 0) + 1);
+          if (!lateRequestMap.has(quizId)) lateRequestMap.set(quizId, request.status);
+        }
       });
 
       const sanitized = quizzes.map((q) => {
@@ -225,11 +240,18 @@ export const getQuizzes = async (req: AuthRequest, res: Response): Promise<void>
           ...sanitizeQuizForStudent(q),
           myAttemptStatus: attemptMap.get(q._id.toString()) || null,
           myLateRequestStatus: lateRequestMap.get(q._id.toString()) || null,
+          myLateRequestCount: lateRequestCountMap.get(q._id.toString()) || 0,
           mySubmission: sub
             ? {
                 submissionId: sub.submissionId,
-                totalScore: sub.totalScore,
-                isGraded: sub.isGraded,
+                ...(q.resultsPublished
+                  ? {
+                      mcqScore: sub.mcqScore,
+                      writtenScore: sub.writtenScore,
+                      totalScore: sub.totalScore,
+                      isGraded: sub.isGraded,
+                    }
+                  : {}),
                 submittedAt: sub.submittedAt,
                 isLate: sub.isLate,
                 status: sub.status,
@@ -268,7 +290,7 @@ export const getQuizzes = async (req: AuthRequest, res: Response): Promise<void>
       const subCountMap = new Map(subCounts.map((sc) => [sc._id.toString(), sc.count]));
 
       const result = quizzes.map((q) => ({
-        ...q,
+        ...(req.admin?.role === 'TEACHER' ? q : sanitizeQuizForStudent(q)),
         submissionCount: subCountMap.get(q._id.toString()) || 0,
       }));
 
@@ -320,7 +342,22 @@ export const getQuizById = async (req: AuthRequest, res: Response): Promise<void
       res.status(200).json({
         success: true,
         quiz: sanitizeQuizForStudent(quiz),
-        mySubmission: mySubmission || null,
+        resultsPublished: quiz.resultsPublished,
+        mySubmission: mySubmission
+          ? {
+              submissionId: mySubmission.submissionId,
+              ...(quiz.resultsPublished
+                ? {
+                    mcqScore: mySubmission.mcqScore,
+                    writtenScore: mySubmission.writtenScore,
+                    totalScore: mySubmission.totalScore,
+                    isGraded: mySubmission.isGraded,
+                  }
+                : {}),
+              submittedAt: mySubmission.submittedAt,
+              status: mySubmission.status,
+            }
+          : null,
       });
       return;
     }
@@ -349,7 +386,10 @@ export const getQuizById = async (req: AuthRequest, res: Response): Promise<void
       }
     }
 
-    res.status(200).json({ success: true, quiz });
+    res.status(200).json({
+      success: true,
+      quiz: req.admin?.role === 'TEACHER' ? quiz : sanitizeQuizForStudent(quiz),
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch quiz details.' });
   }
@@ -392,10 +432,7 @@ export const startQuiz = async (req: AuthRequest, res: Response): Promise<void> 
     let attempt = await QuizAttempt.findOne({ quizId: quiz._id, studentId: req.student.id });
     if (attempt) {
       if (attempt.status === 'in_progress') {
-        attempt.status = 'locked';
-        attempt.lockedAt = new Date();
-        await attempt.save();
-        res.status(423).json({ success: false, message: 'This quiz was interrupted and is locked. Request your CR or teacher to unblock it.' });
+        res.status(200).json({ success: true, quiz: sanitizeQuizForStudent(quiz) });
         return;
       }
       if (attempt.status === 'locked' || attempt.status === 'submitted') {
@@ -666,9 +703,14 @@ export const submitQuiz = async (req: AuthRequest, res: Response): Promise<void>
       message: 'Quiz submitted successfully.',
       submission: {
         submissionId: submission.submissionId,
-        mcqScore: submission.mcqScore,
-        totalScore: submission.totalScore,
-        isGraded: submission.isGraded,
+        ...(quiz.resultsPublished && submission.isGraded
+          ? {
+              mcqScore: submission.mcqScore,
+              writtenScore: submission.writtenScore,
+              totalScore: submission.totalScore,
+              isGraded: submission.isGraded,
+            }
+          : {}),
         submittedAt: submission.submittedAt,
         status: submission.status,
       },
@@ -724,6 +766,29 @@ export const getQuizSubmissions = async (req: AuthRequest, res: Response): Promi
       .populate('studentId', 'name rollNumber email')
       .sort({ rollNumber: 1 })
       .lean();
+    const visibleSubmissions = req.admin?.role === 'TEACHER'
+      ? submissions
+      : submissions.map((submission) => ({
+          _id: submission._id,
+          submissionId: submission.submissionId,
+          quizId: submission.quizId,
+          studentId: submission.studentId,
+          classId: submission.classId,
+          subjectId: submission.subjectId,
+          studentName: submission.studentName,
+          rollNumber: submission.rollNumber,
+          answers: submission.answers.map((answer) => ({
+            questionId: answer.questionId,
+            questionType: answer.questionType,
+            selectedOptionIndex: answer.selectedOptionIndex,
+            writtenAnswerText: answer.writtenAnswerText,
+          })),
+          submittedAt: submission.submittedAt,
+          isLate: submission.isLate,
+          status: submission.status,
+          createdAt: submission.createdAt,
+          updatedAt: submission.updatedAt,
+        }));
 
     res.status(200).json({
       success: true,
@@ -736,10 +801,161 @@ export const getQuizSubmissions = async (req: AuthRequest, res: Response): Promi
         subject: quiz.subjectId,
       },
       count: submissions.length,
-      submissions,
+      submissions: visibleSubmissions,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch quiz submissions.' });
+  }
+};
+
+export const updateQuizResultsPublished = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (typeof req.body.resultsPublished !== 'boolean') {
+      res.status(400).json({ success: false, message: 'resultsPublished must be a boolean.' });
+      return;
+    }
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) {
+      res.status(404).json({ success: false, message: 'Quiz not found.' });
+      return;
+    }
+    if (req.admin?.role !== 'TEACHER' || !(await canTeacherManageQuiz(quiz, req.admin.id))) {
+      res.status(403).json({ success: false, message: 'Only the assigned teacher can publish quiz results.' });
+      return;
+    }
+    quiz.resultsPublished = req.body.resultsPublished;
+    await quiz.save();
+    res.status(200).json({
+      success: true,
+      message: quiz.resultsPublished ? 'Quiz results declared to students.' : 'Quiz results hidden from students.',
+      resultsPublished: quiz.resultsPublished,
+    });
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to update quiz result visibility.' });
+  }
+};
+
+export const downloadQuizSubmissionsPdf = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const quiz = await Quiz.findById(req.params.id)
+      .populate('classId', 'name semester section')
+      .populate('subjectId', 'name code');
+    if (!quiz) {
+      res.status(404).json({ success: false, message: 'Quiz not found.' });
+      return;
+    }
+    if (req.admin?.role !== 'TEACHER' || !(await canTeacherManageQuiz(quiz, req.admin.id))) {
+      res.status(403).json({ success: false, message: 'Only the assigned teacher can export quiz submissions.' });
+      return;
+    }
+    const submissions = await QuizSubmission.find({ quizId: quiz._id }).sort({ rollNumber: 1 }).lean();
+    if (!submissions.length) {
+      res.status(404).json({ success: false, message: 'There are no quiz submissions to export.' });
+      return;
+    }
+
+    const pdf = await PDFDocument.create();
+    const regular = await pdf.embedFont(StandardFonts.Helvetica);
+    const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const pageWidth = 612;
+    const pageHeight = 792;
+    const margin = 48;
+    const maxWidth = pageWidth - margin * 2;
+    const safePdfText = (value: unknown) => String(value ?? '')
+      .replace(/[^\x20-\x7E]/g, '?')
+      .replace(/[ \t]+/g, ' ')
+      .trim();
+    let page = pdf.addPage([pageWidth, pageHeight]);
+    let y = pageHeight - margin;
+    const newPage = () => {
+      page = pdf.addPage([pageWidth, pageHeight]);
+      y = pageHeight - margin;
+    };
+    const drawWrapped = (value: unknown, font = regular, size = 10, color = rgb(0.12, 0.16, 0.23)) => {
+      const text = safePdfText(value) || ' ';
+      const lines: string[] = [];
+      let line = '';
+      for (const word of text.split(/\s+/)) {
+        const candidate = line ? `${line} ${word}` : word;
+        if (line && font.widthOfTextAtSize(candidate, size) > maxWidth) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = candidate;
+        }
+      }
+      if (line) lines.push(line);
+      for (const textLine of lines) {
+        if (y < margin + size) newPage();
+        page.drawText(textLine, { x: margin, y, size, font, color });
+        y -= size + 5;
+      }
+    };
+
+    for (const [studentIndex, submission] of submissions.entries()) {
+      if (studentIndex > 0) newPage();
+      drawWrapped(`${submission.studentName} (${submission.rollNumber})`, bold, 16, rgb(0.1, 0.2, 0.48));
+      drawWrapped(`Quiz: ${quiz.title} | Submission ID: ${submission.submissionId}`, regular, 10);
+      drawWrapped(`Class: ${(quiz.classId as any)?.name || ''} | Subject: ${(quiz.subjectId as any)?.name || ''} (${(quiz.subjectId as any)?.code || ''})`, regular, 10);
+      drawWrapped(`Submitted: ${new Date(submission.submittedAt).toLocaleString()} | Score: ${submission.totalScore}/${quiz.totalMarks} | Status: ${submission.isGraded ? 'Graded' : 'Pending grading'}`, bold, 10);
+      y -= 10;
+
+      const questionMap = new Map(quiz.questions.map((question) => [question.questionId, question]));
+      for (const [answerIndex, answer] of submission.answers.entries()) {
+        const question = questionMap.get(answer.questionId);
+        const answerText = answer.questionType === 'MCQ'
+          ? question?.options?.[answer.selectedOptionIndex ?? -1] || '[No answer]'
+          : answer.writtenAnswerText || '[No answer]';
+        drawWrapped(`Question ${answerIndex + 1}: ${question?.questionText || ''}`, bold, 11);
+        drawWrapped(`Answer: ${answerText}`, regular, 10);
+        drawWrapped(`Marks: ${answer.marksAwarded || 0}/${question?.marks || 0}${answer.teacherFeedback ? ` | Feedback: ${answer.teacherFeedback}` : ''}`, regular, 9, rgb(0.32, 0.35, 0.4));
+        y -= 8;
+      }
+    }
+
+    const pdfBytes = await pdf.save();
+    const filename = `${safePdfText(quiz.title).replace(/[^a-zA-Z0-9_-]/g, '_')}_Quiz_Submissions.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBytes.length);
+    res.status(200).send(Buffer.from(pdfBytes));
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to generate quiz submissions PDF.' });
+  }
+};
+
+export const downloadQuizSubmissionsCsv = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const quiz = await Quiz.findById(req.params.id).populate('subjectId', 'name code');
+    if (!quiz) {
+      res.status(404).json({ success: false, message: 'Quiz not found.' });
+      return;
+    }
+    if (req.admin?.role !== 'TEACHER' || !(await canTeacherManageQuiz(quiz, req.admin.id))) {
+      res.status(403).json({ success: false, message: 'Only the assigned teacher can export quiz grades.' });
+      return;
+    }
+    const submissions = await QuizSubmission.find({ quizId: quiz._id }).sort({ rollNumber: 1 }).lean();
+    const subject = quiz.subjectId as any;
+    const headers = ['Student Name', 'Roll Number', 'Subject', 'Quiz', 'MCQ Marks', 'Written Marks', 'Total Marks', 'Maximum Marks', 'Grading Status'];
+    const rows = submissions.map((submission) => [
+      submission.studentName,
+      submission.rollNumber,
+      `${subject?.name || 'Subject'} (${subject?.code || ''})`,
+      quiz.title,
+      submission.mcqScore,
+      submission.writtenScore,
+      submission.totalScore,
+      quiz.totalMarks,
+      submission.isGraded ? 'Graded' : 'Pending grading',
+    ].map(sanitizeCsvField).join(','));
+    const csvContent = [headers.map(sanitizeCsvField).join(','), ...rows].join('\n');
+    const cleanTitle = quiz.title.replace(/[^a-zA-Z0-9_-]/g, '_');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${cleanTitle}_Quiz_Grades.csv"`);
+    res.status(200).send(`\uFEFF${csvContent}`);
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to export quiz grades CSV.' });
   }
 };
 

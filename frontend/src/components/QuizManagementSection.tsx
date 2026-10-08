@@ -61,6 +61,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
   const [selectedQuizForSubmissions, setSelectedQuizForSubmissions] = useState<Quiz | null>(null);
   const [quizSubmissions, setQuizSubmissions] = useState<QuizSubmission[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState<boolean>(false);
+  const [updatingResults, setUpdatingResults] = useState<boolean>(false);
 
   // Grading Modal State
   const [gradingSubmission, setGradingSubmission] = useState<QuizSubmission | null>(null);
@@ -76,7 +77,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
         api.get('/teacher-assignments/my-classes'),
         api.get('/classes'),
         api.get('/subjects'),
-        api.get('/late-requests?requestType=Quiz&status=Pending'),
+        api.get('/late-requests?requestType=Quiz'),
       ]);
 
       if (resQuizzes.data.success) setQuizzes(resQuizzes.data.quizzes || []);
@@ -134,6 +135,76 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
       await fetchData();
     } catch (err: any) {
       setFeedback({ success: false, message: err.response?.data?.message || 'Failed to update quiz access request.' });
+    }
+  };
+
+  const handleGrantFourthAttempt = async (request: LateRequest) => {
+    const quizId = typeof request.quizId === 'object' && request.quizId ? request.quizId._id : request.quizId;
+    if (!quizId || !request.studentId) return;
+    try {
+      await api.patch(`/quizzes/${quizId}/attempts/${request.studentId}/unlock`);
+      setFeedback({ success: true, message: 'Fourth quiz attempt allowed. The student can resume the quiz.' });
+      await fetchData();
+    } catch (err: any) {
+      setFeedback({ success: false, message: err.response?.data?.message || 'Failed to allow a fourth attempt.' });
+    }
+  };
+
+  const handleToggleResults = async () => {
+    if (!selectedQuizForSubmissions) return;
+    try {
+      setUpdatingResults(true);
+      const resultsPublished = !selectedQuizForSubmissions.resultsPublished;
+      const res = await api.patch(`/quizzes/${selectedQuizForSubmissions._id}/results`, { resultsPublished });
+      if (res.data.success) {
+        setSelectedQuizForSubmissions({ ...selectedQuizForSubmissions, resultsPublished });
+        setQuizzes((current) => current.map((quiz) => quiz._id === selectedQuizForSubmissions._id
+          ? { ...quiz, resultsPublished }
+          : quiz));
+        setFeedback({ success: true, message: res.data.message });
+      }
+    } catch (err: any) {
+      setFeedback({ success: false, message: err.response?.data?.message || 'Failed to update result visibility.' });
+    } finally {
+      setUpdatingResults(false);
+    }
+  };
+
+  const handleDownloadQuizPdf = async () => {
+    if (!selectedQuizForSubmissions) return;
+    try {
+      const response = await api.get(`/quizzes/${selectedQuizForSubmissions._id}/submissions/pdf`, {
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${selectedQuizForSubmissions.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Quiz_Submissions.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err: any) {
+      setFeedback({ success: false, message: err.response?.data?.message || 'Failed to download the quiz PDF.' });
+    }
+  };
+
+  const handleDownloadGradesCsv = async () => {
+    if (!selectedQuizForSubmissions) return;
+    try {
+      const response = await api.get(`/quizzes/${selectedQuizForSubmissions._id}/submissions/csv`, {
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${selectedQuizForSubmissions.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Quiz_Grades.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err: any) {
+      setFeedback({ success: false, message: err.response?.data?.message || 'Failed to download the grades CSV.' });
     }
   };
 
@@ -308,23 +379,6 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
     }
   };
 
-  const handleDownloadDocx = async (submissionId: string, rollNumber: string) => {
-    try {
-      const res = await api.get(`/quizzes/submission/${submissionId}/docx`, {
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${rollNumber}_Quiz_Submission.docx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      alert('Failed to download submission DOCX.');
-    }
-  };
-
   const filteredQuizzes = quizzes.filter((q) => {
     const subjectName = typeof q.subjectId === 'object' && q.subjectId ? (q.subjectId as any).name : '';
     const className = typeof q.classId === 'object' && q.classId ? (q.classId as any).name : '';
@@ -360,21 +414,26 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
         )}
       </div>
 
-      {quizRequests.length > 0 && (
+      {quizRequests.some((request) => request.status === 'Pending' || request.requestCount === 3) && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 sm:p-5 space-y-3">
-          <h3 className="font-bold text-slate-900">Quiz Access Requests ({quizRequests.length})</h3>
-          {quizRequests.map((request) => {
+          <h3 className="font-bold text-slate-900">Quiz Access Requests</h3>
+          {quizRequests.filter((request) => request.status === 'Pending' || request.requestCount === 3).map((request) => {
             const quiz = request.quizId && typeof request.quizId === 'object' ? request.quizId as Quiz : null;
             const requestClass = request.classId && typeof request.classId === 'object' ? request.classId as Class : null;
             return (
               <div key={request._id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-white p-3 border border-amber-100">
                 <div className="min-w-0 text-sm">
                   <p className="font-semibold text-slate-900">{request.studentName} ({request.rollNumber}) · {quiz?.title || 'Quiz'}</p>
-                  <p className="text-xs text-slate-600">{requestClass?.name || 'Class'} · {request.reason}</p>
+                  <p className="text-xs text-slate-600">{requestClass?.name || 'Class'} · {request.reason} · {request.requestCount || 0}/3 requests · {request.status}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <button onClick={() => handleQuizRequestDecision(request._id, 'Approved')} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Approve / Unblock</button>
-                  <button onClick={() => handleQuizRequestDecision(request._id, 'Rejected')} className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-bold">Reject</button>
+                  {request.status === 'Pending' && <>
+                    <button onClick={() => handleQuizRequestDecision(request._id, 'Approved')} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold">Approve / Unblock</button>
+                    <button onClick={() => handleQuizRequestDecision(request._id, 'Rejected')} className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-bold">Reject</button>
+                  </>}
+                  {request.status !== 'Pending' && request.requestCount === 3 && request.attemptStatus === 'locked' && (
+                    <button onClick={() => handleGrantFourthAttempt(request)} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold">Allow 4th Attempt</button>
+                  )}
                 </div>
               </div>
             );
@@ -544,12 +603,27 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                 <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Quiz Submissions</span>
                 <h3 className="font-bold text-slate-900 text-base sm:text-lg">{selectedQuizForSubmissions.title}</h3>
               </div>
-              <button
-                onClick={() => setSelectedQuizForSubmissions(null)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1 rounded-lg"
-              >
-                ✕
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {userRole === 'TEACHER' && (
+                  <>
+                    <button onClick={handleDownloadQuizPdf} className="px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg">
+                      <Download className="inline w-3.5 h-3.5 mr-1" /> Download All as PDF
+                    </button>
+                    <button onClick={handleDownloadGradesCsv} className="px-3 py-2 bg-slate-700 text-white text-xs font-bold rounded-lg">
+                      <Download className="inline w-3.5 h-3.5 mr-1" /> Grades CSV
+                    </button>
+                    <button onClick={handleToggleResults} disabled={updatingResults} className="px-3 py-2 bg-emerald-600 disabled:opacity-50 text-white text-xs font-bold rounded-lg">
+                      {updatingResults ? 'Saving...' : selectedQuizForSubmissions.resultsPublished ? 'Hide Results' : 'Declare Results'}
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setSelectedQuizForSubmissions(null)}
+                  className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1 rounded-lg"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <div className="p-5 overflow-y-auto flex-1 space-y-4">
@@ -569,10 +643,12 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                       <tr>
                         <th className="px-4 py-3">Roll Number</th>
                         <th className="px-4 py-3">Student Name</th>
-                        <th className="px-4 py-3">MCQ Score</th>
-                        <th className="px-4 py-3">Written Score</th>
-                        <th className="px-4 py-3">Total Marks</th>
-                        <th className="px-4 py-3">Status</th>
+                        {userRole === 'TEACHER' && <>
+                          <th className="px-4 py-3">MCQ Score</th>
+                          <th className="px-4 py-3">Written Score</th>
+                          <th className="px-4 py-3">Total Marks</th>
+                          <th className="px-4 py-3">Grading</th>
+                        </>}
                         <th className="px-4 py-3 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -581,22 +657,16 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                         <tr key={sub._id} className="hover:bg-slate-50/80 transition">
                           <td className="px-4 py-3 font-mono font-bold text-slate-900">{sub.rollNumber}</td>
                           <td className="px-4 py-3 font-medium text-slate-800">{sub.studentName}</td>
-                          <td className="px-4 py-3 text-indigo-600 font-semibold">{sub.mcqScore}</td>
-                          <td className="px-4 py-3 text-purple-600 font-semibold">{sub.writtenScore}</td>
-                          <td className="px-4 py-3 font-bold text-slate-900">
-                            {sub.totalScore} / {selectedQuizForSubmissions.totalMarks}
-                          </td>
-                          <td className="px-4 py-3">
-                            {sub.isGraded ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                                <Check className="w-3 h-3" /> Graded
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                                Pending Grading
-                              </span>
-                            )}
-                          </td>
+                          {userRole === 'TEACHER' && <>
+                            <td className="px-4 py-3 text-indigo-600 font-semibold">{sub.mcqScore}</td>
+                            <td className="px-4 py-3 text-purple-600 font-semibold">{sub.writtenScore}</td>
+                            <td className="px-4 py-3 font-bold text-slate-900">{sub.totalScore} / {selectedQuizForSubmissions.totalMarks}</td>
+                            <td className="px-4 py-3">
+                              {sub.isGraded
+                                ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100"><Check className="w-3 h-3" /> Graded</span>
+                                : <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">Pending Grading</span>}
+                            </td>
+                          </>}
                           <td className="px-4 py-3 text-right space-x-2">
                             {userRole === 'TEACHER' && selectedQuizForSubmissions.quizType !== 'MCQ' && (
                               <button
@@ -608,14 +678,6 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                               </button>
                             )}
 
-                            <button
-                              onClick={() => handleDownloadDocx(sub._id, sub.rollNumber)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
-                              title="Download Submission DOCX"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                              DOCX
-                            </button>
                           </td>
                         </tr>
                       ))}

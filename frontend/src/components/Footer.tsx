@@ -9,7 +9,7 @@ export const Footer: React.FC = () => {
             © 2026 <span className="text-white font-bold">The Developers Hub</span>. All rights reserved.
           </p>
           <p className="text-slate-400 text-xs mt-0.5">
-            Assignment & Project Submission Portal
+            Assignments, Quizzes & Results
           </p>
         </div>
         
