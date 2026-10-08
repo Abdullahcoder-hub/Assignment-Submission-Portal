@@ -5,13 +5,13 @@ import {
   resetStudentPassword,
   deleteStudent,
 } from '../controllers/adminStudentController.js';
-import { authenticateStaff } from '../middleware/auth.js';
+import { authenticateCROrSuperAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
-router.get('/', authenticateStaff, getStudents);
-router.put('/:id', authenticateStaff, updateStudent);
-router.patch('/:id/reset-password', authenticateStaff, resetStudentPassword);
-router.delete('/:id', authenticateStaff, deleteStudent);
+router.get('/', authenticateCROrSuperAdmin, getStudents);
+router.put('/:id', authenticateCROrSuperAdmin, updateStudent);
+router.patch('/:id/reset-password', authenticateCROrSuperAdmin, resetStudentPassword);
+router.delete('/:id', authenticateCROrSuperAdmin, deleteStudent);
 
 export default router;
