@@ -114,6 +114,60 @@ button:not(:disabled):active {
 }
 
 @media (max-width: 639px) {
+  body {
+    background-attachment: scroll;
+  }
+
+  .student-dashboard {
+    width: 100%;
+    max-width: 100%;
+    padding: 1rem 0.75rem;
+    overflow-x: clip;
+  }
+
+  .student-dashboard > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1rem;
+  }
+
+  .student-dashboard > *,
+  .student-dashboard :where(.flex, .grid) > * {
+    min-width: 0;
+  }
+
+  .student-dashboard .glass-panel {
+    background-color: #fff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .student-dashboard .glass-panel-dark {
+    background-color: #0f172a;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .student-dashboard :where(p, h1, h2, h3, span, label, button, a, td, th, strong, code) {
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  .student-dashboard h1 {
+    font-size: clamp(1.125rem, 5vw, 1.5rem);
+  }
+
+  .student-dashboard h2 {
+    font-size: clamp(1rem, 4vw, 1.25rem);
+  }
+
+  .student-dashboard .glass-panel [class~="p-6"],
+  .student-dashboard .glass-panel [class~="p-5"] {
+    padding: 1rem;
+  }
+
+  .student-dashboard .flex.items-center.justify-between {
+    flex-wrap: wrap;
+  }
+
   input,
   select,
   textarea,
