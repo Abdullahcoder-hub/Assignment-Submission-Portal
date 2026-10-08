@@ -14,7 +14,10 @@ export const logError = (message: string, error: unknown): void => {
         ? error
         : '';
   let safeErrorMessage = rawErrorMessage.replace(/(mongodb(?:\+srv)?:\/\/)[^/\s@]+@/gi, '$1[REDACTED]@');
-  for (const key of ['MONGODB_URI', 'JWT_SECRET', 'CLOUDINARY_API_SECRET', 'BREVO_API_KEY', 'ADMIN_PASSWORD']) {
+  for (const key of Object.keys(process.env).filter((name) =>
+    ['MONGODB_URI', 'JWT_SECRET', 'CLOUDINARY_API_SECRET', 'BREVO_API_KEY', 'ADMIN_PASSWORD'].includes(name) ||
+    /^SUPER_ADMIN_\d+_PASSWORD$/.test(name)
+  )) {
     const secret = process.env[key];
     if (secret) {
       safeErrorMessage = safeErrorMessage.split(secret).join('[REDACTED]');

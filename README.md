@@ -70,16 +70,19 @@ BREVO_SENDER_NAME=Assignment Portal Admin
 
 FRONTEND_URL=http://localhost:5173
 BACKEND_URL=http://localhost:5000/api
-ADMIN_NAME=
-ADMIN_EMAIL=
-ADMIN_PASSWORD=
+SUPER_ADMIN_1_NAME=
+SUPER_ADMIN_1_EMAIL=
+SUPER_ADMIN_1_PASSWORD=
+SUPER_ADMIN_2_NAME=
+SUPER_ADMIN_2_EMAIL=
+SUPER_ADMIN_2_PASSWORD=
 CLASS_JOIN_CODE=
 GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 ```
 
-The `seed:admin` command requires `ADMIN_NAME`, `ADMIN_EMAIL`, and a strong `ADMIN_PASSWORD`; it has no built-in credentials.
+Set `SUPER_ADMIN_1_NAME`, `SUPER_ADMIN_1_EMAIL`, and a strong `SUPER_ADMIN_1_PASSWORD`. Add sequential `SUPER_ADMIN_2_*`, `SUPER_ADMIN_3_*` sets for more Super Admins. The `seed:admin` command creates or updates these accounts and removes only unconfigured Super Admin accounts; Teacher/CR accounts and other data are unchanged. Legacy `ADMIN_NAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` are supported when no numbered settings are present. No credentials are built in.
 
-This command creates or updates the single Super Admin account. Teachers and Class Representatives (CRs) register themselves at `/staff/register`, verify their email from the emailed link, and remain unable to sign in until the Super Admin approves them under **Staff Management**. Assign a class to each CR before approving. They sign in at `/admin/login`; only the Super Admin can approve, edit, or delete these staff accounts. There are no default staff or Super Admin credentials.
+Run `npm run seed:admin` from `backend/` after configuring the accounts. Teachers and Class Representatives (CRs) register themselves at `/staff/register`, verify their email from the emailed link, and remain unable to sign in until the Super Admin approves them under **Staff Management**. Assign a class to each CR before approving. They sign in at `/admin/login`; only the Super Admin can approve, edit, or delete these staff accounts. There are no default staff or Super Admin credentials.
 
 Before releasing authenticated Cloudinary delivery, run `npm run secure:uploads` once from `backend/` with database and Cloudinary credentials configured. It converts existing submission assets and invalidates cached public URLs. Check the command's success counts before deploying; CDN invalidation can take a few minutes.
 

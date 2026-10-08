@@ -8,61 +8,107 @@ import { logError } from '../src/utils/logger.js';
 
 dotenv.config();
 
+interface SuperAdminConfig {
+  name: string;
+  email: string;
+  password: string;
+}
+
+const getSuperAdminConfigs = (): SuperAdminConfig[] => {
+  const numberedIndexes = [...new Set(
+    Object.keys(process.env)
+      .map((key) => key.match(/^SUPER_ADMIN_(\d+)_(?:NAME|EMAIL|PASSWORD)$/)?.[1])
+      .filter((index): index is string => Boolean(index))
+      .map(Number)
+  )].sort((a, b) => a - b);
+
+  if (numberedIndexes.length === 0) {
+    const legacy = {
+      name: process.env.ADMIN_NAME?.trim(),
+      email: process.env.ADMIN_EMAIL?.trim().toLowerCase(),
+      password: process.env.ADMIN_PASSWORD,
+    };
+    if (!legacy.name || !legacy.email || !legacy.password) {
+      throw new Error('Configure SUPER_ADMIN_1_NAME, SUPER_ADMIN_1_EMAIL, and SUPER_ADMIN_1_PASSWORD (or the legacy ADMIN_NAME, ADMIN_EMAIL, ADMIN_PASSWORD).');
+    }
+    return [legacy as SuperAdminConfig];
+  }
+
+  const configs = numberedIndexes.map((index) => {
+    const prefix = `SUPER_ADMIN_${index}`;
+    const name = process.env[`${prefix}_NAME`]?.trim();
+    const email = process.env[`${prefix}_EMAIL`]?.trim().toLowerCase();
+    const password = process.env[`${prefix}_PASSWORD`];
+    if (!name || !email || !password) {
+      throw new Error(`${prefix}_NAME, ${prefix}_EMAIL, and ${prefix}_PASSWORD must all be configured.`);
+    }
+    return { name, email, password };
+  });
+
+  if (numberedIndexes.some((index, position) => index !== position + 1)) {
+    throw new Error('Numbered Super Admin settings must be sequential, starting at SUPER_ADMIN_1.');
+  }
+
+  const emails = configs.map(({ email }) => email);
+  if (new Set(emails).size !== emails.length) {
+    throw new Error('Each configured Super Admin must have a unique email address.');
+  }
+  return configs;
+};
+
 const seedAdmin = async () => {
   try {
-    const name = process.env.ADMIN_NAME?.trim();
-    const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-    const password = process.env.ADMIN_PASSWORD;
-
-    if (!name || !email || !password) {
-      throw new Error('ADMIN_NAME, ADMIN_EMAIL, and ADMIN_PASSWORD must be configured.');
-    }
-
-    const passwordValidation = validatePasswordStrength(password);
-    if (!passwordValidation.isValid) {
-      throw new Error(`ADMIN_PASSWORD is not strong enough: ${passwordValidation.message}`);
-    }
+    const accounts = getSuperAdminConfigs();
+    accounts.forEach(({ password }, index) => {
+      const passwordValidation = validatePasswordStrength(password);
+      if (!passwordValidation.isValid) {
+        throw new Error(`Password for configured Super Admin ${index + 1} is not strong enough: ${passwordValidation.message}`);
+      }
+    });
 
     await connectDB();
 
-    const otherSuperAdmin = await Admin.findOne({ email: { $ne: email }, role: 'SUPER_ADMIN' });
-    if (otherSuperAdmin) {
-      throw new Error('A Super Admin account already exists. Use its configured email to update that account.');
+    for (const { name, email, password } of accounts) {
+      const existingAdmin = await Admin.findOne({ email });
+      if (existingAdmin && existingAdmin.role !== 'SUPER_ADMIN') {
+        throw new Error(`Configured email ${email} already belongs to a non-Super Admin account. No accounts were removed.`);
+      }
+
+      const passwordHash = await bcrypt.hash(password, await bcrypt.genSalt(10));
+      if (existingAdmin) {
+        existingAdmin.name = name;
+        existingAdmin.passwordHash = passwordHash;
+        existingAdmin.isActive = true;
+        existingAdmin.isEmailVerified = true;
+        existingAdmin.approvalStatus = 'Approved';
+        existingAdmin.verificationToken = undefined;
+        existingAdmin.verificationTokenExpires = undefined;
+        existingAdmin.tokenVersion = (existingAdmin.tokenVersion ?? 0) + 1;
+        await existingAdmin.save();
+      } else {
+        await Admin.create({
+          name,
+          email,
+          passwordHash,
+          role: 'SUPER_ADMIN',
+          isActive: true,
+          isEmailVerified: true,
+          approvalStatus: 'Approved',
+        });
+      }
     }
 
-    const existingAdmin = await Admin.findOne({ email });
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-
-    if (existingAdmin) {
-      existingAdmin.name = name;
-      existingAdmin.passwordHash = passwordHash;
-      existingAdmin.role = 'SUPER_ADMIN';
-      existingAdmin.isActive = true;
-      existingAdmin.isEmailVerified = true;
-      existingAdmin.approvalStatus = 'Approved';
-      existingAdmin.verificationToken = undefined;
-      existingAdmin.verificationTokenExpires = undefined;
-      existingAdmin.tokenVersion = (existingAdmin.tokenVersion ?? 0) + 1;
-      await existingAdmin.save();
-      console.log('Super Admin account updated successfully with role SUPER_ADMIN.');
-    } else {
-      await Admin.create({
-        name,
-        email,
-        passwordHash,
-        role: 'SUPER_ADMIN',
-        isActive: true,
-        isEmailVerified: true,
-        approvalStatus: 'Approved',
-      });
-      console.log('Super Admin account seeded successfully with role SUPER_ADMIN.');
-    }
+    const configuredEmails = accounts.map(({ email }) => email);
+    const removal = await Admin.deleteMany({
+      role: 'SUPER_ADMIN',
+      email: { $nin: configuredEmails },
+    });
+    console.log(`Configured ${accounts.length} Super Admin account(s); removed ${removal.deletedCount} unconfigured Super Admin account(s). Teacher/CR accounts and other data were not changed.`);
 
     await mongoose.connection.close();
     process.exit(0);
   } catch (error) {
-    logError('Failed to seed admin account.', error);
+    logError('Failed to sync Super Admin accounts.', error);
     process.exit(1);
   }
 };
