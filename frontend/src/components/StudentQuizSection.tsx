@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../api/axios';
 import { Quiz, QuizSubmission, Subject, Class } from '../types';
 import {
@@ -31,6 +31,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
   const [studentAnswers, setStudentAnswers] = useState<Record<string, { selectedOptionIndex?: number; writtenAnswerText?: string }>>({});
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submissionReceipt, setSubmissionReceipt] = useState<any | null>(null);
+  const interruptedQuizId = useRef<string | null>(null);
 
   // Late Request Modal State
   const [lateModalQuiz, setLateModalQuiz] = useState<Quiz | null>(null);
@@ -59,6 +60,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
     try {
       const res = await api.post(`/quizzes/${quiz._id}/start`);
       if (res.data.success) {
+        interruptedQuizId.current = null;
         setActiveQuiz(res.data.quiz);
         setSubmissionReceipt(res.data.mySubmission || null);
         setStudentAnswers({});
@@ -90,18 +92,32 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
   useEffect(() => {
     if (!activeQuiz || submissionReceipt) return;
     const interruptOnPageExit = () => {
+      if (interruptedQuizId.current === activeQuiz._id) return;
+      interruptedQuizId.current = activeQuiz._id;
+      setActiveQuiz(null);
+      setStudentAnswers({});
+      setFeedback({ success: false, message: 'Quiz locked because you left or refreshed. Request your CR or teacher to unblock it.' });
       const token = localStorage.getItem('portalToken');
       if (!token) return;
       void fetch(`${api.defaults.baseURL}/quizzes/${activeQuiz._id}/interrupt`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         keepalive: true,
+      }).then((response) => {
+        if (!response.ok) throw new Error('Could not lock the interrupted quiz attempt.');
+        void fetchQuizzes();
+      }).catch(() => {
+        setFeedback({ success: false, message: 'Could not confirm quiz lock. Please contact your CR or teacher.' });
       });
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') interruptOnPageExit();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pagehide', interruptOnPageExit);
     return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('pagehide', interruptOnPageExit);
-      interruptOnPageExit();
     };
   }, [activeQuiz?._id, submissionReceipt]);
 

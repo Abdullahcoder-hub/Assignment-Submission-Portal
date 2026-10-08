@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api, { openSubmissionFile } from '../api/axios';
 import { Subject, Assignment, Submission, StudentUser, SubmissionReceipt, Group, LateRequest, CRApplication, Class } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -32,7 +33,8 @@ import {
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
-  const { user, replaceToken } = useAuth();
+  const { user, replaceToken, switchToStaffPortal } = useAuth();
+  const navigate = useNavigate();
   const student = user as StudentUser;
 
   const validTabs = ['submit', 'quizzes', 'groups', 'history', 'security', 'cr-application'] as const;
@@ -958,6 +960,11 @@ export const StudentDashboard: React.FC = () => {
               {student?.staffRole && (
                 <a
                   href="/admin/dashboard"
+                  onClick={async (event) => {
+                    event.preventDefault();
+                    if (await switchToStaffPortal()) navigate('/admin/dashboard');
+                    else setErrorMsg('Please sign in again to open the staff portal.');
+                  }}
                   className="px-2.5 py-0.5 bg-purple-500/30 text-purple-200 border border-purple-400/40 text-xs font-bold rounded-full shrink-0 hover:bg-purple-500/50 transition flex items-center gap-1"
                 >
                   <Crown className="w-3 h-3 text-amber-300" />
@@ -2201,6 +2208,11 @@ export const StudentDashboard: React.FC = () => {
                         </div>
                         <a
                           href="/admin/dashboard"
+                          onClick={async (event) => {
+                            event.preventDefault();
+                            if (await switchToStaffPortal()) navigate('/admin/dashboard');
+                            else setErrorMsg('Please sign in again to open the staff portal.');
+                          }}
                           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shrink-0 shadow"
                         >
                           Go to Staff Portal &rarr;

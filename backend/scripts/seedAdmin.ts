@@ -68,14 +68,14 @@ const seedAdmin = async () => {
 
     await connectDB();
 
+    let promotedCount = 0;
     for (const { name, email, password } of accounts) {
       const existingAdmin = await Admin.findOne({ email });
-      if (existingAdmin && existingAdmin.role !== 'SUPER_ADMIN') {
-        throw new Error(`Configured email ${email} already belongs to a non-Super Admin account. No accounts were removed.`);
-      }
 
       const passwordHash = await bcrypt.hash(password, await bcrypt.genSalt(10));
       if (existingAdmin) {
+        if (existingAdmin.role !== 'SUPER_ADMIN') promotedCount += 1;
+        existingAdmin.role = 'SUPER_ADMIN';
         existingAdmin.name = name;
         existingAdmin.passwordHash = passwordHash;
         existingAdmin.isActive = true;
@@ -103,7 +103,7 @@ const seedAdmin = async () => {
       role: 'SUPER_ADMIN',
       email: { $nin: configuredEmails },
     });
-    console.log(`Configured ${accounts.length} Super Admin account(s); removed ${removal.deletedCount} unconfigured Super Admin account(s). Teacher/CR accounts and other data were not changed.`);
+    console.log(`Configured ${accounts.length} Super Admin account(s); promoted ${promotedCount} existing staff account(s); removed ${removal.deletedCount} unconfigured Super Admin account(s). Other Teacher/CR accounts and all unrelated data were not changed.`);
 
     await mongoose.connection.close();
     process.exit(0);

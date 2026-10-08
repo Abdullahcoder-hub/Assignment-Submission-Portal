@@ -18,6 +18,8 @@ interface AuthContextType {
   }>;
   logout: () => void;
   replaceToken: (token: string) => void;
+  switchToStaffPortal: () => Promise<boolean>;
+  switchToStudentPortal: () => boolean;
   refreshStudentProfile: () => Promise<void>;
 }
 
@@ -111,6 +113,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!['SUPER_ADMIN', 'TEACHER', 'CR', 'CR_ASSISTANT'].includes(assignedRole)) {
           return { success: false, message: 'This account role is not allowed to sign in.' };
         }
+        localStorage.removeItem('staffPortalToken');
+        localStorage.removeItem('studentPortalToken');
+        localStorage.removeItem('studentPortalUser');
         localStorage.setItem('portalToken', jwtToken);
         localStorage.setItem('userRole', assignedRole);
         localStorage.setItem('portalUser', JSON.stringify(adminData));
@@ -133,6 +138,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.data.success) {
         const jwtToken = res.data.token;
         const studentData = res.data.student;
+        localStorage.removeItem('studentPortalToken');
+        localStorage.removeItem('studentPortalUser');
+        if (res.data.staffPortalToken) {
+          localStorage.setItem('staffPortalToken', res.data.staffPortalToken);
+        } else {
+          localStorage.removeItem('staffPortalToken');
+        }
         localStorage.setItem('portalToken', jwtToken);
         localStorage.setItem('userRole', 'STUDENT');
         localStorage.setItem('portalUser', JSON.stringify(studentData));
@@ -168,6 +180,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.data.success) {
         const jwtToken = res.data.token;
         const studentData = res.data.student;
+        localStorage.removeItem('staffPortalToken');
+        localStorage.removeItem('studentPortalToken');
+        localStorage.removeItem('studentPortalUser');
         localStorage.setItem('portalToken', jwtToken);
         localStorage.setItem('userRole', 'STUDENT');
         localStorage.setItem('portalUser', JSON.stringify(studentData));
@@ -192,6 +207,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('portalToken');
     localStorage.removeItem('userRole');
     localStorage.removeItem('portalUser');
+    localStorage.removeItem('staffPortalToken');
+    localStorage.removeItem('studentPortalToken');
+    localStorage.removeItem('studentPortalUser');
     setToken(null);
     setRole(null);
     setUser(null);
@@ -200,6 +218,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const replaceToken = (updatedToken: string) => {
     localStorage.setItem('portalToken', updatedToken);
     setToken(updatedToken);
+  };
+
+  const switchToStaffPortal = async (): Promise<boolean> => {
+    const staffToken = localStorage.getItem('staffPortalToken');
+    if (!staffToken) return false;
+    localStorage.setItem('studentPortalToken', localStorage.getItem('portalToken') || '');
+    localStorage.setItem('studentPortalUser', localStorage.getItem('portalUser') || '');
+    localStorage.setItem('portalToken', staffToken);
+    try {
+      const res = await api.get('/auth/me');
+      if (!res.data.success) throw new Error('Unable to verify staff account.');
+      const adminData = res.data.admin as AdminUser;
+      localStorage.setItem('userRole', adminData.role);
+      localStorage.setItem('portalUser', JSON.stringify(adminData));
+      setToken(staffToken);
+      setRole(adminData.role);
+      setUser(adminData);
+      return true;
+    } catch (error) {
+      const studentToken = localStorage.getItem('studentPortalToken');
+      if (studentToken) localStorage.setItem('portalToken', studentToken);
+      return false;
+    }
+  };
+
+  const switchToStudentPortal = (): boolean => {
+    const studentToken = localStorage.getItem('studentPortalToken');
+    const studentUser = localStorage.getItem('studentPortalUser');
+    if (!studentToken || !studentUser) return false;
+    let studentData: StudentUser;
+    try {
+      studentData = JSON.parse(studentUser) as StudentUser;
+    } catch {
+      return false;
+    }
+    localStorage.setItem('portalToken', studentToken);
+    localStorage.setItem('userRole', 'STUDENT');
+    localStorage.setItem('portalUser', JSON.stringify(studentData));
+    localStorage.removeItem('studentPortalToken');
+    localStorage.removeItem('studentPortalUser');
+    setToken(studentToken);
+    setRole('STUDENT');
+    setUser(studentData);
+    return true;
   };
 
   return (
@@ -216,6 +278,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         googleLoginStudent,
         logout,
         replaceToken,
+        switchToStaffPortal,
+        switchToStudentPortal,
         refreshStudentProfile,
       }}
     >

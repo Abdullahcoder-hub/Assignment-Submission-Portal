@@ -250,25 +250,38 @@ export const loginStudent = async (req: Request, res: Response): Promise<void> =
       role: { $in: ['CR', 'CR_ASSISTANT'] },
     }).lean();
 
-    const effectiveRole = staffRecord ? staffRecord.role : 'STUDENT';
     const effectiveStaffId = staffRecord ? staffRecord._id.toString() : undefined;
 
     const token = jwt.sign(
       {
-        id: staffRecord ? staffRecord._id : student._id,
+        id: student._id,
         email: student.email,
-        role: effectiveRole,
+        role: 'STUDENT',
         classId: (student as any).classId?.toString(),
-        tokenVersion: (staffRecord ? staffRecord.tokenVersion : student.tokenVersion) ?? 0,
+        tokenVersion: student.tokenVersion ?? 0,
       },
       getJwtSecret(),
       { expiresIn: '7d' }
     );
+    const staffPortalToken = staffRecord
+      ? jwt.sign(
+          {
+            id: staffRecord._id,
+            email: staffRecord.email,
+            role: staffRecord.role,
+            assignedClassId: staffRecord.assignedClassId?.toString(),
+            tokenVersion: staffRecord.tokenVersion ?? 0,
+          },
+          getJwtSecret(),
+          { expiresIn: '7d' }
+        )
+      : undefined;
 
     res.status(200).json({
       success: true,
       message: 'Login successful.',
       token,
+      staffPortalToken,
       student: {
         id: student._id,
         name: student.name,

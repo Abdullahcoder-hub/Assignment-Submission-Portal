@@ -5,7 +5,7 @@ import { LogOut, ShieldCheck, GraduationCap, UserCheck, User } from 'lucide-reac
 import { StudentUser, AdminUser } from '../types';
 
 export const Navbar: React.FC = () => {
-  const { isAuthenticated, user, role, logout } = useAuth();
+  const { isAuthenticated, user, role, logout, switchToStudentPortal } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -23,7 +23,7 @@ export const Navbar: React.FC = () => {
     '/forgot-password',
     '/reset-password',
   ].includes(location.pathname);
-  const isStaff = role && ['SUPER_ADMIN', 'TEACHER', 'CR'].includes(role);
+  const isStaff = role && ['SUPER_ADMIN', 'TEACHER', 'CR', 'CR_ASSISTANT'].includes(role);
   const dashboardPath = isStaff ? '/admin/dashboard' : '/student/dashboard';
 
   const getRoleLabel = () => {
@@ -49,6 +49,17 @@ export const Navbar: React.FC = () => {
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           {isAuthenticated && !isAuthRoute ? (
             <div className="flex items-center gap-1.5 sm:gap-3">
+              {isStaff && localStorage.getItem('studentPortalToken') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (switchToStudentPortal()) navigate('/student/dashboard');
+                  }}
+                  className="px-2.5 sm:px-3.5 py-1.5 text-xs font-medium bg-blue-600/20 hover:bg-blue-600/30 text-blue-200 rounded-lg border border-blue-500/30"
+                >
+                  Student Portal
+                </button>
+              )}
               {isStaff ? (
                 <Link
                   to="/admin/dashboard"
