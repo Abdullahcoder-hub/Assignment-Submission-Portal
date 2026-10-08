@@ -136,6 +136,7 @@ export const StudentDashboard: React.FC = () => {
 
   const [groupMode, setGroupMode] = useState<'create' | 'continue'>('create');
   const [groupName, setGroupName] = useState<string>('');
+  const [groupNameLoading, setGroupNameLoading] = useState<boolean>(false);
   const [extraMembers, setExtraMembers] = useState<{ name: string; rollNumber: string }[]>([
     { name: '', rollNumber: '' },
   ]);
@@ -507,6 +508,7 @@ export const StudentDashboard: React.FC = () => {
       Array.from({ length: maxGroupMembers - 1 }, () => ({ name: '', rollNumber: '' }))
     );
     setLeaderIndex(0);
+    setGroupName('');
 
     const fetchGroupData = async () => {
       try {
@@ -529,13 +531,19 @@ export const StudentDashboard: React.FC = () => {
 
     const fetchNextGroupNumber = async (subId: string, assId: string) => {
       try {
+        setGroupNameLoading(true);
         const res = await api.get(`/groups/next-number?subjectId=${subId}&assignmentId=${assId}`);
         if (res.data.success && res.data.suggestedGroupName) {
           setGroupName(res.data.suggestedGroupName);
+        } else {
+          setGroupName('');
+          setGroupMsg({ type: 'error', text: 'Could not determine the next group number. Please refresh and try again.' });
         }
       } catch (err) {
-        // Fallback default
-        setGroupName('Group 1');
+        setGroupName('');
+        setGroupMsg({ type: 'error', text: 'Could not load the next group number. Please refresh and try again.' });
+      } finally {
+        setGroupNameLoading(false);
       }
     };
 
@@ -645,11 +653,6 @@ export const StudentDashboard: React.FC = () => {
       return;
     }
 
-    if (!groupName.trim()) {
-      setGroupMsg({ type: 'error', text: 'Please enter a group name.' });
-      return;
-    }
-
     const membersPayload = [
       { name: student?.name, rollNumber: student?.rollNumber },
       ...extraMembers.filter((m) => m.rollNumber.trim()),
@@ -683,7 +686,6 @@ export const StudentDashboard: React.FC = () => {
     try {
       setGroupSubmitting(true);
       const res = await api.post('/groups', {
-        groupName: groupName.trim(),
         subjectId: groupSubjectId,
         assignmentId: groupAssignmentId || undefined,
         members: membersPayload,
@@ -693,6 +695,7 @@ export const StudentDashboard: React.FC = () => {
       if (res.data.success) {
         setGroupMsg({ type: 'success', text: res.data.message });
         setMyGroup(res.data.group);
+        setGroupName(res.data.group.groupName);
       }
     } catch (err: any) {
       setGroupMsg({ type: 'error', text: err.response?.data?.message || 'Failed to create group.' });
@@ -1481,9 +1484,10 @@ export const StudentDashboard: React.FC = () => {
                     </p>
                   ) : groupLateRequest?.status === 'Rejected' ? (
                     <p className="text-xs font-bold text-red-800">
-                      Your late group {myGroup ? 'edit' : 'registration'} request was rejected by your CR.
+                      Your late group {myGroup ? 'edit' : 'registration'} request was rejected by your CR. You can submit another request.
                     </p>
-                  ) : (
+                  ) : null}
+                  {groupLateRequest?.status !== 'Pending' && groupLateRequest?.status !== 'Approved' && (
                     <>
                       <textarea
                         value={groupLateReason}
@@ -1650,14 +1654,14 @@ export const StudentDashboard: React.FC = () => {
                           Group Name <span className="text-red-500">*</span>
                         </label>
                         <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                          Auto-Assigned Next Group Number
+                          {groupNameLoading ? 'Finding next group number...' : 'Auto-Assigned Next Group Number'}
                         </span>
                       </div>
                       <input
                         type="text"
                         value={groupName}
                         readOnly
-                        placeholder="e.g., Group 1"
+                        placeholder={groupNameLoading ? 'Loading...' : 'Next group number unavailable'}
                         className="w-full px-4 py-3 bg-slate-100 border border-slate-300 rounded-xl font-semibold text-slate-800 cursor-not-allowed"
                       />
                     </div>
@@ -1765,7 +1769,7 @@ export const StudentDashboard: React.FC = () => {
                     <button
                       type="submit"
                       disabled={
-                        groupSubmitting ||
+                        groupSubmitting || groupNameLoading || !groupName ||
                         (selectedGroupAssignment &&
                           new Date(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).getTime() < deadlineTick &&
                           !selectedGroupAssignment.allowLateGroupRegistration &&

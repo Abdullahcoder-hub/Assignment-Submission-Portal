@@ -31,7 +31,10 @@ const getGroupSequenceNumber = (groupName: string): number => {
 };
 
 const calculateNextGroupNumber = async (subjectId: mongoose.Types.ObjectId | string, assignmentId: mongoose.Types.ObjectId | string): Promise<number> => {
-  const groups = await Group.find({ subjectId, assignmentId }).select('groupName');
+  const groups = await Group.find({
+    subjectId,
+    $or: [{ assignmentId }, { assignmentId: null }],
+  }).select('groupName');
   const usedNumbers = new Set<number>();
 
   for (const group of groups) {
@@ -54,10 +57,10 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const { subjectId, assignmentId, groupName, leaderRollNumber, memberRollNumbers, members } = req.body;
+    const { subjectId, assignmentId, leaderRollNumber, memberRollNumbers, members } = req.body;
 
-    if (!subjectId || !groupName || !leaderRollNumber) {
-      res.status(400).json({ success: false, message: 'Please provide subject, group name, leader, and members list.' });
+    if (!subjectId || !leaderRollNumber) {
+      res.status(400).json({ success: false, message: 'Please provide subject, leader, and members list.' });
       return;
     }
 
@@ -91,13 +94,6 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
 
     const nextGroupNumber = await calculateNextGroupNumber(subject._id, assignment._id);
     const expectedGroupName = `Group ${nextGroupNumber}`;
-    if (groupName.trim().toLowerCase() !== expectedGroupName.toLowerCase()) {
-      res.status(400).json({
-        success: false,
-        message: `The next available group number is ${nextGroupNumber}. Please use "${expectedGroupName}".`,
-      });
-      return;
-    }
 
     // Group registration deadline check
     const groupDeadline = assignment.groupDeadline || assignment.deadline;
@@ -156,13 +152,13 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
     const existingName = await Group.findOne({
       subjectId: subject._id,
       assignmentId: assignment._id,
-      groupName: { $regex: new RegExp(`^${escapeRegex(groupName.trim())}$`, 'i') },
+      groupName: expectedGroupName,
     });
 
     if (existingName) {
       res.status(400).json({
         success: false,
-        message: `Group "${groupName.trim()}" is already registered for this assignment. Please choose another group name or number.`,
+        message: 'Group numbers changed. Refresh the page and try again.',
       });
       return;
     }
@@ -210,7 +206,7 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
     // Check if any roll number is ALREADY registered in a group for this assignment
     const existingGroup = await Group.findOne({
       subjectId: subject._id,
-      assignmentId: assignment._id,
+      $or: [{ assignmentId: assignment._id }, { assignmentId: null }],
       'members.rollNumber': { $in: uniqueRolls.map(r => new RegExp(`^${escapeRegex(r)}$`, 'i')) }
     });
 
@@ -251,7 +247,7 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
     };
 
     const newGroup = await Group.create({
-      groupName: groupName.trim(),
+      groupName: expectedGroupName,
       subjectId: subject._id,
       assignmentId: assignment ? assignment._id : undefined,
       classId: subject.classId || assignment?.classId || req.student?.classId || undefined,
@@ -271,7 +267,7 @@ export const createGroup = async (req: AuthRequest, res: Response): Promise<void
       if (error?.keyPattern?.groupName || JSON.stringify(error).includes('groupName')) {
         res.status(400).json({
           success: false,
-          message: `Group "${req.body.groupName?.trim()}" is already registered for this subject. Please choose another group number or name.`,
+          message: 'Group numbers changed. Refresh the page and try again.',
         });
         return;
       }
@@ -411,7 +407,12 @@ export const getMyPreviousGroups = async (req: AuthRequest, res: Response): Prom
     }
 
     const studentId = req.student.id;
-    const groups = await Group.find({ 'members.studentId': studentId })
+    const groups = await Group.find({
+      $or: [
+        { 'members.studentId': studentId },
+        { 'members.rollNumber': new RegExp(`^${escapeRegex(req.student.rollNumber.trim())}$`, 'i') },
+      ],
+    })
       .populate('subjectId', 'name code')
       .populate('assignmentId', 'title');
 
@@ -450,13 +451,16 @@ export const getMyGroupForSubject = async (req: AuthRequest, res: Response): Pro
       ],
     };
 
-    if (assignmentId) {
-      filter.assignmentId = assignmentId;
-    }
-
-    const group = await Group.findOne(filter)
+    if (assignmentId) filter.assignmentId = assignmentId;
+    let group = await Group.findOne(filter)
       .populate('subjectId', 'name code')
       .populate('assignmentId', 'title');
+    if (!group && assignmentId) {
+      const legacyFilter = { ...filter, assignmentId: null };
+      group = await Group.findOne(legacyFilter)
+        .populate('subjectId', 'name code')
+        .populate('assignmentId', 'title');
+    }
 
     res.status(200).json({
       success: true,

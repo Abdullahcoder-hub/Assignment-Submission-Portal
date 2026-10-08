@@ -197,6 +197,16 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
+    const subject = await Subject.findById(assignment.subjectId)
+      .select('name code crId classId')
+      .populate('crId', 'name email')
+      .lean();
+    const requestClassId = assignment.classId || subject?.classId;
+    if (requestClassId && req.student.classId && requestClassId.toString() !== req.student.classId) {
+      res.status(403).json({ success: false, message: 'You can only request access for your own class assignments.' });
+      return;
+    }
+
     const studentId = req.student.id;
     const studentName = req.student.name;
     const rollNumber = req.student.rollNumber;
@@ -220,7 +230,7 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
 
     let existingRequest = await LateRequest.findOne(filter);
 
-    if (existingRequest) {
+    if (existingRequest && !(requestType === 'GroupRegistration' && existingRequest.status === 'Rejected')) {
       res.status(200).json({
         success: true,
         message: existingRequest.status === 'Approved'
@@ -233,36 +243,52 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const newRequest = await LateRequest.create({
-      studentId,
+    const requestFields = {
       requestType,
       groupId: group ? group._id : undefined,
       subjectId,
+      classId: requestClassId,
       assignmentId,
       studentName,
       rollNumber,
       reason: reason ? reason.trim() : 'Assignment deadline passed.',
-      status: 'Pending',
+      status: 'Pending' as const,
       requestedAt: new Date(),
-    });
+    };
+    let newRequest = existingRequest;
+    if (existingRequest?.status === 'Rejected' && requestType === 'GroupRegistration') {
+      Object.assign(existingRequest, requestFields);
+      existingRequest.decidedAt = undefined;
+      existingRequest.decidedBy = undefined;
+      existingRequest.rejectionReason = '';
+      newRequest = await existingRequest.save();
+    } else if (!existingRequest) {
+      newRequest = await LateRequest.create({ studentId, ...requestFields });
+    }
+    if (!newRequest) {
+      res.status(500).json({ success: false, message: 'Failed to create late request.' });
+      return;
+    }
 
 
     const student = await Student.findById(studentId).select('name email').lean();
-    const subject = await Subject.findById(assignment.subjectId).select('name code crId').populate('crId', 'name email').lean();
-    const admin = await Admin.findOne({ role: 'ADMIN' }).select('name email').lean();
+    const classDoc = requestClassId
+      ? await Class.findById(requestClassId).populate('crId', 'name email').lean()
+      : null;
     let crEmails: string[] = [];
     let crName = 'Class Representative';
 
+    const assignedClassCR = classDoc?.crId as any;
+    if (assignedClassCR?.email) {
+      crEmails.push(assignedClassCR.email.trim());
+      crName = assignedClassCR.name || crName;
+    }
     if (subject && subject.crId && (subject.crId as any).email) {
-      crEmails.push((subject.crId as any).email.trim());
-      crName = (subject.crId as any).name || 'Class Representative';
-    } else {
-      const fallbackAdminEmails = Array.from(new Set([
-        admin?.email?.trim(),
-        process.env.ADMIN_EMAIL?.trim(),
-      ].filter((email): email is string => Boolean(email))));
-      crEmails = fallbackAdminEmails;
-      crName = admin?.name || process.env.ADMIN_NAME || 'Class Representative';
+      const subjectCREmail = (subject.crId as any).email.trim();
+      if (!crEmails.includes(subjectCREmail)) crEmails.push(subjectCREmail);
+      crName = crName === 'Class Representative'
+        ? (subject.crId as any).name || crName
+        : crName;
     }
 
     let crNotified = false;
@@ -310,6 +336,7 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
         assignmentTitle: requestType === 'GroupRegistration' ? `${assignment.title} (Late Group Registration)` : assignment.title,
         reason: newRequest.reason,
         isStudentNotification: true,
+        requestType,
       });
       studentNotified = studentEmailResult.success;
       if (!studentEmailResult.success) {
@@ -390,8 +417,26 @@ export const getLateRequests = async (req: AuthRequest, res: Response): Promise<
     const { subjectId, assignmentId, quizId, status, search, requestType } = req.query;
     const filter: any = {};
 
-    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId) {
-      filter.classId = req.admin.assignedClassId;
+    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '')) {
+      const assignedClassId = req.admin?.assignedClassId;
+      if (!assignedClassId) {
+        res.status(200).json({ success: true, count: 0, requests: [] });
+        return;
+      }
+      const subjectIds = await Subject.find({ classId: assignedClassId }).distinct('_id');
+      const assignmentIds = await Assignment.find({
+        $or: [
+          { classId: assignedClassId },
+          { classId: { $exists: false }, subjectId: { $in: subjectIds } },
+        ],
+      }).distinct('_id');
+      filter.$and = [{
+        $or: [
+          { classId: assignedClassId },
+          { classId: { $exists: false }, subjectId: { $in: subjectIds } },
+          { classId: { $exists: false }, assignmentId: { $in: assignmentIds } },
+        ],
+      }];
     }
     if (req.admin?.role === 'TEACHER') {
       const assignments = await TeacherAssignment.find({ teacherId: req.admin.id, isActive: true }).select('classId subjectId').lean();
@@ -415,11 +460,11 @@ export const getLateRequests = async (req: AuthRequest, res: Response): Promise<
 
     if (search) {
       const searchRegex = new RegExp(escapeRegex((search as string).trim()), 'i');
-      filter.$and = [{
+      filter.$and = [...(filter.$and || []), {
         $or: [
-        { studentName: searchRegex },
-        { rollNumber: searchRegex },
-        { reason: searchRegex },
+          { studentName: searchRegex },
+          { rollNumber: searchRegex },
+          { reason: searchRegex },
         ],
       }];
     }
@@ -481,7 +526,12 @@ export const updateLateRequestDecision = async (req: AuthRequest, res: Response)
         return;
       }
     } else if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '')) {
-      if (currentRequest.requestType === 'Quiz' && currentRequest.classId?.toString() !== req.admin?.assignedClassId) {
+      let requestClassId = currentRequest.classId;
+      if (!requestClassId && currentRequest.assignmentId) {
+        const assignment = await Assignment.findById(currentRequest.assignmentId).select('classId subjectId').lean();
+        requestClassId = assignment?.classId || (await Subject.findById(assignment?.subjectId).select('classId').lean())?.classId;
+      }
+      if (!requestClassId || requestClassId.toString() !== req.admin?.assignedClassId) {
         res.status(403).json({ success: false, message: 'You can only decide requests for your assigned class.' });
         return;
       }
