@@ -4,6 +4,7 @@ import api, { openSubmissionFile } from '../api/axios';
 import { Subject, Assignment, Submission, StudentUser, SubmissionReceipt, Group, LateRequest, CRApplication, Class } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { StudentQuizSection } from '../components/StudentQuizSection';
+import { PasswordInput } from '../components/PasswordInput';
 import {
   User,
   BookOpen,
@@ -2034,8 +2035,7 @@ export const StudentDashboard: React.FC = () => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                 Current Password <span className="text-red-500">*</span>
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 placeholder="Enter current password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -2048,8 +2048,7 @@ export const StudentDashboard: React.FC = () => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                 New Password <span className="text-red-500">*</span>
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 placeholder="Enter new password (min 6 characters)"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -2062,8 +2061,7 @@ export const StudentDashboard: React.FC = () => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                 Confirm New Password <span className="text-red-500">*</span>
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 placeholder="Confirm new password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}

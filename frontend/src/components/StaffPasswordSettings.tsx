@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import { PasswordInput } from './PasswordInput';
 
 export const StaffPasswordSettings: React.FC = () => {
   const { replaceToken } = useAuth();
@@ -44,15 +45,15 @@ export const StaffPasswordSettings: React.FC = () => {
       <form onSubmit={handleSubmit} className="mt-5 space-y-4">
         <label className="block text-sm font-medium text-slate-700">
           Current password
-          <input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
+          <PasswordInput required autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
         </label>
         <label className="block text-sm font-medium text-slate-700">
           New password
-          <input required type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
+          <PasswordInput required autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
         </label>
         <label className="block text-sm font-medium text-slate-700">
           Confirm new password
-          <input required type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
+          <PasswordInput required autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
         </label>
         <button disabled={saving} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {saving ? 'Saving...' : 'Change Password'}

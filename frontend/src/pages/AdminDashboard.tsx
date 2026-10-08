@@ -10,6 +10,7 @@ import { CRApplicationsTab } from '../components/CRApplicationsTab';
 import { TeacherSharedAssignmentsSection } from '../components/TeacherSharedAssignmentsSection';
 import { ShareAssignmentModal } from '../components/ShareAssignmentModal';
 import { StaffPasswordSettings } from '../components/StaffPasswordSettings';
+import { PasswordInput } from '../components/PasswordInput';
 import {
   LayoutDashboard,
   BookOpen,
@@ -93,7 +94,8 @@ export const AdminDashboard: React.FC = () => {
     const tabFromUrl = params.get('tab') as TabType;
     if (validTabs.includes(tabFromUrl) && canAccessTab(tabFromUrl)) return tabFromUrl;
     const savedTab = localStorage.getItem('admin_active_tab') as TabType;
-    if (validTabs.includes(savedTab) && canAccessTab(savedTab)) return savedTab;
+    const savedRole = localStorage.getItem('admin_active_tab_role');
+    if (savedRole === role && validTabs.includes(savedTab) && canAccessTab(savedTab)) return savedTab;
     return 'dashboard';
   });
 
@@ -103,6 +105,7 @@ export const AdminDashboard: React.FC = () => {
     }
     setActiveTabState(tab);
     localStorage.setItem('admin_active_tab', tab);
+    if (role) localStorage.setItem('admin_active_tab_role', role);
     const url = new URL(window.location.href);
     url.searchParams.set('tab', tab);
     window.history.replaceState(null, '', url.toString());
@@ -1418,7 +1421,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="hidden sm:table w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
                     <th className="p-4">Code</th>
@@ -1484,59 +1487,34 @@ export const AdminDashboard: React.FC = () => {
                 </tbody>
               </table>
 
-              <div className="assignment-cards sm:hidden divide-y divide-slate-100">
-                {assignments.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-slate-400">No assignments created yet.</div>
+              <div className="divide-y divide-slate-100 sm:hidden">
+                {subjects.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-slate-400">No subjects created yet. Click 'Add Subject' to create one.</div>
                 ) : (
-                  assignments.map((ass) => (
-                    <article key={ass._id} className="p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-blue-700 break-words">
-                            {(ass.subjectId as any)?.name || 'N/A'} ({(ass.subjectId as any)?.code || ''})
-                          </p>
-                          <h3 className="font-bold text-slate-900 break-words">{ass.title}</h3>
-                        </div>
-                        {renderStatusBadge(assignmentStatus(ass))}
+                  subjects.map((sub) => (
+                    <article key={sub._id} className="flex items-start justify-between gap-3 p-4">
+                      <div className="min-w-0">
+                        <p className="font-mono text-xs font-bold text-blue-700">{sub.code}</p>
+                        <h3 className="break-words font-bold text-slate-900">{sub.name}</h3>
+                        <p className="mt-1 break-words text-xs text-slate-500">{sub.description || 'No description'}</p>
+                        <span className={`mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-bold ${sub.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                          {sub.isActive ? 'Active' : 'Inactive'}
+                        </span>
                       </div>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                        <div><span className="text-slate-500">Deadline</span><p className="font-semibold text-slate-700 break-words">{formatDate(ass.deadline)}</p></div>
-                        <div><span className="text-slate-500">Mode</span><p className="font-semibold text-slate-700">{ass.submissionType === 'Individual' ? 'Individual' : `Group (${(ass as any).minGroupSize || 1}-${ass.maxGroupSize || 4} members)`}</p></div>
-                        <div><span className="text-slate-500">Late allowed</span><p className={`font-bold ${ass.allowLateSubmission ? 'text-emerald-700' : 'text-red-700'}`}>{ass.allowLateSubmission ? 'Yes' : 'No'}</p></div>
-                        <div><span className="text-slate-500">Max file</span><p className="font-semibold text-slate-700">{ass.maxFileSize} MB</p></div>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 border-t border-slate-200 pt-2 text-xs">
-                        <span className="text-slate-500">Status</span>
-                        {renderStatusBadge(assignmentStatus(ass))}
-                      </div>
-                      <p className="text-xs text-slate-600 break-words"><span className="text-slate-500">Files:</span> {ass.allowedFileTypes.join(', ').toUpperCase()}</p>
-                      <div className="border-t border-slate-200 pt-2">
-                        <p className="text-xs text-slate-500 mb-2">Actions</p>
-                        <div className="flex flex-wrap gap-2">
-                        <button title="Download All as ZIP" onClick={() => handleDownloadZip(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg"><Download className="w-4 h-4" /> ZIP</button>
-                        <button title="Export CSV" onClick={() => handleExportCsv(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-lg"><FileSpreadsheet className="w-4 h-4" /> CSV</button>
-                        <button title="View unsubmitted students" onClick={() => fetchDefaulters(ass)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg"><UserX className="w-4 h-4" /> Defaulters</button>
-                        <button title="Edit assignment" onClick={() => {
-                          setEditingAssignment(ass);
-                          setAssignmentForm({
-                            subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string),
-                            title: ass.title,
-                            description: ass.description || '',
-                            deadline: toLocalDateTimeInput(new Date(ass.deadline)),
-                            groupDeadline: ass.groupDeadline ? toLocalDateTimeInput(new Date(ass.groupDeadline)) : '',
-                            allowLateSubmission: ass.allowLateSubmission,
-                            allowLateGroupRegistration: ass.allowLateGroupRegistration || false,
-                            allowedFileTypes: ass.allowedFileTypes.join(', '),
-                            maxFileSize: ass.maxFileSize,
-                            maxGroupSize: ass.maxGroupSize || 4,
-                            minGroupSize: (ass as any).minGroupSize || 1,
-                            submissionType: ass.submissionType || 'Group',
-                            isActive: ass.isActive,
-                          });
-                          setAssignmentModalOpen(true);
-                        }} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg"><Edit2 className="w-4 h-4" /> Edit</button>
-                        <button title="Delete assignment" onClick={() => handleDeleteAssignment(ass._id)} className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg"><Trash2 className="w-4 h-4" /> Delete</button>
-                        </div>
+                      <div className="flex shrink-0 gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Edit ${sub.name}`}
+                          onClick={() => {
+                            setEditingSubject(sub);
+                            setSubjectForm({ name: sub.name, code: sub.code, description: sub.description || '', crId: (sub as any).crId || '', isActive: sub.isActive });
+                            setSubjectModalOpen(true);
+                          }}
+                          className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+                        ><Edit2 className="h-4 w-4" /></button>
+                        <button type="button" aria-label={`Delete ${sub.name}`} onClick={() => handleDeleteSubject(sub._id)} className="rounded-lg p-2 text-red-600 hover:bg-red-50">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </article>
                   ))
@@ -1700,6 +1678,44 @@ export const AdminDashboard: React.FC = () => {
                   )}
                 </tbody>
               </table>
+              <div className="divide-y divide-slate-100 sm:hidden">
+                {assignments.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-slate-400">No assignments created yet. Click 'Create Assignment' to create one.</div>
+                ) : assignments.map((ass) => (
+                  <article key={ass._id} className="space-y-3 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="break-words text-xs font-bold text-blue-700">{(ass.subjectId as any)?.name || 'N/A'} ({(ass.subjectId as any)?.code || ''})</p>
+                        <h3 className="break-words font-bold text-slate-900">{ass.title}</h3>
+                      </div>
+                      {renderStatusBadge(assignmentStatus(ass))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div><span className="text-slate-500">Deadline</span><p className="font-semibold text-slate-700">{formatDate(ass.deadline)}</p></div>
+                      <div><span className="text-slate-500">Mode</span><p className="font-semibold text-slate-700">{ass.submissionType === 'Individual' ? 'Individual' : `Group (${(ass as any).minGroupSize || 1}-${ass.maxGroupSize || 4})`}</p></div>
+                      <div><span className="text-slate-500">Late allowed</span><p className="font-semibold text-slate-700">{ass.allowLateSubmission ? 'Yes' : 'No'}</p></div>
+                      <div><span className="text-slate-500">Max file</span><p className="font-semibold text-slate-700">{ass.maxFileSize} MB</p></div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+                      <button onClick={() => handleDownloadZip(ass._id)} className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-2 text-xs font-bold text-blue-600"><Download className="h-4 w-4" />ZIP</button>
+                      <button onClick={() => handleExportCsv(ass._id)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-2 text-xs font-bold text-emerald-600"><FileSpreadsheet className="h-4 w-4" />CSV</button>
+                      <button onClick={() => fetchDefaulters(ass)} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-2 text-xs font-bold text-amber-700"><UserX className="h-4 w-4" />Defaulters</button>
+                      <button onClick={() => {
+                        setEditingAssignment(ass);
+                        setAssignmentForm({
+                          subjectId: (ass.subjectId as any)?._id || (ass.subjectId as string), title: ass.title, description: ass.description || '',
+                          deadline: toLocalDateTimeInput(new Date(ass.deadline)), groupDeadline: ass.groupDeadline ? toLocalDateTimeInput(new Date(ass.groupDeadline)) : '',
+                          allowLateSubmission: ass.allowLateSubmission, allowLateGroupRegistration: ass.allowLateGroupRegistration || false,
+                          allowedFileTypes: ass.allowedFileTypes.join(', '), maxFileSize: ass.maxFileSize, maxGroupSize: ass.maxGroupSize || 4,
+                          minGroupSize: (ass as any).minGroupSize || 1, submissionType: ass.submissionType || 'Group', isActive: ass.isActive,
+                        });
+                        setAssignmentModalOpen(true);
+                      }} className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-2 text-xs font-bold text-slate-600"><Edit2 className="h-4 w-4" />Edit</button>
+                      <button onClick={() => handleDeleteAssignment(ass._id)} className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-2.5 py-2 text-xs font-bold text-red-600"><Trash2 className="h-4 w-4" />Delete</button>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -2384,7 +2400,7 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {resetPassModalOpen && resetPassStudent && (
-          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"><form onSubmit={handleResetStudentPassword} className="glass-panel rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200/80 dark:border-white/10 shadow-2xl"><h3 className="font-bold text-slate-900">Reset Student Password</h3><input type="password" value={newStudentPassInput} onChange={(e) => setNewStudentPassInput(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="New password" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setResetPassModalOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold">Cancel</button><button className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow">Reset Password</button></div></form></div>
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"><form onSubmit={handleResetStudentPassword} className="glass-panel rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200/80 dark:border-white/10 shadow-2xl"><h3 className="font-bold text-slate-900">Reset Student Password</h3><PasswordInput value={newStudentPassInput} onChange={(e) => setNewStudentPassInput(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="New password" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setResetPassModalOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold">Cancel</button><button className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow">Reset Password</button></div></form></div>
         )}
 
         {/* MODAL: ADD / EDIT SUBJECT */}

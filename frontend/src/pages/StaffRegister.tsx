@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, GraduationCap, Loader2, Mail, Send, ShieldCheck, User } from 'lucide-react';
 import api from '../api/axios';
+import { PasswordInput } from '../components/PasswordInput';
 
 export const StaffRegister: React.FC = () => {
   const [role, setRole] = useState<'TEACHER' | 'CR' | 'CR_ASSISTANT'>('TEACHER');
@@ -153,13 +154,13 @@ export const StaffRegister: React.FC = () => {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
-              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" autoComplete="new-password" />
+              <PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" autoComplete="new-password" />
               <p className="text-[11px] text-slate-500 mt-1">Use at least 8 characters, including uppercase, lowercase, a number, and a symbol.</p>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Confirm password</label>
-              <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" autoComplete="new-password" />
+              <PasswordInput value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" autoComplete="new-password" />
             </div>
 
             <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2">

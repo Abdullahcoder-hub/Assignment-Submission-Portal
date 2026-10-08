@@ -116,6 +116,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('staffPortalToken');
         localStorage.removeItem('studentPortalToken');
         localStorage.removeItem('studentPortalUser');
+        localStorage.setItem('admin_active_tab', 'dashboard');
+        localStorage.setItem('admin_active_tab_role', assignedRole);
         localStorage.setItem('portalToken', jwtToken);
         localStorage.setItem('userRole', assignedRole);
         localStorage.setItem('portalUser', JSON.stringify(adminData));
