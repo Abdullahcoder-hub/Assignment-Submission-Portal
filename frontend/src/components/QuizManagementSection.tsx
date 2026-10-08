@@ -10,6 +10,7 @@ import {
   CheckCircle,
   AlertCircle,
   Download,
+  Upload,
   Calendar,
   Clock,
   BookOpen,
@@ -35,6 +36,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
 
   // Create Quiz Modal State
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
+  const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
   const [quizTitle, setQuizTitle] = useState<string>('');
@@ -61,7 +63,11 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
   const [selectedQuizForSubmissions, setSelectedQuizForSubmissions] = useState<Quiz | null>(null);
   const [quizSubmissions, setQuizSubmissions] = useState<QuizSubmission[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState<boolean>(false);
+  const [loadingGradingSubmissionId, setLoadingGradingSubmissionId] = useState<string | null>(null);
   const [updatingResults, setUpdatingResults] = useState<boolean>(false);
+  const [uploadingGrades, setUploadingGrades] = useState<boolean>(false);
+  const [uploadedGradesFile, setUploadedGradesFile] = useState<string | null>(null);
+  const [loadingQuizRequests, setLoadingQuizRequests] = useState<boolean>(true);
 
   // Grading Modal State
   const [gradingSubmission, setGradingSubmission] = useState<QuizSubmission | null>(null);
@@ -69,27 +75,36 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
   const [gradedFeedback, setGradedFeedback] = useState<Record<string, string>>({});
   const [savingGrade, setSavingGrade] = useState<boolean>(false);
 
-  const fetchData = async () => {
+  const fetchQuizRequests = async () => {
+    setLoadingQuizRequests(true);
     try {
-      setLoading(true);
-      const [resQuizzes, resMyClasses, resClasses, resSubjects, resRequests] = await Promise.all([
+      const response = await api.get('/late-requests?requestType=Quiz');
+      if (response.data.success) setQuizRequests(response.data.requests || []);
+    } catch {
+      setFeedback({ success: false, message: 'Failed to load quiz access requests.' });
+    } finally {
+      setLoadingQuizRequests(false);
+    }
+  };
+
+  const fetchData = async () => {
+    void fetchQuizRequests();
+    setLoading(true);
+    const results = await Promise.allSettled([
         api.get('/quizzes'),
         api.get('/teacher-assignments/my-classes'),
         api.get('/classes'),
         api.get('/subjects'),
-        api.get('/late-requests?requestType=Quiz'),
-      ]);
-
-      if (resQuizzes.data.success) setQuizzes(resQuizzes.data.quizzes || []);
-      if (resMyClasses.data.success) setMyAssignments(resMyClasses.data.assignments || []);
-      if (resClasses.data.success) setClasses(resClasses.data.classes || []);
-      if (resSubjects.data.success) setSubjects(resSubjects.data.subjects || []);
-      if (resRequests.data.success) setQuizRequests(resRequests.data.requests || []);
-    } catch (err) {
-      setFeedback({ success: false, message: 'Failed to load quizzes.' });
-    } finally {
-      setLoading(false);
+    ]);
+    const [resQuizzes, resMyClasses, resClasses, resSubjects] = results;
+    if (resQuizzes.status === 'fulfilled' && resQuizzes.value.data.success) setQuizzes(resQuizzes.value.data.quizzes || []);
+    if (resMyClasses.status === 'fulfilled' && resMyClasses.value.data.success) setMyAssignments(resMyClasses.value.data.assignments || []);
+    if (resClasses.status === 'fulfilled' && resClasses.value.data.success) setClasses(resClasses.value.data.classes || []);
+    if (resSubjects.status === 'fulfilled' && resSubjects.value.data.success) setSubjects(resSubjects.value.data.subjects || []);
+    if (results.some((result) => result.status === 'rejected')) {
+      setFeedback({ success: false, message: 'Some quiz management data failed to load.' });
     }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -98,6 +113,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
 
   const handleOpenCreateModal = () => {
     if (userRole !== 'TEACHER') return;
+    setEditingQuizId(null);
     // Default to first assigned class and subject
     const defaultAssignment = myAssignments[0];
     const defaultClassId = defaultAssignment ? (typeof defaultAssignment.classId === 'object' ? (defaultAssignment.classId as any)._id : defaultAssignment.classId) : (classes[0]?._id || '');
@@ -128,11 +144,29 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
     setShowCreateModal(true);
   };
 
+  const handleOpenEditModal = (quiz: Quiz) => {
+    const classId = typeof quiz.classId === 'string' ? quiz.classId : quiz.classId._id;
+    const subjectId = typeof quiz.subjectId === 'string' ? quiz.subjectId : quiz.subjectId._id;
+    setEditingQuizId(quiz._id);
+    setSelectedClassId(classId);
+    setSelectedSubjectId(subjectId);
+    setQuizTitle(quiz.title);
+    setQuizDescription(quiz.description || '');
+    setQuizType(quiz.quizType);
+    setDurationMinutes(quiz.durationMinutes || 30);
+    const quizDeadline = new Date(quiz.deadline);
+    setDeadline(new Date(quizDeadline.getTime() - quizDeadline.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+    setAllowLateSubmission(quiz.allowLateSubmission);
+    setQuestions(quiz.questions.map((question) => ({ ...question, options: question.options ? [...question.options] : undefined })));
+    setFormError('');
+    setShowCreateModal(true);
+  };
+
   const handleQuizRequestDecision = async (requestId: string, decision: 'Approved' | 'Rejected') => {
     try {
       await api.patch(`/late-requests/${requestId}/decision`, { decision });
       setFeedback({ success: true, message: `Quiz access request ${decision.toLowerCase()}.` });
-      await fetchData();
+      await fetchQuizRequests();
     } catch (err: any) {
       setFeedback({ success: false, message: err.response?.data?.message || 'Failed to update quiz access request.' });
     }
@@ -144,7 +178,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
     try {
       await api.patch(`/quizzes/${quizId}/attempts/${request.studentId}/unlock`);
       setFeedback({ success: true, message: 'Fourth quiz attempt allowed. The student can resume the quiz.' });
-      await fetchData();
+      await fetchQuizRequests();
     } catch (err: any) {
       setFeedback({ success: false, message: err.response?.data?.message || 'Failed to allow a fourth attempt.' });
     }
@@ -205,6 +239,53 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err: any) {
       setFeedback({ success: false, message: err.response?.data?.message || 'Failed to download the grades CSV.' });
+    }
+  };
+
+  const handleDownloadGradesExcel = async () => {
+    if (!selectedQuizForSubmissions) return;
+    try {
+      const response = await api.get(`/quizzes/${selectedQuizForSubmissions._id}/submissions/grades-excel`, {
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${selectedQuizForSubmissions.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Quiz_Grades.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err: any) {
+      setFeedback({ success: false, message: err.response?.data?.message || 'Failed to download the Excel grades file.' });
+    }
+  };
+
+  const handleUploadGradesFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !selectedQuizForSubmissions) return;
+    const isExcel = file.name.toLowerCase().endsWith('.xlsx');
+    const isCsv = file.name.toLowerCase().endsWith('.csv');
+    if (!isExcel && !isCsv) {
+      setFeedback({ success: false, message: 'Select an Excel (.xlsx) or Excel-compatible (.csv) grades file.' });
+      return;
+    }
+
+    setUploadingGrades(true);
+    try {
+      const response = await api.post(
+        `/quizzes/${selectedQuizForSubmissions._id}/submissions/grades-${isExcel ? 'excel' : 'csv'}`,
+        isExcel ? await file.arrayBuffer() : await file.text(),
+        { headers: { 'Content-Type': isExcel ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv' } },
+      );
+      setFeedback({ success: true, message: response.data.message || 'Grades uploaded successfully.' });
+      setUploadedGradesFile(file.name);
+      await handleViewSubmissions(selectedQuizForSubmissions);
+    } catch (err: any) {
+      setFeedback({ success: false, message: err.response?.data?.message || 'File rejected. Use the downloaded grades template.' });
+    } finally {
+      setUploadingGrades(false);
     }
   };
 
@@ -277,7 +358,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
 
     setSaving(true);
     try {
-      const res = await api.post('/quizzes', {
+      const payload = {
         classId: selectedClassId,
         subjectId: selectedSubjectId,
         title: quizTitle,
@@ -287,11 +368,15 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
         deadline,
         allowLateSubmission,
         questions,
-      });
+      };
+      const res = editingQuizId
+        ? await api.put(`/quizzes/${editingQuizId}`, payload)
+        : await api.post('/quizzes', payload);
 
       if (res.data.success) {
-        setFeedback({ success: true, message: 'Quiz created successfully.' });
+        setFeedback({ success: true, message: editingQuizId ? 'Quiz updated successfully.' : 'Quiz created successfully.' });
         setShowCreateModal(false);
+        setEditingQuizId(null);
         fetchData();
       }
     } catch (err: any) {
@@ -332,20 +417,27 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
     }
   };
 
-  const handleOpenGradeModal = (sub: QuizSubmission) => {
-    setGradingSubmission(sub);
-    const initialMarks: Record<string, number> = {};
-    const initialFeedback: Record<string, string> = {};
-
-    sub.answers.forEach((ans) => {
-      if (ans.questionType === 'Written') {
-        initialMarks[ans.questionId] = ans.marksAwarded || 0;
-        initialFeedback[ans.questionId] = ans.teacherFeedback || '';
-      }
-    });
-
-    setGradedMarks(initialMarks);
-    setGradedFeedback(initialFeedback);
+  const handleOpenGradeModal = async (sub: QuizSubmission) => {
+    setLoadingGradingSubmissionId(sub._id);
+    try {
+      const response = await api.get(`/quizzes/submissions/${sub._id}/grade`);
+      const detailedSubmission = response.data.submission as QuizSubmission;
+      const initialMarks: Record<string, number> = {};
+      const initialFeedback: Record<string, string> = {};
+      detailedSubmission.answers.forEach((answer) => {
+        if (answer.questionType === 'Written') {
+          initialMarks[answer.questionId] = answer.marksAwarded || 0;
+          initialFeedback[answer.questionId] = answer.teacherFeedback || '';
+        }
+      });
+      setGradedMarks(initialMarks);
+      setGradedFeedback(initialFeedback);
+      setGradingSubmission(detailedSubmission);
+    } catch (err: any) {
+      setFeedback({ success: false, message: err.response?.data?.message || 'Failed to load submission for grading.' });
+    } finally {
+      setLoadingGradingSubmissionId(null);
+    }
   };
 
   const handleSaveGrades = async (e: React.FormEvent) => {
@@ -414,10 +506,14 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
         )}
       </div>
 
-      {quizRequests.some((request) => request.status === 'Pending' || request.requestCount === 3) && (
+      {(userRole === 'TEACHER' || quizRequests.some((request) => request.status === 'Pending' || request.requestCount === 3)) && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 sm:p-5 space-y-3">
           <h3 className="font-bold text-slate-900">Quiz Access Requests</h3>
-          {quizRequests.filter((request) => request.status === 'Pending' || request.requestCount === 3).map((request) => {
+          {loadingQuizRequests ? (
+            <p className="text-sm text-slate-500">Loading quiz access requests...</p>
+          ) : quizRequests.filter((request) => request.status === 'Pending' || request.requestCount === 3).length === 0 ? (
+            <p className="text-sm text-slate-500">No pending quiz access requests.</p>
+          ) : quizRequests.filter((request) => request.status === 'Pending' || request.requestCount === 3).map((request) => {
             const quiz = request.quizId && typeof request.quizId === 'object' ? request.quizId as Quiz : null;
             const requestClass = request.classId && typeof request.classId === 'object' ? request.classId as Class : null;
             return (
@@ -519,13 +615,22 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                     </div>
 
                     {userRole === 'TEACHER' && (
-                      <button
-                        onClick={() => handleDeleteQuiz(q._id, q.title)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                        title="Delete quiz"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenEditModal(q)}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                          title="Edit quiz"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteQuiz(q._id, q.title)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Delete quiz"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -609,9 +714,27 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                     <button onClick={handleDownloadQuizPdf} className="px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg">
                       <Download className="inline w-3.5 h-3.5 mr-1" /> Download All as PDF
                     </button>
-                    <button onClick={handleDownloadGradesCsv} className="px-3 py-2 bg-slate-700 text-white text-xs font-bold rounded-lg">
-                      <Download className="inline w-3.5 h-3.5 mr-1" /> Grades CSV
+                    <button onClick={handleDownloadGradesExcel} className="px-3 py-2 bg-slate-600 text-white text-xs font-bold rounded-lg">
+                      <Download className="inline w-3.5 h-3.5 mr-1" /> Download Grades File
                     </button>
+                    {selectedQuizForSubmissions.questions?.some((question) => question.questionType === 'Written') && (
+                      <label className={`inline-flex items-center gap-1 px-3 py-2 ${uploadingGrades ? 'bg-emerald-400' : 'bg-emerald-600 hover:bg-emerald-700'} text-white text-xs font-bold rounded-lg cursor-pointer`}>
+                        <Upload className="inline w-3.5 h-3.5 mr-1" />
+                        {uploadingGrades ? 'Uploading...' : uploadedGradesFile ? 'File Uploaded' : 'Upload Marked File'}
+                        <input
+                          type="file"
+                          accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+                          className="hidden"
+                          disabled={uploadingGrades}
+                          onChange={handleUploadGradesFile}
+                        />
+                      </label>
+                    )}
+                      {uploadedGradesFile && !uploadingGrades && (
+                        <span className="max-w-32 truncate text-[11px] text-emerald-700" title={uploadedGradesFile}>
+                          {uploadedGradesFile}
+                        </span>
+                      )}
                     <button onClick={handleToggleResults} disabled={updatingResults} className="px-3 py-2 bg-emerald-600 disabled:opacity-50 text-white text-xs font-bold rounded-lg">
                       {updatingResults ? 'Saving...' : selectedQuizForSubmissions.resultsPublished ? 'Hide Results' : 'Declare Results'}
                     </button>
@@ -671,10 +794,13 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                             {userRole === 'TEACHER' && selectedQuizForSubmissions.quizType !== 'MCQ' && (
                               <button
                                 onClick={() => handleOpenGradeModal(sub)}
+                                disabled={loadingGradingSubmissionId === sub._id}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition"
                               >
-                                <Edit2 className="w-3.5 h-3.5" />
-                                Grade
+                                {loadingGradingSubmissionId === sub._id
+                                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  : <Edit2 className="w-3.5 h-3.5" />}
+                                {loadingGradingSubmissionId === sub._id ? 'Loading' : 'Grade'}
                               </button>
                             )}
 
@@ -723,7 +849,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                         <input
                           type="number"
                           min="0"
-                          max="20"
+                          max={selectedQuizForSubmissions?.questions.find((question) => question.questionId === ans.questionId)?.marks || 0}
                           value={gradedMarks[ans.questionId] ?? ans.marksAwarded ?? 0}
                           onChange={(e) =>
                             setGradedMarks({
@@ -781,7 +907,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl border border-slate-100 overflow-hidden max-h-[92vh] flex flex-col">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h3 className="font-bold text-slate-900 text-lg">Create New Quiz</h3>
+              <h3 className="font-bold text-slate-900 text-lg">{editingQuizId ? 'Edit Quiz' : 'Create New Quiz'}</h3>
               <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600 font-bold">
                 ✕
               </button>
@@ -796,6 +922,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Target Class</label>
                   <select
                     required
+                    disabled={Boolean(editingQuizId)}
                     value={selectedClassId}
                     onChange={(e) => setSelectedClassId(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -813,6 +940,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Subject</label>
                   <select
                     required
+                    disabled={Boolean(editingQuizId)}
                     value={selectedSubjectId}
                     onChange={(e) => setSelectedSubjectId(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -878,7 +1006,10 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
               </div>
 
               {/* Questions Section */}
-              <div className="space-y-4 pt-4 border-t border-slate-100">
+              <fieldset disabled={Boolean(editingQuizId && (quizzes.find((quiz) => quiz._id === editingQuizId)?.submissionCount || 0) > 0)} className="space-y-4 pt-4 border-t border-slate-100">
+                {editingQuizId && (quizzes.find((quiz) => quiz._id === editingQuizId)?.submissionCount || 0) > 0 && (
+                  <p className="text-xs text-amber-700">Questions are locked because students have submitted; edit quiz details only.</p>
+                )}
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                     <HelpCircle className="w-4 h-4 text-indigo-600" />
@@ -984,7 +1115,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                     )}
                   </div>
                 ))}
-              </div>
+              </fieldset>
 
               <div className="pt-4 flex items-center justify-end gap-2 border-t border-slate-100">
                 <button
@@ -1000,7 +1131,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                   className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition disabled:opacity-50"
                 >
                   {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Publish Quiz
+                  {editingQuizId ? 'Save Changes' : 'Publish Quiz'}
                 </button>
               </div>
             </form>

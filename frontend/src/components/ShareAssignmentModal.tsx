@@ -95,7 +95,7 @@ export const ShareAssignmentModal: React.FC<ShareAssignmentModalProps> = ({
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.post('/api/shared-assignments/share', {
+      const res = await api.post('/shared-assignments/share', {
         assignmentId: assignment._id,
         teacherId: selectedTeacherId,
         shareZip,

@@ -33,7 +33,7 @@ export const TeacherSharedAssignmentsSection: React.FC = () => {
     setError(null);
 
     try {
-      const res = await api.get('/api/shared-assignments/teacher-received');
+      const res = await api.get('/shared-assignments/teacher-received');
       if (res.data?.success) {
         setSharedList(res.data.sharedAssignments || []);
       }
@@ -52,7 +52,7 @@ export const TeacherSharedAssignmentsSection: React.FC = () => {
   const handleDownloadZip = async (item: SharedAssignment) => {
     setDownloadingZipId(item._id);
     try {
-      const response = await api.get(`/api/shared-assignments/${item._id}/download-zip`, {
+      const response = await api.get(`/shared-assignments/${item._id}/download-zip`, {
         responseType: 'blob',
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -76,7 +76,7 @@ export const TeacherSharedAssignmentsSection: React.FC = () => {
   const handleDownloadCsv = async (item: SharedAssignment) => {
     setDownloadingCsvId(item._id);
     try {
-      const response = await api.get(`/api/shared-assignments/${item._id}/download-csv`, {
+      const response = await api.get(`/shared-assignments/${item._id}/download-csv`, {
         responseType: 'blob',
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));

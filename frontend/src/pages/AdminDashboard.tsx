@@ -2074,8 +2074,10 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'late-requests' && (
           <div className="space-y-6">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Late Submission Requests</h1>
-              <p className="text-slate-500 text-sm">Review and decide late submission requests submitted by students/groups.</p>
+              <h1 className="text-2xl font-bold text-slate-900">{isTeacher ? 'Quiz Access Requests' : 'Late Submission Requests'}</h1>
+              <p className="text-slate-500 text-sm">
+                {isTeacher ? 'Review and decide student requests to resume assigned quizzes.' : 'Review and decide late submission requests submitted by students/groups.'}
+              </p>
             </div>
 
             {/* Filter Bar */}

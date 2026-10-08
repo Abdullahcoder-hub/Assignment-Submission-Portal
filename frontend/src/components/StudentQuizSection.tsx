@@ -336,10 +336,6 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                         <span className="text-xs font-semibold text-amber-700">Unblock request pending</span>
                       ) : (q.myLateRequestCount || 0) >= 3 ? (
                         <span className="text-xs text-slate-600">3 requests used. Contact your teacher or CR to allow a 4th attempt.</span>
-                      ) : q.myLateRequestStatus === 'Approved' ? (
-                        <button onClick={() => handleStartQuiz(q)} className="w-full py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl">
-                          Resume Quiz
-                        </button>
                       ) : (
                         <button onClick={() => setLateModalQuiz(q)} className="w-full py-2 bg-amber-50 text-amber-800 text-xs font-semibold rounded-xl border border-amber-200">
                           Request Unblock

@@ -14,6 +14,7 @@ import { generateQuizSubmissionDocx } from '../utils/docxGenerator.js';
 import { generateSubmissionId } from '../utils/submissionId.js';
 import { escapeRegex, sanitizeCsvField } from '../utils/fileValidation.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import ExcelJS from 'exceljs';
 
 /**
  * Helper: Strip correct answers for students
@@ -183,6 +184,96 @@ export const createQuiz = async (req: AuthRequest, res: Response): Promise<void>
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to create quiz.' });
+  }
+};
+
+export const updateQuiz = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) {
+      res.status(404).json({ success: false, message: 'Quiz not found.' });
+      return;
+    }
+    if (req.admin?.role !== 'TEACHER' || !(await canTeacherManageQuiz(quiz, req.admin.id))) {
+      res.status(403).json({ success: false, message: 'Only the assigned teacher can edit this quiz.' });
+      return;
+    }
+
+    const { title, description, durationMinutes, deadline, allowLateSubmission, questions } = req.body;
+    if (!title?.trim() || !deadline || !Array.isArray(questions) || !questions.length) {
+      res.status(400).json({ success: false, message: 'Title, deadline, and at least one question are required.' });
+      return;
+    }
+    if (!Number.isFinite(Number(durationMinutes)) || Number(durationMinutes) < 5 || Number(durationMinutes) > 180
+      || !Number.isFinite(new Date(deadline).getTime())) {
+      res.status(400).json({ success: false, message: 'Enter a valid duration and deadline.' });
+      return;
+    }
+
+    const submissions = await QuizSubmission.countDocuments({ quizId: quiz._id });
+    const formattedQuestions: IQuizQuestion[] = [];
+    for (const [index, question] of questions.entries()) {
+      const questionType = question.questionType === 'Written' ? 'Written' : question.questionType === 'MCQ' ? 'MCQ' : null;
+      const marks = Number(question.marks);
+      if (!questionType || !question.questionText?.trim() || !Number.isFinite(marks) || marks < 1 || marks > 50) {
+        res.status(400).json({ success: false, message: `Question ${index + 1} has invalid text, type, or marks.` });
+        return;
+      }
+      const questionId = String(question.questionId || '');
+      if (!questionId) {
+        res.status(400).json({ success: false, message: `Question ${index + 1} is missing its ID.` });
+        return;
+      }
+      if (questionType === 'MCQ') {
+        const correctOptionIndex = Number(question.correctOptionIndex);
+        if (!Array.isArray(question.options) || question.options.length < 2
+          || question.options.some((option: string) => !String(option).trim())
+          || !Number.isInteger(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex >= question.options.length) {
+          res.status(400).json({ success: false, message: `MCQ Question ${index + 1} has invalid options or correct answer.` });
+          return;
+        }
+        formattedQuestions.push({
+          questionId,
+          questionType,
+          questionText: question.questionText.trim(),
+          options: question.options.map((option: string) => String(option).trim()),
+          correctOptionIndex,
+          marks,
+        });
+      } else {
+        formattedQuestions.push({ questionId, questionType, questionText: question.questionText.trim(), marks });
+      }
+    }
+
+    if (submissions > 0) {
+      const currentStructure = quiz.questions.map(({ questionId, questionType, marks }) => ({ questionId, questionType, marks }));
+      const nextStructure = formattedQuestions.map(({ questionId, questionType, marks }) => ({ questionId, questionType, marks }));
+      if (JSON.stringify(currentStructure) !== JSON.stringify(nextStructure)) {
+        res.status(400).json({ success: false, message: 'Questions, question types, marks, and order cannot change after students submit.' });
+        return;
+      }
+      if (formattedQuestions.some((question) => question.questionType === 'MCQ'
+        && quiz.questions.find((current) => current.questionId === question.questionId)?.correctOptionIndex !== question.correctOptionIndex)) {
+        res.status(400).json({ success: false, message: 'Correct answers cannot change after students submit.' });
+        return;
+      }
+    }
+
+    quiz.title = title.trim();
+    quiz.description = String(description || '').trim();
+    quiz.durationMinutes = Number(durationMinutes);
+    quiz.deadline = new Date(deadline);
+    quiz.allowLateSubmission = Boolean(allowLateSubmission);
+    quiz.questions = formattedQuestions as typeof quiz.questions;
+    quiz.totalMarks = formattedQuestions.reduce((total, question) => total + question.marks, 0);
+    quiz.quizType = formattedQuestions.some((question) => question.questionType === 'Written')
+      ? formattedQuestions.some((question) => question.questionType === 'MCQ') ? 'Mixed' : 'Written'
+      : 'MCQ';
+    await quiz.save();
+
+    res.status(200).json({ success: true, message: 'Quiz updated successfully.', quiz });
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to update quiz.' });
   }
 };
 
@@ -763,12 +854,10 @@ export const getQuizSubmissions = async (req: AuthRequest, res: Response): Promi
     }
 
     const submissions = await QuizSubmission.find({ quizId: id })
-      .populate('studentId', 'name rollNumber email')
+      .select('_id submissionId quizId studentId classId subjectId studentName rollNumber mcqScore writtenScore totalScore isGraded submittedAt isLate status createdAt updatedAt')
       .sort({ rollNumber: 1 })
       .lean();
-    const visibleSubmissions = req.admin?.role === 'TEACHER'
-      ? submissions
-      : submissions.map((submission) => ({
+    const visibleSubmissions = submissions.map((submission) => ({
           _id: submission._id,
           submissionId: submission.submissionId,
           quizId: submission.quizId,
@@ -777,12 +866,13 @@ export const getQuizSubmissions = async (req: AuthRequest, res: Response): Promi
           subjectId: submission.subjectId,
           studentName: submission.studentName,
           rollNumber: submission.rollNumber,
-          answers: submission.answers.map((answer) => ({
-            questionId: answer.questionId,
-            questionType: answer.questionType,
-            selectedOptionIndex: answer.selectedOptionIndex,
-            writtenAnswerText: answer.writtenAnswerText,
-          })),
+          answers: [],
+          ...(req.admin?.role === 'TEACHER' ? {
+            mcqScore: submission.mcqScore,
+            writtenScore: submission.writtenScore,
+            totalScore: submission.totalScore,
+            isGraded: submission.isGraded,
+          } : {}),
           submittedAt: submission.submittedAt,
           isLate: submission.isLate,
           status: submission.status,
@@ -805,6 +895,28 @@ export const getQuizSubmissions = async (req: AuthRequest, res: Response): Promi
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch quiz submissions.' });
+  }
+};
+
+export const getQuizSubmissionForGrading = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const submission = await QuizSubmission.findById(req.params.submissionId).lean();
+    if (!submission) {
+      res.status(404).json({ success: false, message: 'Quiz submission not found.' });
+      return;
+    }
+    const quiz = await Quiz.findById(submission.quizId).select('teacherId classId subjectId');
+    if (!quiz) {
+      res.status(404).json({ success: false, message: 'Quiz not found.' });
+      return;
+    }
+    if (req.admin?.role !== 'TEACHER' || !(await canTeacherManageQuiz(quiz, req.admin.id))) {
+      res.status(403).json({ success: false, message: 'Only the assigned teacher can grade this submission.' });
+      return;
+    }
+    res.status(200).json({ success: true, submission });
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to load quiz submission for grading.' });
   }
 };
 
@@ -937,18 +1049,48 @@ export const downloadQuizSubmissionsCsv = async (req: AuthRequest, res: Response
     }
     const submissions = await QuizSubmission.find({ quizId: quiz._id }).sort({ rollNumber: 1 }).lean();
     const subject = quiz.subjectId as any;
-    const headers = ['Student Name', 'Roll Number', 'Subject', 'Quiz', 'MCQ Marks', 'Written Marks', 'Total Marks', 'Maximum Marks', 'Grading Status'];
-    const rows = submissions.map((submission) => [
-      submission.studentName,
-      submission.rollNumber,
-      `${subject?.name || 'Subject'} (${subject?.code || ''})`,
-      quiz.title,
-      submission.mcqScore,
-      submission.writtenScore,
-      submission.totalScore,
-      quiz.totalMarks,
-      submission.isGraded ? 'Graded' : 'Pending grading',
-    ].map(sanitizeCsvField).join(','));
+    const writtenQuestions = quiz.questions.filter((question) => question.questionType === 'Written');
+    const headers = [
+      'Submission ID', 'Student Name', 'Roll Number', 'Subject', 'Quiz', 'MCQ Marks',
+      ...writtenQuestions.map((question) => `Question ${question.questionId} Marks`),
+      'Written Marks', 'Total Marks', 'Maximum Marks', 'Grading Status',
+    ];
+    const columnName = (column: number): string => {
+      let name = '';
+      let value = column;
+      while (value > 0) {
+        value -= 1;
+        name = String.fromCharCode(65 + (value % 26)) + name;
+        value = Math.floor(value / 26);
+      }
+      return name;
+    };
+    const rows = submissions.map((submission, index) => {
+      const rowNumber = index + 2;
+      const writtenEndColumn = 6 + writtenQuestions.length;
+      const writtenFormula = writtenQuestions.length
+        ? `=SUM(G${rowNumber}:${columnName(writtenEndColumn)}${rowNumber})`
+        : '=0';
+      const totalFormula = `=F${rowNumber}+${columnName(writtenEndColumn + 1)}${rowNumber}`;
+      const values = [
+        submission.submissionId,
+        submission.studentName,
+        submission.rollNumber,
+        `${subject?.name || 'Subject'} (${subject?.code || ''})`,
+        quiz.title,
+        submission.mcqScore,
+        ...writtenQuestions.map((question) =>
+          submission.answers.find((answer) => answer.questionId === question.questionId)?.marksAwarded || 0
+        ),
+        writtenFormula,
+        totalFormula,
+        quiz.totalMarks,
+        submission.isGraded ? 'Graded' : 'Pending grading',
+      ];
+      return values.map((value) => typeof value === 'string' && value.startsWith('=')
+        ? `"${value}"`
+        : sanitizeCsvField(value)).join(',');
+    });
     const csvContent = [headers.map(sanitizeCsvField).join(','), ...rows].join('\n');
     const cleanTitle = quiz.title.replace(/[^a-zA-Z0-9_-]/g, '_');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -956,6 +1098,275 @@ export const downloadQuizSubmissionsCsv = async (req: AuthRequest, res: Response
     res.status(200).send(`\uFEFF${csvContent}`);
   } catch {
     res.status(500).json({ success: false, message: 'Failed to export quiz grades CSV.' });
+  }
+};
+
+export const downloadQuizGradesExcel = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const quiz = await Quiz.findById(req.params.id).populate('subjectId', 'name code');
+    if (!quiz) {
+      res.status(404).json({ success: false, message: 'Quiz not found.' });
+      return;
+    }
+    if (req.admin?.role !== 'TEACHER' || !(await canTeacherManageQuiz(quiz, req.admin.id))) {
+      res.status(403).json({ success: false, message: 'Only the assigned teacher can export quiz grades.' });
+      return;
+    }
+
+    const submissions = await QuizSubmission.find({ quizId: quiz._id }).sort({ rollNumber: 1 }).lean();
+    const subject = quiz.subjectId as any;
+    const writtenQuestions = quiz.questions.filter((question) => question.questionType === 'Written');
+    const headers = [
+      'Submission ID', 'Student Name', 'Roll Number', 'Subject', 'Quiz', 'MCQ Marks',
+      ...writtenQuestions.map((question) => `Question ${question.questionId} Marks`),
+      'Written Marks', 'Total Marks', 'Maximum Marks', 'Grading Status',
+    ];
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Grades');
+    sheet.addRow(headers);
+    submissions.forEach((submission, index) => {
+      const rowNumber = index + 2;
+      const writtenEndColumn = 6 + writtenQuestions.length;
+      const writtenMarks = writtenQuestions.map((question) =>
+        submission.answers.find((answer) => answer.questionId === question.questionId)?.marksAwarded || 0
+      );
+      sheet.addRow([
+        submission.submissionId,
+        submission.studentName,
+        submission.rollNumber,
+        `${subject?.name || 'Subject'} (${subject?.code || ''})`,
+        quiz.title,
+        submission.mcqScore,
+        ...writtenMarks,
+        { formula: writtenQuestions.length ? `SUM(G${rowNumber}:${sheet.getColumn(writtenEndColumn).letter}${rowNumber})` : '0' },
+        { formula: `F${rowNumber}+${sheet.getColumn(writtenEndColumn + 1).letter}${rowNumber}` },
+        quiz.totalMarks,
+        submission.isGraded ? 'Graded' : 'Pending grading',
+      ]);
+    });
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+    sheet.autoFilter = { from: 'A1', to: `${sheet.getColumn(headers.length).letter}1` };
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+    sheet.columns.forEach((column, index) => {
+      column.width = Math.min(Math.max(headers[index].length + 3, 14), 32);
+    });
+
+    const filename = `${quiz.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Quiz_Grades.xlsx`;
+    const file = await workbook.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.status(200).send(Buffer.from(file));
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to export quiz grades Excel file.' });
+  }
+};
+
+const parseCsvRows = (content: string, delimiter: ',' | ';'): string[][] => {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let quoted = false;
+
+  for (let i = 0; i < content.length; i += 1) {
+    const character = content[i];
+    if (quoted) {
+      if (character === '"' && content[i + 1] === '"') {
+        field += '"';
+        i += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        field += character;
+      }
+    } else if (character === '"' && field.length === 0) {
+      quoted = true;
+    } else if (character === delimiter) {
+      row.push(field);
+      field = '';
+    } else if (character === '\n' || character === '\r') {
+      if (character === '\r' && content[i + 1] === '\n') i += 1;
+      row.push(field);
+      while (row.length && !row[row.length - 1].trim()) row.pop();
+      if (row.some((cell) => cell.trim() !== '')) rows.push(row);
+      row = [];
+      field = '';
+    } else {
+      field += character;
+    }
+  }
+
+  if (quoted) throw new Error('CSV contains an unclosed quoted field.');
+  row.push(field);
+  if (row.some((cell) => cell.trim() !== '')) rows.push(row);
+  return rows;
+};
+
+export const uploadQuizGradesCsv = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) {
+      res.status(404).json({ success: false, message: 'Quiz not found.' });
+      return;
+    }
+    if (req.admin?.role !== 'TEACHER' || !(await canTeacherManageQuiz(quiz, req.admin.id))) {
+      res.status(403).json({ success: false, message: 'Only the assigned teacher can upload quiz grades.' });
+      return;
+    }
+
+    const writtenQuestions = quiz.questions.filter((question) => question.questionType === 'Written');
+    if (!writtenQuestions.length) {
+      res.status(400).json({ success: false, message: 'This quiz has no written questions to grade.' });
+      return;
+    }
+    const isExcel = Buffer.isBuffer(req.body);
+    const contentSize = isExcel ? req.body.length : typeof req.body === 'string' ? Buffer.byteLength(req.body, 'utf8') : 0;
+    if ((!isExcel && (typeof req.body !== 'string' || !req.body.trim())) || contentSize > 5 * 1024 * 1024) {
+      res.status(400).json({ success: false, message: 'Upload a non-empty Excel or CSV file smaller than 5 MB.' });
+      return;
+    }
+
+    let rows: string[][];
+    try {
+      if (isExcel) {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(req.body);
+        const sheet = workbook.worksheets[0];
+        if (!sheet || sheet.rowCount > 5001 || sheet.columnCount > 256) {
+          res.status(400).json({ success: false, message: 'Excel file must contain one grades sheet with at most 5,000 rows.' });
+          return;
+        }
+        rows = [];
+        sheet.eachRow({ includeEmpty: false }, (excelRow) => {
+          const row = Array.from({ length: sheet.columnCount }, (_, index) => {
+            const value = excelRow.getCell(index + 1).value;
+            if (typeof value === 'string' || typeof value === 'number') return String(value);
+            if (value && typeof value === 'object' && 'richText' in value) {
+              return value.richText.map((part) => part.text).join('');
+            }
+            if (value && typeof value === 'object' && 'result' in value) {
+              return String(value.result ?? '');
+            }
+            return '';
+          });
+          if (row.some((cell) => cell.trim() !== '')) rows.push(row);
+        });
+      } else {
+        const csvContent = req.body.replace(/^\uFEFF/, '');
+        const firstLine = csvContent.split(/\r?\n/, 1)[0] || '';
+        const delimiter: ',' | ';' = (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ';' : ',';
+        rows = parseCsvRows(csvContent, delimiter);
+      }
+    } catch (error) {
+      res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Invalid Excel or CSV file.' });
+      return;
+    }
+    rows = rows.map((row) => {
+      while (row.length && !row[row.length - 1].trim()) row.pop();
+      return row;
+    });
+    const normalizeHeader = (header: string) => header.replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const headers = rows[0]?.map(normalizeHeader);
+    const requiredQuestionHeaders = writtenQuestions.map((question) => normalizeHeader(`Question ${question.questionId} Marks`));
+    const hasQuestionMarks = requiredQuestionHeaders.every((header) => headers?.includes(header));
+    const hasAggregateMarks = headers?.includes('writtenmarks') || headers?.includes('writtenscore');
+    if (!headers || (!headers.includes('submissionid') && !headers.includes('rollnumber')) || (!hasQuestionMarks && !hasAggregateMarks)) {
+      res.status(400).json({ success: false, message: 'Include Submission ID or Roll Number and Written Marks (or each question marks column).' });
+      return;
+    }
+    const headerIndex = new Map(headers.map((header, index) => [header, index]));
+    const submissionIdColumn = headerIndex.get('submissionid');
+    const rollNumberColumn = headerIndex.get('rollnumber');
+    const aggregateMarksColumn = headerIndex.get('writtenmarks') ?? headerIndex.get('writtenscore');
+    const questionColumns = new Map(writtenQuestions.map((question) => [
+      question.questionId,
+      headerIndex.get(normalizeHeader(`Question ${question.questionId} Marks`)),
+    ]));
+
+    const submissions = await QuizSubmission.find({ quizId: quiz._id }).lean();
+    const submissionMap = new Map(submissions.map((submission) => [submission.submissionId, submission]));
+    const rollNumberMap = new Map(submissions.map((submission) => [submission.rollNumber.trim().toLowerCase(), submission]));
+    const csvRows = rows.slice(1);
+    if (csvRows.length !== submissions.length) {
+      res.status(400).json({ success: false, message: 'File must contain exactly one row for every quiz submission.' });
+      return;
+    }
+
+    const grades = new Map<string, Map<string, number>>();
+    for (const [index, row] of csvRows.entries()) {
+      const submissionId = submissionIdColumn !== undefined ? row[submissionIdColumn]?.trim() : '';
+      const rollNumber = rollNumberColumn !== undefined ? row[rollNumberColumn]?.trim().toLowerCase() : '';
+      const submission = (submissionId && submissionMap.get(submissionId))
+        || (rollNumber && rollNumberMap.get(rollNumber));
+      if (!submission || grades.has(submission.submissionId)) {
+        res.status(400).json({ success: false, message: `Invalid or duplicate submission ID on row ${index + 2}.` });
+        return;
+      }
+
+      const questionGrades = new Map<string, number>();
+      for (const question of writtenQuestions) {
+        const column = questionColumns.get(question.questionId);
+        const rawMarks = column === undefined ? '' : row[column]?.trim();
+        const marks = rawMarks === '' ? 0 : Number(rawMarks);
+        if (column !== undefined && (!Number.isFinite(marks) || marks < 0 || marks > question.marks)) {
+          res.status(400).json({
+            success: false,
+            message: `Invalid marks for ${question.questionId} on row ${index + 2}; enter 0 to ${question.marks}.`,
+          });
+          return;
+        }
+        if (column !== undefined) questionGrades.set(question.questionId, marks);
+      }
+      const questionMarksTotal = [...questionGrades.values()].reduce((sum, marks) => sum + marks, 0);
+      const rawAggregate = aggregateMarksColumn === undefined ? '' : row[aggregateMarksColumn]?.trim();
+      if (aggregateMarksColumn !== undefined && (!hasQuestionMarks || (questionMarksTotal === 0 && Number(rawAggregate) > 0))) {
+        const aggregate = Number(rawAggregate);
+        const maximumWrittenMarks = writtenQuestions.reduce((total, question) => total + question.marks, 0);
+        if (!Number.isFinite(aggregate) || aggregate < 0 || aggregate > maximumWrittenMarks) {
+          res.status(400).json({ success: false, message: `Invalid written marks on row ${index + 2}; enter 0 to ${maximumWrittenMarks}.` });
+          return;
+        }
+        let remaining = aggregate;
+        writtenQuestions.forEach((question) => {
+          const assigned = Math.min(remaining, question.marks);
+          questionGrades.set(question.questionId, assigned);
+          remaining -= assigned;
+        });
+      }
+      grades.set(submission.submissionId, questionGrades);
+    }
+    if (grades.size !== submissions.length) {
+      res.status(400).json({ success: false, message: 'File must include every quiz submission.' });
+      return;
+    }
+
+    const operations = submissions.map((submission) => {
+      const questionGrades = grades.get(submission.submissionId)!;
+      let writtenTotal = 0;
+      const answers = submission.answers.map((answer) => {
+        if (answer.questionType === 'Written') {
+          const marksAwarded = questionGrades.get(answer.questionId) ?? 0;
+          writtenTotal += marksAwarded;
+          return { ...answer, marksAwarded };
+        }
+        return answer;
+      });
+      return {
+        updateOne: {
+          filter: { _id: submission._id, quizId: quiz._id },
+          update: { $set: { answers, writtenScore: writtenTotal, totalScore: submission.mcqScore + writtenTotal, isGraded: true } },
+        },
+      };
+    });
+    const result = await QuizSubmission.bulkWrite(operations);
+
+    res.status(200).json({
+      success: true,
+      message: `Grades saved for ${result.matchedCount} of ${submissions.length} submissions.`,
+      updatedCount: result.matchedCount,
+    });
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to upload quiz grades CSV.' });
   }
 };
 
@@ -1000,17 +1411,27 @@ export const gradeQuizSubmission = async (req: AuthRequest, res: Response): Prom
       }
     }
 
-    const gradeMap = new Map(gradedAnswers.map((g: any) => [g.questionId, g]));
+    const writtenQuestions = new Map(quiz.questions
+      .filter((question) => question.questionType === 'Written')
+      .map((question) => [question.questionId, question]));
+    const gradeMap = new Map<string, { marksAwarded: number; teacherFeedback?: string }>();
+    for (const grade of gradedAnswers) {
+      const question = writtenQuestions.get(grade.questionId);
+      const marks = Number(grade.marksAwarded);
+      if (!question || !Number.isFinite(marks) || marks < 0 || marks > question.marks || gradeMap.has(grade.questionId)) {
+        res.status(400).json({ success: false, message: 'Grades must contain valid marks for written questions only.' });
+        return;
+      }
+      gradeMap.set(grade.questionId, { marksAwarded: marks, teacherFeedback: grade.teacherFeedback });
+    }
     let writtenTotal = 0;
 
     submission.answers.forEach((ans) => {
       if (ans.questionType === 'Written') {
         const gradeInfo = gradeMap.get(ans.questionId);
         if (gradeInfo) {
-          ans.marksAwarded = Number(gradeInfo.marksAwarded) || 0;
-          if (gradeInfo.teacherFeedback) {
-            ans.teacherFeedback = String(gradeInfo.teacherFeedback).trim();
-          }
+          ans.marksAwarded = gradeInfo.marksAwarded;
+          ans.teacherFeedback = String(gradeInfo.teacherFeedback || '').trim();
         }
         writtenTotal += ans.marksAwarded || 0;
       }
