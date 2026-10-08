@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../api/axios';
 import { Quiz, QuizSubmission, Subject, Class } from '../types';
 import {
@@ -31,6 +31,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
   const [studentAnswers, setStudentAnswers] = useState<Record<string, { selectedOptionIndex?: number; writtenAnswerText?: string }>>({});
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submissionReceipt, setSubmissionReceipt] = useState<any | null>(null);
+  const interruptionHandledRef = useRef(false);
 
   // Late Request Modal State
   const [lateModalQuiz, setLateModalQuiz] = useState<Quiz | null>(null);
@@ -66,6 +67,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
     try {
       const res = await api.post(`/quizzes/${quiz._id}/start`);
       if (res.data.success) {
+        interruptionHandledRef.current = false;
         setActiveQuiz(res.data.quiz);
         setSubmissionReceipt(res.data.mySubmission || null);
         try {
@@ -82,6 +84,50 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
       await fetchQuizzes();
     }
   };
+
+  useEffect(() => {
+    if (!activeQuiz || submissionReceipt) return;
+
+    const lockInterruptedQuiz = () => {
+      if (interruptionHandledRef.current) return;
+      interruptionHandledRef.current = true;
+      setActiveQuiz(null);
+      setSubmissionReceipt(null);
+
+      void (async () => {
+        try {
+          const res = await api.post(`/quizzes/${activeQuiz._id}/interrupt`);
+          if (!res.data.success || !res.data.locked) {
+            throw new Error('The quiz interruption could not be confirmed.');
+          }
+          setFeedback({
+            success: false,
+            message: 'Quiz blocked because you minimized it or switched apps. Request an unblock from your CR or teacher.',
+          });
+        } catch (error: any) {
+          setFeedback({
+            success: false,
+            message: error.response?.data?.message || error.message || 'Failed to block the interrupted quiz.',
+          });
+        } finally {
+          await fetchQuizzes();
+        }
+      })();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') lockInterruptedQuiz();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', lockInterruptedQuiz);
+    if (document.visibilityState === 'hidden') lockInterruptedQuiz();
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', lockInterruptedQuiz);
+    };
+  }, [activeQuiz?._id, submissionReceipt]);
 
   const leaveQuiz = async () => {
     if (!submissionReceipt && !window.confirm('Exit this quiz? Your answers are saved and you can resume later.')) return;

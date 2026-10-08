@@ -57,7 +57,7 @@ export const Navbar: React.FC = () => {
                   }}
                   className="px-2.5 sm:px-3.5 py-1.5 text-xs font-medium bg-blue-600/20 hover:bg-blue-600/30 text-blue-200 rounded-lg border border-blue-500/30"
                 >
-                  Student Portal
+                  Portal
                 </button>
               )}
               {isStaff ? (
