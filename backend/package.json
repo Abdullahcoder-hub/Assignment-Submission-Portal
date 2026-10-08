@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/src/server.js",
+    "start": "node dist/scripts/seedAdmin.js && node dist/src/server.js",
     "secure:uploads": "tsx scripts/secureUploads.ts",
     "seed:admin": "tsx scripts/seedAdmin.ts",
     "typecheck": "tsc --noEmit",
