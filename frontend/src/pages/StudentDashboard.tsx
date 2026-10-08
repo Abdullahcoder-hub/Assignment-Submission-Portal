@@ -963,8 +963,9 @@ export const StudentDashboard: React.FC = () => {
                   href="/admin/dashboard"
                   onClick={async (event) => {
                     event.preventDefault();
-                    if (await switchToStaffPortal()) navigate('/admin/dashboard');
-                    else setErrorMsg('Please sign in again to open the staff portal.');
+                    const result = await switchToStaffPortal();
+                    if (result.success) navigate('/admin/dashboard');
+                    else setErrorMsg(result.message || 'Could not open the staff portal.');
                   }}
                   className="px-2.5 py-0.5 bg-purple-500/30 text-purple-200 border border-purple-400/40 text-xs font-bold rounded-full shrink-0 hover:bg-purple-500/50 transition flex items-center gap-1"
                 >
@@ -2199,8 +2200,9 @@ export const StudentDashboard: React.FC = () => {
                           href="/admin/dashboard"
                           onClick={async (event) => {
                             event.preventDefault();
-                            if (await switchToStaffPortal()) navigate('/admin/dashboard');
-                            else setErrorMsg('Please sign in again to open the staff portal.');
+                            const result = await switchToStaffPortal();
+                            if (result.success) navigate('/admin/dashboard');
+                            else setErrorMsg(result.message || 'Could not open the staff portal.');
                           }}
                           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shrink-0 shadow"
                         >

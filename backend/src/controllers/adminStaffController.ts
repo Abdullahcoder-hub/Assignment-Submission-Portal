@@ -183,6 +183,8 @@ export const deleteStaffMember = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
+    // A CR/Assistant staff account is separate from its linked Student record.
+    // Remove only staff access; the student's account and academic data must remain.
     await Promise.all([
       TeacherAssignment.deleteMany({ teacherId: id }),
       Class.updateMany({ crId: id }, { $unset: { crId: 1 } }),
@@ -190,9 +192,12 @@ export const deleteStaffMember = async (req: AuthRequest, res: Response): Promis
       Admin.findByIdAndDelete(id),
     ]);
 
+    const studentAccountRetained = ['CR', 'CR_ASSISTANT'].includes(staff.role);
     res.status(200).json({
       success: true,
-      message: `Staff account "${staff.name}" (${staff.role}) deleted successfully.`,
+      message: studentAccountRetained
+        ? `CR access for "${staff.name}" was removed. Their student account and academic data were retained.`
+        : `Staff account "${staff.name}" (${staff.role}) deleted successfully.`,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to delete staff account.' });

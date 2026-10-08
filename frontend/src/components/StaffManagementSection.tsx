@@ -90,7 +90,11 @@ export const StaffManagementSection: React.FC = () => {
   };
 
   const handleDeleteStaff = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete the staff account for "${name}"?`)) return;
+    const selectedStaff = staff.find((account) => account.id === id);
+    const confirmation = selectedStaff && ['CR', 'CR_ASSISTANT'].includes(selectedStaff.role)
+      ? `Remove CR staff access for "${name}"? Their student account and academic data will be kept.`
+      : `Are you sure you want to delete the staff account for "${name}"?`;
+    if (!window.confirm(confirmation)) return;
     try {
       const res = await api.delete(`/admin/staff/${id}`);
       if (res.data.success) {

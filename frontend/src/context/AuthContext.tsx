@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
 import api from '../api/axios';
 import { AdminUser, StudentUser, UserRole } from '../types';
 
@@ -18,7 +19,7 @@ interface AuthContextType {
   }>;
   logout: () => void;
   replaceToken: (token: string) => void;
-  switchToStaffPortal: () => Promise<boolean>;
+  switchToStaffPortal: () => Promise<{ success: boolean; message?: string }>;
   switchToStudentPortal: () => boolean;
   refreshStudentProfile: () => Promise<void>;
 }
@@ -225,10 +226,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(updatedToken);
   };
 
-  const switchToStaffPortal = async (): Promise<boolean> => {
+  const switchToStaffPortal = async (): Promise<{ success: boolean; message?: string }> => {
     const currentStudentToken = localStorage.getItem('portalToken');
     const currentStudentUser = localStorage.getItem('portalUser');
-    if (!currentStudentToken || !currentStudentUser) return false;
+    if (!currentStudentToken || !currentStudentUser) {
+      return { success: false, message: 'Student session is missing. Please sign in again.' };
+    }
     try {
       const sessionResponse = await api.post('/auth/student/staff-session');
       const staffToken = sessionResponse.data.token as string;
@@ -245,14 +248,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(staffToken);
       setRole(adminData.role);
       setUser(adminData);
-      return true;
+      return { success: true };
     } catch (error) {
       localStorage.setItem('portalToken', currentStudentToken);
       localStorage.setItem('userRole', 'STUDENT');
       localStorage.setItem('portalUser', currentStudentUser);
       localStorage.removeItem('studentPortalToken');
       localStorage.removeItem('studentPortalUser');
-      return false;
+      const message = axios.isAxiosError<{ message?: string }>(error)
+        ? error.response?.data?.message
+        : undefined;
+      return { success: false, message: message || 'Could not connect to the staff portal. Please try again.' };
     }
   };
 
