@@ -10,6 +10,7 @@ import {
   getStudentProfile,
   changePassword,
   checkRollNumberAvailability,
+  createStudentStaffSession,
 } from '../controllers/studentAuthController.js';
 import { authenticateStudent } from '../middleware/auth.js';
 
@@ -26,5 +27,6 @@ router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.get('/me', authenticateStudent, getStudentProfile);
 router.post('/change-password', authenticateStudent, changePassword);
+router.post('/staff-session', authenticateStudent, createStudentStaffSession);
 
 export default router;

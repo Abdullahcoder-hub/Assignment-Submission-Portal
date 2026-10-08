@@ -226,12 +226,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchToStaffPortal = async (): Promise<boolean> => {
-    const staffToken = localStorage.getItem('staffPortalToken');
-    if (!staffToken) return false;
-    localStorage.setItem('studentPortalToken', localStorage.getItem('portalToken') || '');
-    localStorage.setItem('studentPortalUser', localStorage.getItem('portalUser') || '');
-    localStorage.setItem('portalToken', staffToken);
+    const currentStudentToken = localStorage.getItem('portalToken');
+    const currentStudentUser = localStorage.getItem('portalUser');
+    if (!currentStudentToken || !currentStudentUser) return false;
     try {
+      const sessionResponse = await api.post('/auth/student/staff-session');
+      const staffToken = sessionResponse.data.token as string;
+      if (!staffToken) throw new Error('CR session token was not returned.');
+      localStorage.setItem('studentPortalToken', currentStudentToken);
+      localStorage.setItem('studentPortalUser', currentStudentUser);
+      localStorage.setItem('staffPortalToken', staffToken);
+      localStorage.setItem('portalToken', staffToken);
       const res = await api.get('/auth/me');
       if (!res.data.success) throw new Error('Unable to verify staff account.');
       const adminData = res.data.admin as AdminUser;
@@ -242,8 +247,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(adminData);
       return true;
     } catch (error) {
-      const studentToken = localStorage.getItem('studentPortalToken');
-      if (studentToken) localStorage.setItem('portalToken', studentToken);
+      localStorage.setItem('portalToken', currentStudentToken);
+      localStorage.setItem('userRole', 'STUDENT');
+      localStorage.setItem('portalUser', currentStudentUser);
+      localStorage.removeItem('studentPortalToken');
+      localStorage.removeItem('studentPortalUser');
       return false;
     }
   };

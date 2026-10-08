@@ -298,6 +298,36 @@ export const loginStudent = async (req: Request, res: Response): Promise<void> =
   }
 };
 
+export const createStudentStaffSession = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.student) {
+      res.status(401).json({ success: false, message: 'Student authentication required.' });
+      return;
+    }
+    const staffRecord = await Admin.findOne({
+      email: req.student.email,
+      role: { $in: ['CR', 'CR_ASSISTANT'] },
+      isActive: true,
+      isEmailVerified: true,
+      approvalStatus: 'Approved',
+    }).lean();
+    if (!staffRecord) {
+      res.status(403).json({ success: false, message: 'No approved CR account is linked to this student.' });
+      return;
+    }
+    const staffToken = jwt.sign({
+      id: staffRecord._id,
+      email: staffRecord.email,
+      role: staffRecord.role,
+      assignedClassId: staffRecord.assignedClassId?.toString(),
+      tokenVersion: staffRecord.tokenVersion ?? 0,
+    }, getJwtSecret(), { expiresIn: '7d' });
+    res.status(200).json({ success: true, token: staffToken });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to open the linked CR account.' });
+  }
+};
+
 /**
  * 4. GOOGLE OAUTH LOGIN / REGISTER
  */
