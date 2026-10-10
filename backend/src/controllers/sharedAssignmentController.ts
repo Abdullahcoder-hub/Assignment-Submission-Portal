@@ -13,7 +13,7 @@ import Student from '../models/Student.js';
 import cloudinary, { sanitizePathSegment } from '../config/cloudinary.js';
 import { sendSharedAssignmentToTeacherEmail } from '../config/brevo.js';
 import { sanitizeCsvField } from '../utils/fileValidation.js';
-import { mergePDFs, getGroupSequence } from '../utils/pdfMerge.js';
+import { convertFileToPdf, mergePDFs, getGroupSequence, OfficeConversionError } from '../utils/pdfMerge.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { logError } from '../utils/logger.js';
 
@@ -224,7 +224,7 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
     const assignment = shared.assignmentId as any;
     const subject = shared.subjectId as any;
 
-    const submissions = await Submission.find({ assignmentId: assignment._id });
+    const submissions = await Submission.find({ assignmentId: assignment._id }).sort({ submittedAt: 1, _id: 1 });
     if (!submissions || submissions.length === 0) {
       res.status(400).json({ success: false, message: 'No student submissions found for this assignment.' });
       return;
@@ -246,11 +246,28 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
 
       for (const [groupId, groupSubmissions] of groupMap) {
         const pdfsToMerge: Array<{ buffer: Buffer; sequenceNumber: number; studentName: string; rollNumber: string }> = [];
+        const filesToKeepSeparate: Array<{ buffer: Buffer; name: string }> = [];
         for (const sub of groupSubmissions) {
           if (!sub.cloudinarySecureUrl && !sub.cloudinaryPublicId) continue;
           try {
-            const fileBuffer = await fetchFileBuffer([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)]);
-            const sequenceNumber = sub.sequenceNumber || groupSubmissions.indexOf(sub) + 1;
+            const originalBuffer = await fetchFileBuffer([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)]);
+            const originalFileName = sub.originalFileName || sub.cloudinaryFormat || 'submission';
+            const extension = path.extname(originalFileName).toLowerCase();
+            const archiveName = `${subjectCode}_${cleanAssignmentTitle}/${sanitizePathSegment(sub.rollNumber)}-${sanitizePathSegment(sub.studentName)}${extension || '.bin'}`;
+
+            if (['.zip', '.ppt', '.pptx', '.xls', '.xlsx', '.xlsm', '.xlsb', '.ods', '.csv'].includes(extension)) {
+              filesToKeepSeparate.push({ buffer: originalBuffer, name: archiveName });
+              continue;
+            }
+
+            let fileBuffer: Buffer;
+            if (extension === '.pdf') {
+              fileBuffer = originalBuffer;
+            } else {
+              fileBuffer = await convertFileToPdf(originalBuffer, originalFileName);
+            }
+
+            const sequenceNumber = sub.sequenceNumber ?? groupSubmissions.indexOf(sub) + 1;
             pdfsToMerge.push({
               buffer: fileBuffer,
               sequenceNumber,
@@ -258,29 +275,19 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
               rollNumber: sub.rollNumber,
             });
           } catch (err) {
-            logError('[ZIP Group Fetch Error]', err);
+            logError('[ZIP Group Error] Failed to prepare a submission for the group PDF.', err);
+            throw err;
           }
         }
+        filesToArchive.push(...filesToKeepSeparate);
 
         let finalBuffer: Buffer;
         let fileName: string;
 
         if (pdfsToMerge.length > 1) {
-          try {
-            finalBuffer = await mergePDFs(pdfsToMerge);
-            const groupNumber = groupId === 'individual' ? 'Individual' : getGroupSequence(groupSubmissions[0]?.groupName || '');
-            fileName = `Group ${groupNumber}.pdf`;
-          } catch (mergeErr) {
-            logError('[ZIP Group Merge Error]', mergeErr);
-            for (const pdf of pdfsToMerge) {
-              const ext = path.extname(pdf.studentName) || '.pdf';
-              filesToArchive.push({
-                buffer: pdf.buffer,
-                name: `${subjectCode}_${cleanAssignmentTitle}/${pdf.rollNumber}-${pdf.studentName}${ext}`,
-              });
-            }
-            continue;
-          }
+          finalBuffer = await mergePDFs(pdfsToMerge);
+          const groupNumber = groupId === 'individual' ? 'Individual' : getGroupSequence(groupSubmissions[0]?.groupName || '');
+          fileName = `Group ${groupNumber}.pdf`;
         } else if (pdfsToMerge.length === 1) {
           finalBuffer = pdfsToMerge[0].buffer;
           const groupNumber = groupId === 'individual' ? 'Individual' : getGroupSequence(groupSubmissions[0]?.groupName || '');
@@ -342,6 +349,10 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
   } catch (error) {
     logError('[Teacher Download ZIP Error]', error);
     if (!res.headersSent) {
+      if (error instanceof OfficeConversionError) {
+        res.status(503).json({ success: false, message: error.message });
+        return;
+      }
       res.status(500).json({ success: false, message: 'Failed to generate submissions ZIP package.' });
     }
   }

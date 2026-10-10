@@ -88,6 +88,18 @@ Before releasing authenticated Cloudinary delivery, run `npm run secure:uploads`
 
 For deployment, set `FRONTEND_URL` in the backend hosting environment to the deployed frontend URL (for example, `https://your-frontend.vercel.app`). This URL is used in email verification and password reset links.
 
+### DOC/DOCX conversion and deployment
+
+Group-submission ZIP downloads convert DOC/DOCX and supported image files to PDF, then merge them in each student's selected sequence. ZIP, PPT/PPTX, Excel, and CSV files remain original files. LibreOffice is installed in the backend Docker image. If conversion or PDF merging fails, the ZIP request returns an error rather than silently placing a mergeable file beside the group PDF. LibreOffice supports rich Word layouts, but exact pagination can differ from Microsoft Word when fonts or rendering behavior differ.
+
+The GitHub Actions workflow builds the backend, frontend, and Docker image on every pull request and `main` push. Render is configured to deploy only after CI checks pass.
+
+**One-time Render setup:** the existing `assignment-submission-api` service must use the Docker runtime. If it is managed by the Render Blueprint, sync this file after confirming its diff updates the existing service (not a duplicate). Otherwise, in the existing service's **Settings → Build → Source**, change Runtime to **Docker**, keep the same repository, `main` branch, and `backend` root directory, set Dockerfile path to `Dockerfile`, and set Auto-Deploy to **After CI Checks Pass**. Keep the existing service and its environment variables; do not create a second service or change the public URL. The `render.yaml` records the Docker and CI-gated auto-deploy configuration for future Blueprint syncs.
+
+After this one-time setup, pushing to `main` runs CI, then Render deploys the Docker image and Vercel builds the frontend (assuming both existing services have Git auto-deploy enabled on `main`). Before switching Render runtime, confirm required production environment variables are present in the existing service. Render keeps the same service URL and environment values when its runtime is changed.
+
+For local DOC/DOCX conversion, stop the native backend (`npm run dev`) and run `docker compose up --build` from `backend/`. The backend `.env` must exist; if MongoDB is installed on the host rather than using Atlas, set its URI host to `host.docker.internal` while running in Docker.
+
 Run the backend development server:
 
 ```bash

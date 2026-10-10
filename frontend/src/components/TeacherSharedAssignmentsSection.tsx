@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api/axios';
+import api, { getDownloadErrorMessage } from '../api/axios';
 import { SharedAssignment } from '../types';
 import {
   Archive,
@@ -66,8 +66,8 @@ export const TeacherSharedAssignmentsSection: React.FC = () => {
       link.remove();
       window.URL.revokeObjectURL(url);
       fetchSharedAssignments(true);
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to download ZIP file.');
+    } catch (err: unknown) {
+      alert(await getDownloadErrorMessage(err, 'Failed to download ZIP file.'));
     } finally {
       setDownloadingZipId(null);
     }

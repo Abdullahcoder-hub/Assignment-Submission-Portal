@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install and build backend
+        working-directory: backend
+        run: npm ci && npm run build
+
+      - name: Install and build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Build production Docker image
+        run: docker build -t assignment-submission-api ./backend

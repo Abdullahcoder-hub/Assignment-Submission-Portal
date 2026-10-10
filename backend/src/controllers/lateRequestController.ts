@@ -649,13 +649,9 @@ export const completeLateRequestDecisionByEmail = async (req: Request, res: Resp
       return;
     }
 
-    const lateReq = await LateRequest.findOneAndUpdate(
-      { _id: id, status: 'Pending' },
-      { $set: { status: decision, decidedAt: new Date() } },
-      { new: true },
-    );
+    const lateReq = await applyDecision(id, decision as 'Approved' | 'Rejected');
     if (!lateReq) {
-      res.status(409).send('This late request has already been decided or no longer exists.');
+      res.status(409).send('This request has already been decided or no longer exists.');
       return;
     }
     if (lateReq.requestType === 'Quiz' && lateReq.quizId && decision === 'Approved') {
@@ -668,7 +664,8 @@ export const completeLateRequestDecisionByEmail = async (req: Request, res: Resp
     const requestLabel = lateReq.requestType === 'Quiz' ? 'Quiz access / unblock request' : 'Late submission request';
     res.setHeader('Cache-Control', 'no-store');
     res.type('html').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Request ${decision.toLowerCase()}</title><style>body{font:16px Arial,sans-serif;background:#f1f5f9;color:#0f172a;margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:white;border:1px solid #e2e8f0;border-radius:16px;padding:28px;box-shadow:0 12px 36px #0f172a18}.status{color:${decision === 'Approved' ? '#15803d' : '#b91c1c'};font-weight:700}</style></head><body><main><h1>${escapeHtml(requestLabel)} ${decision.toLowerCase()}</h1><p class="status">The request was ${decision.toLowerCase()} successfully.</p><p>The student has been notified by email. You may close this page.</p></main></body></html>`);
-  } catch {
-    res.status(400).send('This late request link is invalid or expired.');
+  } catch (error) {
+    logError('[Email Late Request Decision Error]', error);
+    res.status(500).send('The request decision could not be completed. Please try again or decide it from the portal.');
   }
 };

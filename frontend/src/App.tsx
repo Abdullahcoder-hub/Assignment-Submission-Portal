@@ -14,6 +14,7 @@ import { ResetPassword } from './pages/ResetPassword';
 import { AdminLogin } from './pages/AdminLogin';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { StaffRegister } from './pages/StaffRegister';
+import { SubmissionPreview } from './pages/SubmissionPreview';
 
 const HomeRedirect: React.FC = () => {
   const { isAuthenticated, role, isLoading } = useAuth();
@@ -42,6 +43,7 @@ export const App: React.FC = () => {
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/submission-preview/:id" element={<SubmissionPreview />} />
 
               {/* Student Protected Dashboard */}
               <Route element={<ProtectedRoute requiredRole="STUDENT" />}>

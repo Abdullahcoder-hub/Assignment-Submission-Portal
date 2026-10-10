@@ -25,22 +25,32 @@ api.interceptors.request.use(
 
 export default api;
 
+export const getDownloadErrorMessage = async (error: unknown, fallback: string): Promise<string> => {
+  if (!axios.isAxiosError(error)) return fallback;
+
+  const data = error.response?.data;
+  if (data instanceof Blob) {
+    try {
+      const parsed: unknown = JSON.parse(await data.text());
+      if (typeof parsed === 'object' && parsed !== null && 'message' in parsed && typeof parsed.message === 'string') {
+        return parsed.message;
+      }
+    } catch {
+      return fallback;
+    }
+  }
+
+  if (typeof data === 'object' && data !== null && 'message' in data && typeof data.message === 'string') {
+    return data.message;
+  }
+  return fallback;
+};
+
 export const openSubmissionFile = async (submissionId: string): Promise<void> => {
   const fileWindow = window.open('about:blank', '_blank');
   if (!fileWindow) {
     throw new Error('Please allow pop-ups to open submission files.');
   }
   fileWindow.opener = null;
-
-  try {
-    const response = await api.get(`/submissions/${encodeURIComponent(submissionId)}/view`, {
-      responseType: 'blob',
-    });
-    const fileUrl = URL.createObjectURL(response.data);
-    fileWindow.location.replace(fileUrl);
-    window.setTimeout(() => URL.revokeObjectURL(fileUrl), 60_000);
-  } catch (error) {
-    fileWindow.close();
-    throw error;
-  }
+  fileWindow.location.replace(`/submission-preview/${encodeURIComponent(submissionId)}`);
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api/axios';
+import api, { getDownloadErrorMessage } from '../api/axios';
 import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest, RegisteredStudent, Class } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { ClassManagementSection } from '../components/ClassManagementSection';
@@ -814,8 +814,8 @@ export const AdminDashboard: React.FC = () => {
       link.click();
       link.remove();
       setTimeout(() => window.URL.revokeObjectURL(url), 100);
-    } catch (err: any) {
-      showToast('error', 'Failed to download ZIP file.');
+    } catch (err: unknown) {
+      showToast('error', await getDownloadErrorMessage(err, 'Failed to download ZIP file.'));
     }
   };
 
