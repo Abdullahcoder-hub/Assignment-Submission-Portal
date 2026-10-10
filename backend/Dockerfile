@@ -12,7 +12,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libreoffice-writer \
     fonts-crosextra-caladea \
     fonts-crosextra-carlito \
@@ -22,8 +22,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev \
-  && npm cache clean --force
+RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 
 USER node

@@ -32,7 +32,7 @@ A modern, full-stack web application designed for universities and schools to st
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18+)
+- [Node.js](https://nodejs.org/) (v22.13+)
 - [MongoDB](https://www.mongodb.com/) (Local instance or MongoDB Atlas cluster)
 
 ---
@@ -90,7 +90,7 @@ For deployment, set `FRONTEND_URL` in the backend hosting environment to the dep
 
 ### DOC/DOCX conversion and deployment
 
-Group-submission ZIP downloads convert DOC/DOCX and supported image files to PDF, then merge them in each student's selected sequence. ZIP, PPT/PPTX, Excel, and CSV files remain original files. LibreOffice is installed in the backend Docker image. If conversion or PDF merging fails, the ZIP request returns an error rather than silently placing a mergeable file beside the group PDF. LibreOffice supports rich Word layouts, but exact pagination can differ from Microsoft Word when fonts or rendering behavior differ.
+Group-submission ZIP downloads convert DOC/DOCX and supported image files to PDF, then merge them in each student's selected sequence. Before merging, text-based submissions are checked for the student's current account name and roll number. If one detail is missing, it is added beside the existing one on the first page in a matching font style; if both are missing (including scanned/image-only PDFs), an identity page with both details is added at the start of that student's section. ZIP, PPT/PPTX, Excel, and CSV files remain original files. LibreOffice is installed in the backend Docker image. If conversion or PDF merging fails, the ZIP request returns an error rather than silently placing a mergeable file beside the group PDF. LibreOffice supports rich Word layouts, but exact pagination can differ from Microsoft Word when fonts or rendering behavior differ.
 
 The GitHub Actions workflow builds the backend, frontend, and Docker image on every pull request and `main` push. Render is configured to deploy only after CI checks pass.
 

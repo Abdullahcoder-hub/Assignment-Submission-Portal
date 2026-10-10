@@ -14,6 +14,7 @@ import cloudinary, { sanitizePathSegment } from '../config/cloudinary.js';
 import { sendSharedAssignmentToTeacherEmail } from '../config/brevo.js';
 import { sanitizeCsvField } from '../utils/fileValidation.js';
 import { convertFileToPdf, mergePDFs, getGroupSequence, OfficeConversionError } from '../utils/pdfMerge.js';
+import { addMissingStudentIdentity } from '../utils/submissionPdfIdentity.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { logError } from '../utils/logger.js';
 
@@ -233,6 +234,17 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
     const subjectCode = subject?.code || 'SUB';
     const cleanAssignmentTitle = sanitizePathSegment(assignment.title);
     const isGroupAssignment = assignment.submissionType === 'Group';
+    const accountIdentityById = new Map<string, { studentName: string; rollNumber: string }>();
+    if (isGroupAssignment) {
+      const studentIds = [...new Set(submissions.map((submission) => submission.studentId.toString()))];
+      const studentAccounts = await Student.find({ _id: { $in: studentIds } }).select('name rollNumber').lean();
+      studentAccounts.forEach((student) => {
+        accountIdentityById.set(student._id.toString(), {
+          studentName: student.name,
+          rollNumber: student.rollNumber,
+        });
+      });
+    }
 
     const filesToArchive: Array<{ buffer: Buffer; name: string }> = [];
 
@@ -249,11 +261,15 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
         const filesToKeepSeparate: Array<{ buffer: Buffer; name: string }> = [];
         for (const sub of groupSubmissions) {
           if (!sub.cloudinarySecureUrl && !sub.cloudinaryPublicId) continue;
+          const identity = accountIdentityById.get(sub.studentId.toString()) ?? {
+            studentName: sub.studentName,
+            rollNumber: sub.rollNumber,
+          };
           try {
             const originalBuffer = await fetchFileBuffer([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)]);
             const originalFileName = sub.originalFileName || sub.cloudinaryFormat || 'submission';
             const extension = path.extname(originalFileName).toLowerCase();
-            const archiveName = `${subjectCode}_${cleanAssignmentTitle}/${sanitizePathSegment(sub.rollNumber)}-${sanitizePathSegment(sub.studentName)}${extension || '.bin'}`;
+            const archiveName = `${subjectCode}_${cleanAssignmentTitle}/${sanitizePathSegment(identity.rollNumber)}-${sanitizePathSegment(identity.studentName)}${extension || '.bin'}`;
 
             if (['.zip', '.ppt', '.pptx', '.xls', '.xlsx', '.xlsm', '.xlsb', '.ods', '.csv'].includes(extension)) {
               filesToKeepSeparate.push({ buffer: originalBuffer, name: archiveName });
@@ -266,13 +282,14 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
             } else {
               fileBuffer = await convertFileToPdf(originalBuffer, originalFileName);
             }
+            fileBuffer = await addMissingStudentIdentity(fileBuffer, identity.studentName, identity.rollNumber);
 
             const sequenceNumber = sub.sequenceNumber ?? groupSubmissions.indexOf(sub) + 1;
             pdfsToMerge.push({
               buffer: fileBuffer,
               sequenceNumber,
-              studentName: sub.studentName,
-              rollNumber: sub.rollNumber,
+              studentName: identity.studentName,
+              rollNumber: identity.rollNumber,
             });
           } catch (err) {
             logError('[ZIP Group Error] Failed to prepare a submission for the group PDF.', err);

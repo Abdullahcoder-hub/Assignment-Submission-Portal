@@ -27,6 +27,10 @@ jobs:
         working-directory: backend
         run: npm ci && npm run build
 
+      - name: Test merged PDF identity pages
+        working-directory: backend
+        run: npm run test:pdf-identity
+
       - name: Install and build frontend
         working-directory: frontend
         run: npm ci && npm run build

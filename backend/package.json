@@ -10,7 +10,8 @@
     "secure:uploads": "tsx scripts/secureUploads.ts",
     "seed:admin": "tsx scripts/seedAdmin.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:pdf-identity": "tsx --test tests/submissionPdfIdentity.test.ts"
   },
   "dependencies": {
     "archiver": "^7.0.1",
@@ -29,8 +30,9 @@
     "jsonwebtoken": "^9.0.3",
     "moment-timezone": "^0.5.48",
     "mongoose": "^8.24.4",
-    "multer": "^1.4.5-lts.1",
-    "pdf-lib": "^1.17.1"
+    "multer": "^2.4.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.4.299"
   },
   "devDependencies": {
     "@types/archiver": "^6.0.4",
@@ -39,9 +41,17 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/multer": "^1.4.13",
+    "@types/multer": "^2.3.0",
     "@types/node": "^22.20.2",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }
