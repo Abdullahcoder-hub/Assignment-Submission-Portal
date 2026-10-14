@@ -258,6 +258,8 @@ export interface DashboardStats {
 }
 
 export interface SubmissionReceipt {
+  id?: string;
+  _id?: string;
   submissionId: string;
   studentName: string;
   rollNumber: string;

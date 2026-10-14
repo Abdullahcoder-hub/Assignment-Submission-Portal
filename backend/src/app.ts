@@ -44,44 +44,70 @@ app.use(
 );
 
 // CORS Configuration
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
-  .split(',')
+const rawAllowed = [
+  process.env.FRONTEND_URL,
+  process.env.BACKEND_URL,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3000',
+  'http://localhost:4173',
+];
+
+const allowedOrigins = rawAllowed
+  .filter(Boolean)
+  .flatMap((u) => u!.split(','))
   .map((url) => url.trim().replace(/\/$/, ''))
   .filter(Boolean);
 
 // Always allow common local dev origins in development
 const devOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000', 'http://localhost:4173'];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, server-to-server)
-      if (!origin) {
-        return callback(null, true);
-      }
+const corsMiddleware = cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, email client links, server-to-server)
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      const isDev = process.env.NODE_ENV !== 'production';
-      if (isDev && devOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (isDev && devOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-      if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-        return callback(null, true);
-      }
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
 
-      // If in dev and origin is localhost on another port, permit
-      if (isDev && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) {
-        return callback(null, true);
-      }
+    // Allow onrender.com origins (both frontend and backend domains)
+    if (/^https:\/\/[a-z0-9-]+\.onrender\.com$/i.test(origin)) {
+      return callback(null, true);
+    }
 
-      return callback(new Error(`CORS policy: Origin ${origin} is not authorized.`));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['X-File-Name'],
-  })
-);
+    // Allow vercel.app origins
+    if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) {
+      return callback(null, true);
+    }
+
+    // If in dev and origin is localhost on another port, permit
+    if (isDev && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS policy: Origin ${origin} is not authorized.`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['X-File-Name'],
+});
+
+// Bypass CORS for email decision endpoints (direct browser/email client GET & POST)
+app.use((req, res, next) => {
+  if (req.path.includes('/email-decision')) {
+    return next();
+  }
+  corsMiddleware(req, res, next);
+});
 
 // Rate Limiting: Authentication Endpoints (Brute-force / Credential Stuffing Protection)
 const authLimiter = rateLimit({

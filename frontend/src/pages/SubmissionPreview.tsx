@@ -14,6 +14,11 @@ const getExtension = (fileName: string): string => {
   return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : '';
 };
 
+const hasPdfSignature = (data: ArrayBuffer): boolean => {
+  const header = new TextDecoder().decode(data.slice(0, 1024));
+  return header.includes('%PDF-');
+};
+
 const readPptxSlides = async (data: ArrayBuffer): Promise<string[][]> => {
   const zip = await JSZip.loadAsync(data);
   const presentationFile = zip.file('ppt/presentation.xml');
@@ -90,7 +95,9 @@ export const SubmissionPreview: React.FC = () => {
 
   const extension = getExtension(fileName);
   const imageExtensions = useMemo(() => new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']), []);
-  const isPdf = extension === '.pdf' || contentType === 'application/pdf';
+  const isPdf = extension === '.pdf'
+    || contentType === 'application/pdf'
+    || (fileData !== null && hasPdfSignature(fileData));
   const isImage = imageExtensions.has(extension) || contentType.startsWith('image/');
 
   useEffect(() => {
@@ -104,7 +111,8 @@ export const SubmissionPreview: React.FC = () => {
 
         const encodedFileName = response.headers['x-file-name'];
         const responseType = String(response.headers['content-type'] || '').split(';')[0].toLowerCase();
-        setFileName(encodedFileName ? decodeURIComponent(encodedFileName) : `submission${responseType === 'application/pdf' ? '.pdf' : ''}`);
+        const isPdfFile = responseType === 'application/pdf' || hasPdfSignature(response.data);
+        setFileName(encodedFileName ? decodeURIComponent(encodedFileName) : `submission${isPdfFile ? '.pdf' : ''}`);
         setContentType(responseType);
         setFileData(response.data);
       } catch (loadError: unknown) {
@@ -132,7 +140,7 @@ export const SubmissionPreview: React.FC = () => {
   useEffect(() => {
     if (!fileData || (!isPdf && !isImage)) return;
     const url = URL.createObjectURL(new Blob([fileData], {
-      type: contentType || (isPdf ? 'application/pdf' : 'application/octet-stream'),
+      type: isPdf ? 'application/pdf' : contentType || 'application/octet-stream',
     }));
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);

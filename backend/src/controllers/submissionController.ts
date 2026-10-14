@@ -304,6 +304,7 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
         : 'Assignment submitted successfully. However, the confirmation email could not be sent.',
       emailSent,
       submission: {
+        id: newSubmission._id,
         submissionId: newSubmission.submissionId,
         studentName: newSubmission.studentName,
         rollNumber: newSubmission.rollNumber,

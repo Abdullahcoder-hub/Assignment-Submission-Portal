@@ -1053,10 +1053,10 @@ export const StudentDashboard: React.FC = () => {
                 <span className="text-slate-500 font-medium">Uploaded File</span>
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-blue-600 truncate max-w-[160px] sm:max-w-[220px]">{receipt.originalFileName}</span>
-                  {receipt.cloudinarySecureUrl && (
+                  {(receipt.cloudinarySecureUrl || receipt.id || receipt._id || receipt.submissionId) && (
                     <button
                       type="button"
-                      onClick={() => void openSubmissionFile((receipt as any).id || (receipt as any)._id || receipt.submissionId).catch(() => window.alert('Unable to open this submission file.'))}
+                      onClick={() => void openSubmissionFile(receipt.id || receipt._id || receipt.submissionId).catch((err: any) => alert(err?.message || 'Unable to open this submission file.'))}
                       className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition flex items-center gap-1 shrink-0"
                       title="View submitted file in new tab"
                     >

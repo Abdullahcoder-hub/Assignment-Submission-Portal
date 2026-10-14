@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api, { getDownloadErrorMessage } from '../api/axios';
+import api, { getDownloadErrorMessage, openSubmissionFile } from '../api/axios';
 import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest, RegisteredStudent, Class } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { ClassManagementSection } from '../components/ClassManagementSection';
