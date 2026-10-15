@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { PasswordInput } from './PasswordInput';
+import { PasswordRequirements } from './PasswordRequirements';
 
 export const StaffPasswordSettings: React.FC = () => {
   const { replaceToken } = useAuth();
@@ -50,6 +51,7 @@ export const StaffPasswordSettings: React.FC = () => {
         <label className="block text-sm font-medium text-slate-700">
           New password
           <PasswordInput required autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
+          <PasswordRequirements password={newPassword} />
         </label>
         <label className="block text-sm font-medium text-slate-700">
           Confirm new password

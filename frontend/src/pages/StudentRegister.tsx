@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { User, Lock, Mail, KeyRound, Loader2, AlertCircle, CheckCircle2, Shield, Eye, EyeOff, Send } from 'lucide-react';
 import api from '../api/axios';
+import { PasswordRequirements } from '../components/PasswordRequirements';
+import { getPasswordRequirementStatus } from '../utils/passwordRequirements';
 
 export const StudentRegister: React.FC = () => {
   const { studentRegister, googleLoginStudent } = useAuth();
@@ -83,12 +85,7 @@ export const StudentRegister: React.FC = () => {
     }
   };
 
-  // Password rules checks
-  const hasLength = password.length >= 8;
-  const hasUpper = /[A-Z]/.test(password);
-  const hasLower = /[a-z]/.test(password);
-  const hasNum = /[0-9]/.test(password);
-  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+  const passwordRequirements = getPasswordRequirementStatus(password);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +110,7 @@ export const StudentRegister: React.FC = () => {
       return;
     }
 
-    if (!hasLength || !hasUpper || !hasLower || !hasNum || !hasSpecial) {
+    if (!passwordRequirements.every((requirement) => requirement.isMet)) {
       setErrorMsg('Password does not meet all security requirements.');
       return;
     }
@@ -375,27 +372,7 @@ export const StudentRegister: React.FC = () => {
               </div>
             </div>
 
-            {/* Password Requirements Checklist */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1 text-slate-600">
-              <p className="font-bold text-slate-700">Password Security Requirements:</p>
-              <div className="grid grid-cols-2 gap-1 font-medium">
-                <span className={hasLength ? 'text-emerald-600 font-bold' : 'text-slate-400'}>
-                  {hasLength ? '✓' : '•'} Min 8 chars
-                </span>
-                <span className={hasUpper ? 'text-emerald-600 font-bold' : 'text-slate-400'}>
-                  {hasUpper ? '✓' : '•'} Uppercase (A-Z)
-                </span>
-                <span className={hasLower ? 'text-emerald-600 font-bold' : 'text-slate-400'}>
-                  {hasLower ? '✓' : '•'} Lowercase (a-z)
-                </span>
-                <span className={hasNum ? 'text-emerald-600 font-bold' : 'text-slate-400'}>
-                  {hasNum ? '✓' : '•'} Number (0-9)
-                </span>
-                <span className={hasSpecial ? 'text-emerald-600 font-bold' : 'text-slate-400'}>
-                  {hasSpecial ? '✓' : '•'} Special (!@#$)
-                </span>
-              </div>
-            </div>
+            <PasswordRequirements password={password} />
 
             <button
               type="submit"

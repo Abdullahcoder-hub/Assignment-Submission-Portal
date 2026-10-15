@@ -10,7 +10,6 @@ import { CRApplicationsTab } from '../components/CRApplicationsTab';
 import { TeacherSharedAssignmentsSection } from '../components/TeacherSharedAssignmentsSection';
 import { ShareAssignmentModal } from '../components/ShareAssignmentModal';
 import { StaffPasswordSettings } from '../components/StaffPasswordSettings';
-import { PasswordInput } from '../components/PasswordInput';
 import {
   LayoutDashboard,
   BookOpen,
@@ -244,9 +243,7 @@ export const AdminDashboard: React.FC = () => {
   const [editingStudent, setEditingStudent] = useState<RegisteredStudent | null>(null);
   const [studentEditForm, setStudentEditForm] = useState({ name: '', rollNumber: '' });
   const [studentEditModalOpen, setStudentEditModalOpen] = useState<boolean>(false);
-  const [resetPassStudent, setResetPassStudent] = useState<RegisteredStudent | null>(null);
-  const [newStudentPassInput, setNewStudentPassInput] = useState<string>('123456');
-  const [resetPassModalOpen, setResetPassModalOpen] = useState<boolean>(false);
+  const [resetPassStudentId, setResetPassStudentId] = useState<string | null>(null);
 
   // Defaulters State
   const [defaultersModalOpen, setDefaultersModalOpen] = useState<boolean>(false);
@@ -502,19 +499,17 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleResetStudentPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resetPassStudent || !newStudentPassInput.trim()) return;
+  const handleResetStudentPassword = async (student: RegisteredStudent) => {
+    setResetPassStudentId(student._id);
     try {
-      const res = await api.patch(`/admin/students/${resetPassStudent._id}/reset-password`, {
-        newPassword: newStudentPassInput.trim(),
-      });
+      const res = await api.patch(`/admin/students/${student._id}/reset-password`);
       if (res.data.success) {
         showToast('success', res.data.message);
-        setResetPassModalOpen(false);
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to reset password.');
+      showToast('error', err.response?.data?.message || 'Failed to send password reset email.');
+    } finally {
+      setResetPassStudentId(null);
     }
   };
 
@@ -2271,7 +2266,7 @@ export const AdminDashboard: React.FC = () => {
                 <thead><tr className="bg-slate-50 text-xs uppercase text-slate-600"><th className="p-4">Name</th><th className="p-4">Roll No</th><th className="p-4">Email</th><th className="p-4">Joined</th>{(isSuperAdmin || isCROrAssistant) && <th className="p-4">Actions</th>}</tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {loadingStudents ? <tr><td colSpan={(isSuperAdmin || isCROrAssistant) ? 5 : 4} className="p-8 text-center text-slate-500">Loading students...</td></tr> : registeredStudents.length === 0 ? <tr><td colSpan={(isSuperAdmin || isCROrAssistant) ? 5 : 4} className="p-8 text-center text-slate-400">No registered students.</td></tr> : registeredStudents.map((studentRecord) => (
-                    <tr key={studentRecord._id}><td className="p-4 font-semibold">{studentRecord.name}</td><td className="p-4 font-mono">{studentRecord.rollNumber}</td><td className="p-4 break-all">{studentRecord.email}</td><td className="p-4 text-xs text-slate-500">{formatDate(studentRecord.createdAt)}</td>{(isSuperAdmin || isCROrAssistant) && <td className="p-4"><div className="flex flex-wrap gap-2"><button onClick={() => { setEditingStudent(studentRecord); setStudentEditForm({ name: studentRecord.name, rollNumber: studentRecord.rollNumber }); setStudentEditModalOpen(true); }} className="px-2.5 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg">Edit</button><button onClick={() => { setResetPassStudent(studentRecord); setResetPassModalOpen(true); }} className="px-2.5 py-1.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg">Reset Password</button><button onClick={() => handleDeleteStudent(studentRecord._id, studentRecord.name, studentRecord.rollNumber)} className="px-2.5 py-1.5 bg-red-50 text-red-700 text-xs font-bold rounded-lg">Delete</button></div></td>}</tr>
+                    <tr key={studentRecord._id}><td className="p-4 font-semibold">{studentRecord.name}</td><td className="p-4 font-mono">{studentRecord.rollNumber}</td><td className="p-4 break-all">{studentRecord.email}</td><td className="p-4 text-xs text-slate-500">{formatDate(studentRecord.createdAt)}</td>{(isSuperAdmin || isCROrAssistant) && <td className="p-4"><div className="flex flex-wrap gap-2"><button onClick={() => { setEditingStudent(studentRecord); setStudentEditForm({ name: studentRecord.name, rollNumber: studentRecord.rollNumber }); setStudentEditModalOpen(true); }} className="px-2.5 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg">Edit</button><button onClick={() => handleResetStudentPassword(studentRecord)} disabled={resetPassStudentId === studentRecord._id} className="px-2.5 py-1.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg disabled:opacity-50">{resetPassStudentId === studentRecord._id ? 'Sending...' : 'Reset Password'}</button><button onClick={() => handleDeleteStudent(studentRecord._id, studentRecord.name, studentRecord.rollNumber)} className="px-2.5 py-1.5 bg-red-50 text-red-700 text-xs font-bold rounded-lg">Delete</button></div></td>}</tr>
                   ))}
                 </tbody>
               </table>
@@ -2422,10 +2417,6 @@ export const AdminDashboard: React.FC = () => {
 
         {studentEditModalOpen && editingStudent && (
           <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"><form onSubmit={handleSaveStudentEdit} className="glass-panel rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200/80 dark:border-white/10 shadow-2xl"><h3 className="font-bold text-slate-900">Edit Student</h3><input value={studentEditForm.name} onChange={(e) => setStudentEditForm({ ...studentEditForm, name: e.target.value })} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="Name" required /><input value={studentEditForm.rollNumber} maxLength={7} onChange={(e) => setStudentEditForm({ ...studentEditForm, rollNumber: e.target.value.replace(/\D/g, '') })} className="w-full px-3 py-2 border rounded-xl text-sm font-mono tracking-wider" placeholder="Roll number (7 digits, e.g. 2260000)" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setStudentEditModalOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold">Cancel</button><button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow">Save</button></div></form></div>
-        )}
-
-        {resetPassModalOpen && resetPassStudent && (
-          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"><form onSubmit={handleResetStudentPassword} className="glass-panel rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200/80 dark:border-white/10 shadow-2xl"><h3 className="font-bold text-slate-900">Reset Student Password</h3><PasswordInput value={newStudentPassInput} onChange={(e) => setNewStudentPassInput(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="New password" required /><div className="flex justify-end gap-2"><button type="button" onClick={() => setResetPassModalOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold">Cancel</button><button className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow">Reset Password</button></div></form></div>
         )}
 
         {/* MODAL: ADD / EDIT SUBJECT */}

@@ -1,11 +1,12 @@
 import { Response } from 'express';
-import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import Student from '../models/Student.js';
 import Submission from '../models/Submission.js';
 import { AuthRequest } from '../middleware/auth.js';
-import { validatePasswordStrength } from '../utils/passwordValidator.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
 import { escapeRegex } from '../utils/fileValidation.js';
+import { sendPasswordResetEmail } from '../config/brevo.js';
+import { logError } from '../utils/logger.js';
 
 const canManageStudent = (req: AuthRequest, student: { classId?: unknown }): boolean => {
   if (req.admin?.role === 'SUPER_ADMIN') return true;
@@ -113,18 +114,6 @@ export const updateStudent = async (req: AuthRequest, res: Response): Promise<vo
 export const resetStudentPassword = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { newPassword } = req.body;
-
-    if (!newPassword) {
-      res.status(400).json({ success: false, message: 'New password is required.' });
-      return;
-    }
-
-    const passValidation = validatePasswordStrength(newPassword);
-    if (!passValidation.isValid) {
-      res.status(400).json({ success: false, message: passValidation.message });
-      return;
-    }
 
     const student = await Student.findById(id);
     if (!student) {
@@ -136,14 +125,26 @@ export const resetStudentPassword = async (req: AuthRequest, res: Response): Pro
       return;
     }
 
-    const salt = await bcrypt.genSalt(10);
-    student.passwordHash = await bcrypt.hash(newPassword, salt);
-    student.tokenVersion = (student.tokenVersion ?? 0) + 1;
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    student.resetPasswordToken = resetToken;
+    student.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000);
     await student.save();
+
+    const emailResult = await sendPasswordResetEmail(student.email, student.name, resetToken);
+    if (!emailResult.success) {
+      logError('[Admin Student Password Reset Email Error]', emailResult.error);
+      if (student.resetPasswordToken === resetToken) {
+        student.resetPasswordToken = undefined;
+        student.resetPasswordExpires = undefined;
+        await student.save();
+      }
+      res.status(502).json({ success: false, message: 'Failed to send password reset email. Please try again later.' });
+      return;
+    }
 
     res.status(200).json({
       success: true,
-      message: `Password for student "${student.name}" (${student.rollNumber}) reset successfully.`,
+      message: `Password reset link sent to ${student.email}.`,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to reset student password.' });

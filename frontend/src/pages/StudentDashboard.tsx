@@ -5,6 +5,7 @@ import { Subject, Assignment, Submission, StudentUser, SubmissionReceipt, Group,
 import { useAuth } from '../context/AuthContext';
 import { StudentQuizSection } from '../components/StudentQuizSection';
 import { PasswordInput } from '../components/PasswordInput';
+import { PasswordRequirements } from '../components/PasswordRequirements';
 import {
   User,
   BookOpen,
@@ -2050,12 +2051,13 @@ export const StudentDashboard: React.FC = () => {
                 New Password <span className="text-red-500">*</span>
               </label>
               <PasswordInput
-                placeholder="Enter new password (min 6 characters)"
+                placeholder="Enter new password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold text-sm"
               />
+              <PasswordRequirements password={newPassword} />
             </div>
 
             <div>

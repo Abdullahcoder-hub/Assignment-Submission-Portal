@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import api from '../api/axios';
 import { Lock, Loader2, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { PasswordRequirements } from '../components/PasswordRequirements';
 
 export const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -102,6 +103,7 @@ export const ResetPassword: React.FC = () => {
                   {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              <PasswordRequirements password={newPassword} />
             </div>
 
             <div>
