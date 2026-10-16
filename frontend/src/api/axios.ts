@@ -38,6 +38,8 @@ type WindowWithSavePicker = Window & {
   showSaveFilePicker?: (options: ZipSavePickerOptions) => Promise<ZipFileHandle>;
 };
 
+const isZipSignature = (bytes: Uint8Array): boolean => bytes[0] === 0x50 && bytes[1] === 0x4b;
+
 export const downloadZipFile = async (endpoint: string, fileName: string): Promise<void> => {
   const saveFilePicker = (window as WindowWithSavePicker).showSaveFilePicker;
 
@@ -68,11 +70,39 @@ export const downloadZipFile = async (endpoint: string, fileName: string): Promi
       throw new Error('The browser could not stream the ZIP download.');
     }
 
-    await response.body.pipeTo(await fileHandle.createWritable());
+    let receivedBytes = 0;
+    const signatureBytes: number[] = [];
+    const checkedBody = response.body.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          for (let index = 0; index < chunk.length && signatureBytes.length < 2; index++) {
+            signatureBytes.push(chunk[index]);
+          }
+          if (signatureBytes.length === 2 && !isZipSignature(Uint8Array.from(signatureBytes))) {
+            throw new Error('The server did not return a valid ZIP archive.');
+          }
+          receivedBytes += chunk.length;
+          controller.enqueue(chunk);
+        },
+        flush() {
+          if (receivedBytes < 2) {
+            throw new Error('The server returned an empty ZIP archive.');
+          }
+        },
+      })
+    );
+    await checkedBody.pipeTo(await fileHandle.createWritable());
     return;
   }
 
   const response = await api.get(endpoint, { responseType: 'blob' });
+  if (response.data.size < 2) {
+    throw new Error('The server returned an empty ZIP archive.');
+  }
+  const signature = new Uint8Array(await response.data.slice(0, 2).arrayBuffer());
+  if (!isZipSignature(signature)) {
+    throw new Error('The server did not return a valid ZIP archive.');
+  }
   const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/zip' }));
   const link = document.createElement('a');
   link.href = url;

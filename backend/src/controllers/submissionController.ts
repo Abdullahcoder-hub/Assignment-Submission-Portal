@@ -833,6 +833,7 @@ export const downloadAssignmentZip = async (req: AuthRequest, res: Response): Pr
           filesToArchive.push({ path: stagedPath, name: `${subjectCode}_${cleanAssignmentTitle}/${targetFileName}` });
         } catch (fileErr) {
           logError('[ZIP Stream File Error]', fileErr);
+          throw fileErr;
         }
       }
     }

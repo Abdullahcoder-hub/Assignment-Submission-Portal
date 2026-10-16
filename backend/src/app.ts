@@ -103,7 +103,9 @@ const corsMiddleware = cors({
 
 // Bypass CORS for email decision endpoints (direct browser/email client GET & POST)
 app.use((req, res, next) => {
-  if (req.path.includes('/email-decision')) {
+  const requestOrigin = `${req.protocol}://${req.get('host')}`;
+  const isEmailDecisionRequest = /^\/api\/(?:late-requests|admin\/staff)\/email-decision(?:\/|$)/.test(req.path);
+  if (!req.get('origin') || req.get('origin') === requestOrigin || isEmailDecisionRequest) {
     return next();
   }
   corsMiddleware(req, res, next);

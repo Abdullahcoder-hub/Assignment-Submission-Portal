@@ -354,6 +354,7 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
           filesToArchive.push({ path: stagedPath, name: `${subjectCode}_${cleanAssignmentTitle}/${targetFileName}` });
         } catch (fileErr) {
           logError('[ZIP Stream File Error]', fileErr);
+          throw fileErr;
         }
       }
     }
