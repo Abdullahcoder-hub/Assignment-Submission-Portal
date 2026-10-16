@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api, { getDownloadErrorMessage } from '../api/axios';
+import api, { downloadZipFile, getDownloadErrorMessage } from '../api/axios';
 import { SharedAssignment } from '../types';
 import {
   Archive,
@@ -52,21 +52,12 @@ export const TeacherSharedAssignmentsSection: React.FC = () => {
   const handleDownloadZip = async (item: SharedAssignment) => {
     setDownloadingZipId(item._id);
     try {
-      const response = await api.get(`/shared-assignments/${item._id}/download-zip`, {
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
       const subCode = item.subjectId?.code || 'SUB';
       const cleanTitle = (item.assignmentId?.title || 'Assignment').replace(/[^a-zA-Z0-9_-]/g, '_');
-      link.setAttribute('download', `${subCode}_${cleanTitle}_Submissions.zip`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      await downloadZipFile(`/shared-assignments/${item._id}/download-zip`, `${subCode}_${cleanTitle}_Submissions.zip`);
       fetchSharedAssignments(true);
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       alert(await getDownloadErrorMessage(err, 'Failed to download ZIP file.'));
     } finally {
       setDownloadingZipId(null);

@@ -12,6 +12,7 @@ A modern, full-stack web application designed for universities and schools to st
 - **Password Controls**: Password strength validation, show/hide eye toggle, and a complete Forgot & Reset Password workflow.
 - **Assignment Submission**: Submit homework files (PDF, Word, Zip, etc.) with automatic deadline enforcement and late-submission flags.
 - **Submission History**: View submitted assignments and download receipt records.
+- **Account Deletion**: Students can permanently delete their account and personal records while leaving other group members' data intact.
 
 ### 👑 CR / Admin Portal
 - **Custom Class Join Code**: Class Representative (CR) can view, auto-generate, or manually edit custom Class Join Codes.
@@ -90,7 +91,7 @@ For deployment, set `FRONTEND_URL` in the backend hosting environment to the dep
 
 ### DOC/DOCX conversion and deployment
 
-Group-submission ZIP downloads convert DOC/DOCX and supported image files to PDF, then merge them in each student's selected sequence. Before merging, text-based submissions are checked for the student's current account name and roll number. If one detail is missing, it is added beside the existing one on the first page in a matching font style; if both are missing (including scanned/image-only PDFs), an identity page with both details is added at the start of that student's section. ZIP, PPT/PPTX, Excel, and CSV files remain original files. LibreOffice is installed in the backend Docker image. If conversion or PDF merging fails, the ZIP request returns an error rather than silently placing a mergeable file beside the group PDF. LibreOffice supports rich Word layouts, but exact pagination can differ from Microsoft Word when fonts or rendering behavior differ.
+Group-submission ZIP downloads convert DOC/DOCX and supported image files to PDF, then merge them in each student's selected sequence. Before merging, text-based submissions are checked for the student's current account name and roll number. If one detail is missing, it is added beside the existing one on the first page in a matching font style; if both are missing (including scanned/image-only PDFs), an identity page with both details is added at the start of that student's section. ZIP, PPT/PPTX, Excel, and CSV files remain original files. ZIP downloads stage source files and generated PDFs on temporary disk storage and stream the archive to reduce backend memory usage; the backend host must have enough temporary disk space for the files being prepared. Browsers that support the File System Access API can also stream the download directly to a user-selected device file instead of buffering the entire ZIP in browser memory; other browsers use the regular download fallback. ZIP compression uses a faster, lower-compression setting to reduce CPU time. LibreOffice is installed in the backend Docker image. If conversion or PDF merging fails, the ZIP request returns an error rather than silently placing a mergeable file beside the group PDF. LibreOffice supports rich Word layouts, but exact pagination can differ from Microsoft Word when fonts or rendering behavior differ.
 
 The GitHub Actions workflow builds the backend, frontend, and Docker image on every pull request and `main` push. Render is configured to deploy only after CI checks pass.
 

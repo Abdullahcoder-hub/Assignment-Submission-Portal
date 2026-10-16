@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
-  const { user, replaceToken, switchToStaffPortal } = useAuth();
+  const { user, replaceToken, switchToStaffPortal, logout } = useAuth();
   const navigate = useNavigate();
   const student = user as StudentUser;
 
@@ -168,6 +168,7 @@ export const StudentDashboard: React.FC = () => {
   const [newPassword, setNewPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [changingPass, setChangingPass] = useState<boolean>(false);
+  const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
   const [passMsg, setPassMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deadlineTick, setDeadlineTick] = useState(() => Date.now());
   const [sequenceNumber, setSequenceNumber] = useState<number>(1);
@@ -216,6 +217,27 @@ export const StudentDashboard: React.FC = () => {
       setPassMsg({ type: 'error', text: err.response?.data?.message || 'Failed to change password.' });
     } finally {
       setChangingPass(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      'Delete your account permanently? Your submissions, quiz data, group membership, and linked CR access will also be deleted. Other group members will remain. This cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingAccount(true);
+      await api.delete('/auth/student/me');
+      Object.keys(sessionStorage)
+        .filter((key) => key.startsWith('portal_cached_'))
+        .forEach((key) => sessionStorage.removeItem(key));
+      logout();
+      navigate('/student/login', { replace: true });
+    } catch (error: any) {
+      window.alert(error.response?.data?.message || 'Failed to delete your account.');
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -2089,6 +2111,30 @@ export const StudentDashboard: React.FC = () => {
               )}
             </button>
           </form>
+          <div className="p-6 sm:p-8 pt-0">
+            <div className="border-t border-red-200 dark:border-red-900/50 pt-6">
+              <h3 className="text-sm font-bold text-red-700 dark:text-red-400">Delete account</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-4">
+                Permanently delete your account and personal records. Other students' records will not be deleted.
+              </p>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount}
+                className="w-full py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-bold text-sm rounded-xl shadow transition flex items-center justify-center gap-2"
+              >
+                {deletingAccount ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Deleting Account...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" /> Delete My Account
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

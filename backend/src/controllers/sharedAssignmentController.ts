@@ -1,5 +1,9 @@
 import { Response } from 'express';
 import path from 'path';
+import os from 'node:os';
+import { createReadStream } from 'node:fs';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
 import archiver from 'archiver';
 import axios from 'axios';
 import moment from 'moment-timezone';
@@ -15,6 +19,7 @@ import { sendSharedAssignmentToTeacherEmail } from '../config/brevo.js';
 import { sanitizeCsvField } from '../utils/fileValidation.js';
 import { convertFileToPdf, mergePDFs, getGroupSequence, OfficeConversionError } from '../utils/pdfMerge.js';
 import { addMissingStudentIdentity } from '../utils/submissionPdfIdentity.js';
+import { downloadFileToPath } from '../utils/downloadFileToPath.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { logError } from '../utils/logger.js';
 
@@ -209,6 +214,7 @@ export const getCRSharedAssignments = async (req: AuthRequest, res: Response): P
  * 4. TEACHER DOWNLOAD SHARED ASSIGNMENT ZIP
  */
 export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Response): Promise<void> => {
+  let temporaryDirectory: string | undefined;
   try {
     const { id } = req.params;
     const teacherId = req.admin?.id;
@@ -246,7 +252,11 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
       });
     }
 
-    const filesToArchive: Array<{ buffer: Buffer; name: string }> = [];
+    const filesToArchive: Array<{ path: string; name: string }> = [];
+    const stagingDirectory = await mkdtemp(path.join(os.tmpdir(), 'shared-assignment-zip-'));
+    temporaryDirectory = stagingDirectory;
+    let stagedFileCount = 0;
+    const getStagedFilePath = () => path.join(stagingDirectory, `${stagedFileCount++}.bin`);
 
     if (isGroupAssignment) {
       const groupMap = new Map<string, typeof submissions>();
@@ -258,7 +268,7 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
 
       for (const [groupId, groupSubmissions] of groupMap) {
         const pdfsToMerge: Array<{ buffer: Buffer; sequenceNumber: number; studentName: string; rollNumber: string }> = [];
-        const filesToKeepSeparate: Array<{ buffer: Buffer; name: string }> = [];
+        const filesToKeepSeparate: Array<{ path: string; name: string }> = [];
         for (const sub of groupSubmissions) {
           if (!sub.cloudinarySecureUrl && !sub.cloudinaryPublicId) continue;
           const identity = accountIdentityById.get(sub.studentId.toString()) ?? {
@@ -266,16 +276,18 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
             rollNumber: sub.rollNumber,
           };
           try {
-            const originalBuffer = await fetchFileBuffer([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)]);
             const originalFileName = sub.originalFileName || sub.cloudinaryFormat || 'submission';
             const extension = path.extname(originalFileName).toLowerCase();
             const archiveName = `${subjectCode}_${cleanAssignmentTitle}/${sanitizePathSegment(identity.rollNumber)}-${sanitizePathSegment(identity.studentName)}${extension || '.bin'}`;
 
             if (['.zip', '.ppt', '.pptx', '.xls', '.xlsx', '.xlsm', '.xlsb', '.ods', '.csv'].includes(extension)) {
-              filesToKeepSeparate.push({ buffer: originalBuffer, name: archiveName });
+              const stagedPath = getStagedFilePath();
+              await downloadFileToPath([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)], stagedPath);
+              filesToKeepSeparate.push({ path: stagedPath, name: archiveName });
               continue;
             }
 
+            const originalBuffer = await fetchFileBuffer([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)]);
             let fileBuffer: Buffer;
             if (extension === '.pdf') {
               fileBuffer = originalBuffer;
@@ -313,8 +325,10 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
           continue;
         }
 
+        const stagedPath = getStagedFilePath();
+        await writeFile(stagedPath, finalBuffer);
         filesToArchive.push({
-          buffer: finalBuffer,
+          path: stagedPath,
           name: `${subjectCode}_${cleanAssignmentTitle}/${fileName}`,
         });
       }
@@ -335,8 +349,9 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
           }
           usedFileNames.add(targetFileName);
 
-          const fileBuffer = await fetchFileBuffer([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)]);
-          filesToArchive.push({ buffer: fileBuffer, name: `${subjectCode}_${cleanAssignmentTitle}/${targetFileName}` });
+          const stagedPath = getStagedFilePath();
+          await downloadFileToPath([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)], stagedPath);
+          filesToArchive.push({ path: stagedPath, name: `${subjectCode}_${cleanAssignmentTitle}/${targetFileName}` });
         } catch (fileErr) {
           logError('[ZIP Stream File Error]', fileErr);
         }
@@ -356,13 +371,13 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${subjectCode}_${cleanAssignmentTitle}_Submissions.zip"`);
 
-    const archive = archiver('zip', { zlib: { level: 6 } });
-    archive.pipe(res);
+    const archive = archiver('zip', { zlib: { level: 1 } });
+    const archiveOutput = pipeline(archive, res);
     for (const file of filesToArchive) {
-      archive.append(file.buffer, { name: file.name });
+      archive.append(createReadStream(file.path), { name: file.name });
     }
 
-    await archive.finalize();
+    await Promise.all([archive.finalize(), archiveOutput]);
   } catch (error) {
     logError('[Teacher Download ZIP Error]', error);
     if (!res.headersSent) {
@@ -371,6 +386,12 @@ export const downloadSharedAssignmentZip = async (req: AuthRequest, res: Respons
         return;
       }
       res.status(500).json({ success: false, message: 'Failed to generate submissions ZIP package.' });
+    }
+  } finally {
+    if (temporaryDirectory) {
+      await rm(temporaryDirectory, { recursive: true, force: true }).catch((error: unknown) => {
+        logError('[Teacher Download ZIP Error] Failed to remove temporary ZIP files.', error);
+      });
     }
   }
 };

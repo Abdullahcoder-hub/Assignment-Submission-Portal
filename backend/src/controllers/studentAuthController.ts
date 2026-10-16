@@ -6,6 +6,15 @@ import { OAuth2Client } from 'google-auth-library';
 import Student from '../models/Student.js';
 import Admin from '../models/Admin.js';
 import Submission from '../models/Submission.js';
+import QuizSubmission from '../models/QuizSubmission.js';
+import QuizAttempt from '../models/QuizAttempt.js';
+import LateRequest from '../models/LateRequest.js';
+import CRApplication from '../models/CRApplication.js';
+import Group from '../models/Group.js';
+import Class from '../models/Class.js';
+import Quiz from '../models/Quiz.js';
+import TeacherAssignment from '../models/TeacherAssignment.js';
+import { deleteFromCloudinary } from '../config/cloudinary.js';
 import { findAndVerifyClassByJoinCode, verifyClassJoinCode } from '../utils/joinCode.js';
 import { validatePasswordStrength } from '../utils/passwordValidator.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
@@ -615,6 +624,101 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
 
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch student profile.' });
+  }
+};
+
+export const deleteStudentAccount = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.student) {
+      res.status(401).json({ success: false, message: 'Student authentication required.' });
+      return;
+    }
+
+    const student = await Student.findById(req.student.id);
+    if (!student) {
+      res.status(404).json({ success: false, message: 'Student account not found.' });
+      return;
+    }
+
+    const studentId = student._id;
+    const studentIdString = studentId.toString();
+    const [submissions, quizSubmissions, groups, linkedStaff] = await Promise.all([
+      Submission.find({ studentId }).select('cloudinaryPublicId cloudinaryResourceType').lean(),
+      QuizSubmission.find({ studentId }).select('docxPublicId').lean(),
+      Group.find({
+        $or: [
+          { 'leader.studentId': studentId },
+          { 'members.studentId': studentId },
+          { 'leader.rollNumber': student.rollNumber },
+          { 'members.rollNumber': student.rollNumber },
+        ],
+      }),
+      Admin.find({
+        email: student.email,
+        role: { $in: ['CR', 'CR_ASSISTANT'] },
+      }).select('_id').lean(),
+    ]);
+
+    for (const submission of submissions) {
+      if (
+        submission.cloudinaryPublicId
+        && !(await deleteFromCloudinary(submission.cloudinaryPublicId, submission.cloudinaryResourceType))
+      ) {
+        res.status(502).json({ success: false, message: 'Could not delete all your uploaded files. Please try again.' });
+        return;
+      }
+    }
+
+    for (const quizSubmission of quizSubmissions) {
+      if (quizSubmission.docxPublicId && !(await deleteFromCloudinary(quizSubmission.docxPublicId, 'raw'))) {
+        res.status(502).json({ success: false, message: 'Could not delete all your uploaded files. Please try again.' });
+        return;
+      }
+    }
+
+    for (const group of groups) {
+      const isStudentMember = (member: { studentId?: { toString(): string }; rollNumber: string }) =>
+        member.studentId?.toString() === studentIdString
+        || member.rollNumber.toLowerCase() === student.rollNumber.toLowerCase();
+      const remainingMembers = group.members.filter((member) => !isStudentMember(member));
+      const wasLeader = isStudentMember(group.leader);
+
+      if (remainingMembers.length === group.members.length && !wasLeader) continue;
+      if (remainingMembers.length === 0) {
+        await group.deleteOne();
+        continue;
+      }
+
+      group.members = remainingMembers;
+      if (wasLeader) group.leader = remainingMembers[0];
+      await group.save();
+    }
+
+    const linkedStaffIds = linkedStaff.map((staff) => staff._id);
+    if (linkedStaffIds.length > 0) {
+      await Promise.all([
+        TeacherAssignment.deleteMany({ teacherId: { $in: linkedStaffIds } }),
+        Class.updateMany({ crId: { $in: linkedStaffIds } }, { $unset: { crId: 1 } }),
+        Class.updateMany({ assistantId: { $in: linkedStaffIds } }, { $unset: { assistantId: 1 } }),
+        Quiz.updateMany({ crId: { $in: linkedStaffIds } }, { $unset: { crId: 1 } }),
+        Quiz.updateMany({ assistantId: { $in: linkedStaffIds } }, { $unset: { assistantId: 1 } }),
+        Admin.deleteMany({ _id: { $in: linkedStaffIds } }),
+      ]);
+    }
+
+    await Promise.all([
+      Submission.deleteMany({ studentId }),
+      QuizSubmission.deleteMany({ studentId }),
+      QuizAttempt.deleteMany({ studentId }),
+      LateRequest.deleteMany({ studentId }),
+      CRApplication.deleteMany({ studentId }),
+      Student.findByIdAndDelete(studentId),
+    ]);
+
+    res.status(200).json({ success: true, message: 'Your account and personal data were deleted.' });
+  } catch (error) {
+    logError('[Student Account Deletion Error]', error);
+    res.status(500).json({ success: false, message: 'Failed to delete your account. Please try again.' });
   }
 };
 

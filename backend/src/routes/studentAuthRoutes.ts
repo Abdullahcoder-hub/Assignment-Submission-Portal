@@ -8,6 +8,7 @@ import {
   forgotPassword,
   resetPassword,
   getStudentProfile,
+  deleteStudentAccount,
   changePassword,
   checkRollNumberAvailability,
   createStudentStaffSession,
@@ -26,6 +27,7 @@ router.post('/google', googleAuthStudent);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.get('/me', authenticateStudent, getStudentProfile);
+router.delete('/me', authenticateStudent, deleteStudentAccount);
 router.post('/change-password', authenticateStudent, changePassword);
 router.post('/staff-session', authenticateStudent, createStudentStaffSession);
 

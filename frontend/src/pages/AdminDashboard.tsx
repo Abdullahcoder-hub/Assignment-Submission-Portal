@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api, { getDownloadErrorMessage, openSubmissionFile } from '../api/axios';
+import api, { downloadZipFile, getDownloadErrorMessage, openSubmissionFile } from '../api/axios';
 import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest, RegisteredStudent, Class } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { ClassManagementSection } from '../components/ClassManagementSection';
@@ -797,19 +797,9 @@ export const AdminDashboard: React.FC = () => {
   const handleDownloadZip = async (assignmentId: string) => {
     try {
       showToast('success', 'Generating ZIP archive of all submissions... Please wait.');
-      const response = await api.get(`/assignments/${assignmentId}/submissions/download-zip`, {
-        responseType: 'blob',
-      });
-      const blob = new Blob([response.data], { type: 'application/zip' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Assignment_Submissions.zip`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      await downloadZipFile(`/assignments/${assignmentId}/submissions/download-zip`, 'Assignment_Submissions.zip');
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       showToast('error', await getDownloadErrorMessage(err, 'Failed to download ZIP file.'));
     }
   };
