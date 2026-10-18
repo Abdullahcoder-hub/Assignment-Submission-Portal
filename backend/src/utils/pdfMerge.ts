@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,46 +9,51 @@ import { logError } from './logger.js';
 
 const execFileAsync = promisify(execFile);
 
-export interface PDFToMerge {
-  buffer: Buffer;
-  sequenceNumber: number;
-  studentName: string;
-  rollNumber: string;
-}
-
 export class OfficeConversionError extends Error {}
+export class PdfMergeError extends Error {}
 
-export const convertFileToPdf = async (buffer: Buffer, fileName: string): Promise<Buffer> => {
-  const extension = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
-  if (['.pdf', '.zip', '.ppt', '.pptx', '.xls', '.xlsx', '.xlsm', '.xlsb', '.ods', '.csv'].includes(extension)) {
-    throw new Error(`Cannot convert ${fileName} to PDF.`);
-  }
-
+export const convertFileToPdfFile = async (
+  inputPath: string,
+  fileName: string,
+  outputPath: string,
+  signal?: AbortSignal,
+): Promise<void> => {
+  const extension = path.extname(fileName).toLowerCase();
   if (['.jpg', '.jpeg', '.png'].includes(extension)) {
-    const pdf = await PDFDocument.create();
-    const image = extension === '.png'
-      ? await pdf.embedPng(buffer)
-      : await pdf.embedJpg(buffer);
-    const pageWidth = 595.28;
-    const pageHeight = 841.89;
-    const margin = 36;
-    const imageSize = image.scaleToFit(pageWidth - margin * 2, pageHeight - margin * 2);
-    const page = pdf.addPage([pageWidth, pageHeight]);
-    page.drawImage(image, {
-      x: (pageWidth - imageSize.width) / 2,
-      y: (pageHeight - imageSize.height) / 2,
-      ...imageSize,
-    });
-    return Buffer.from(await pdf.save());
+    try {
+      if (signal?.aborted) throw new Error('Conversion cancelled.');
+      const buffer = await readFile(inputPath);
+      if (signal?.aborted) throw new Error('Conversion cancelled.');
+      const pdf = await PDFDocument.create();
+      const image = extension === '.png'
+        ? await pdf.embedPng(buffer)
+        : await pdf.embedJpg(buffer);
+      const pageWidth = 595.28;
+      const pageHeight = 841.89;
+      const margin = 36;
+      const imageSize = image.scaleToFit(pageWidth - margin * 2, pageHeight - margin * 2);
+      const page = pdf.addPage([pageWidth, pageHeight]);
+      page.drawImage(image, {
+        x: (pageWidth - imageSize.width) / 2,
+        y: (pageHeight - imageSize.height) / 2,
+        ...imageSize,
+      });
+      const pdfBytes = await pdf.save();
+      if (signal?.aborted) throw new Error('Conversion cancelled.');
+      await writeFile(outputPath, pdfBytes);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      logError(`[Image Conversion Error] Failed to convert ${fileName}.`, error);
+      throw new OfficeConversionError(`Could not convert ${fileName} to PDF. Check that the file is valid.`);
+    }
+    return;
   }
 
   const workingDirectory = await mkdtemp(path.join(os.tmpdir(), 'assignment-office-convert-'));
-  const inputPath = path.join(workingDirectory, `submission${extension}`);
   const profilePath = path.join(workingDirectory, 'profile');
-  const outputPath = path.join(workingDirectory, 'submission.pdf');
+  const convertedPath = path.join(workingDirectory, `${path.basename(inputPath, path.extname(inputPath))}.pdf`);
 
   try {
-    await writeFile(inputPath, buffer, { flag: 'wx' });
     await execFileAsync('soffice', [
       '--headless',
       '--nologo',
@@ -60,14 +65,21 @@ export const convertFileToPdf = async (buffer: Buffer, fileName: string): Promis
       '--outdir',
       workingDirectory,
       inputPath,
-    ], { timeout: 90_000, maxBuffer: 1024 * 1024 });
+    ], { timeout: 90_000, maxBuffer: 1024 * 1024, signal });
 
-    const pdf = await readFile(outputPath);
-    if (!pdf.subarray(0, 4).equals(Buffer.from('%PDF'))) {
-      throw new Error(`LibreOffice returned an invalid PDF for ${fileName}.`);
+    const converted = await open(convertedPath, 'r');
+    try {
+      const signature = Buffer.alloc(4);
+      await converted.read(signature, 0, signature.length, 0);
+      if (!signature.equals(Buffer.from('%PDF'))) {
+        throw new Error(`LibreOffice returned an invalid PDF for ${fileName}.`);
+      }
+    } finally {
+      await converted.close();
     }
-    return pdf;
+    await rename(convertedPath, outputPath);
   } catch (error) {
+    if (signal?.aborted) throw error;
     logError(`[Office Conversion Error] Failed to convert ${fileName}.`, error);
     const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
     if (code === 'ENOENT') {
@@ -81,30 +93,34 @@ export const convertFileToPdf = async (buffer: Buffer, fileName: string): Promis
   }
 };
 
-export const mergePDFs = async (pdfs: PDFToMerge[]): Promise<Buffer> => {
+export const mergePdfFiles = async (pdfPaths: string[], outputPath: string): Promise<void> => {
+  if (pdfPaths.length === 0) {
+    throw new PdfMergeError('There are no PDF files to merge.');
+  }
+
   try {
-    if (!pdfs || pdfs.length === 0) {
-      throw new Error('No PDFs to merge');
+    await execFileAsync('qpdf', ['--empty', '--pages', ...pdfPaths, '--', outputPath], {
+      timeout: 120_000,
+      maxBuffer: 1024 * 1024,
+    });
+
+    const output = await open(outputPath, 'r');
+    try {
+      const signature = Buffer.alloc(4);
+      await output.read(signature, 0, signature.length, 0);
+      if (!signature.equals(Buffer.from('%PDF')) || (await stat(outputPath)).size === 0) {
+        throw new Error('qpdf returned an invalid PDF.');
+      }
+    } finally {
+      await output.close();
     }
-
-    // Sort by sequence number
-    const sortedPdfs = [...pdfs].sort((a, b) => a.sequenceNumber - b.sequenceNumber);
-
-    // Create a new PDF document
-    const mergedPdf = await PDFDocument.create();
-
-    for (const pdf of sortedPdfs) {
-      const sourcePdf = await PDFDocument.load(pdf.buffer);
-      const copiedPages = await mergedPdf.copyPages(sourcePdf, sourcePdf.getPageIndices());
-      copiedPages.forEach((page) => mergedPdf.addPage(page));
-    }
-
-    // Save the merged PDF
-    const mergedPdfBytes = await mergedPdf.save();
-    return Buffer.from(mergedPdfBytes);
   } catch (error) {
-    logError('[PDF Merge Error]', error);
-    throw new Error('Failed to merge PDFs');
+    logError('[Disk PDF Merge Error]', error);
+    const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+    if (code === 'ENOENT') {
+      throw new PdfMergeError('qpdf is unavailable. Deploy the Docker backend to merge group PDFs.');
+    }
+    throw new PdfMergeError('Could not merge the group PDFs. Check that all submitted files are valid.');
   }
 };
 

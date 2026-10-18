@@ -1,11 +1,15 @@
 import axios from 'axios';
+import { backendPool } from './backendPool';
 
-const API_URL = import.meta.env.DEV
-  ? '/api'
-  : import.meta.env.VITE_API_URL || 'https://assignment-submission-portal-rfq1.onrender.com/api';
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    backendOrigin?: string;
+    backendFailoverRetried?: boolean;
+  }
+}
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: backendPool.getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -14,6 +18,14 @@ const api = axios.create({
 // Interceptor to attach JWT token for authenticated requests (Student or Admin)
 api.interceptors.request.use(
   (config) => {
+    config.backendOrigin = config.backendOrigin || backendPool.getSnapshot().activeUrl;
+    config.baseURL = `${config.backendOrigin}/api`;
+    if (!config.timeout) {
+      const longRequest = config.method?.toLowerCase() === 'post'
+        || config.url?.includes('/export-pdf')
+        || config.url?.includes('/download');
+      config.timeout = longRequest ? 120000 : 30000;
+    }
     const token = localStorage.getItem('portalToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -21,6 +33,30 @@ api.interceptors.request.use(
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error: unknown) => {
+    if (!axios.isAxiosError(error) || !error.config) throw error;
+    const config = error.config;
+    const status = error.response?.status;
+    const transportFailure = !error.response && error.code !== 'ERR_CANCELED';
+    if (!transportFailure && status !== 502 && status !== 503 && status !== 504) throw error;
+
+    const attemptedOrigin = config.backendOrigin || backendPool.getSnapshot().activeUrl;
+    await backendPool.handleRequestFailure(attemptedOrigin);
+    const method = (config.method || 'get').toLowerCase();
+    const canRetry = ['get', 'head'].includes(method)
+      && !config.backendFailoverRetried
+      && backendPool.getSnapshot().activeUrl !== attemptedOrigin;
+    if (!canRetry) throw error;
+
+    config.backendFailoverRetried = true;
+    config.backendOrigin = backendPool.getSnapshot().activeUrl;
+    config.baseURL = `${config.backendOrigin}/api`;
+    return api.request(config);
+  },
 );
 
 export default api;
@@ -39,6 +75,31 @@ type WindowWithSavePicker = Window & {
 };
 
 const isZipSignature = (bytes: Uint8Array): boolean => bytes[0] === 0x50 && bytes[1] === 0x4b;
+const zipEndRecordSignature = [0x50, 0x4b, 0x05, 0x06];
+const maxZipCommentLength = 0xffff;
+
+const hasZipEndRecord = (bytes: Uint8Array): boolean => {
+  const searchStart = Math.max(0, bytes.length - 22 - maxZipCommentLength);
+  for (let offset = bytes.length - 22; offset >= searchStart; offset--) {
+    if (zipEndRecordSignature.every((value, index) => bytes[offset + index] === value)) {
+      const commentLength = bytes[offset + 20] | (bytes[offset + 21] << 8);
+      if (offset + 22 + commentLength !== bytes.length) continue;
+      const entryCount = bytes[offset + 10] | (bytes[offset + 11] << 8);
+      return entryCount > 0;
+    }
+  }
+  return false;
+};
+
+const appendZipTail = (tail: Uint8Array, chunk: Uint8Array): Uint8Array => {
+  const maxTailLength = 22 + maxZipCommentLength;
+  const combined = new Uint8Array(Math.min(tail.length + chunk.length, maxTailLength));
+  const chunkStart = Math.max(0, chunk.length - combined.length);
+  const tailLength = combined.length - (chunk.length - chunkStart);
+  if (tailLength > 0) combined.set(tail.subarray(tail.length - tailLength), 0);
+  combined.set(chunk.subarray(chunkStart), tailLength);
+  return combined;
+};
 
 export const downloadZipFile = async (endpoint: string, fileName: string): Promise<void> => {
   const saveFilePicker = (window as WindowWithSavePicker).showSaveFilePicker;
@@ -49,9 +110,26 @@ export const downloadZipFile = async (endpoint: string, fileName: string): Promi
       types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }],
     });
     const token = localStorage.getItem('portalToken');
-    const response = await fetch(`${API_URL}${endpoint}`, {
+    const fetchZip = () => fetch(`${backendPool.getApiBaseUrl()}${endpoint}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
+    const attemptedOrigin = backendPool.getSnapshot().activeUrl;
+    let response: Response;
+    try {
+      response = await fetchZip();
+    } catch (error) {
+      await backendPool.handleRequestFailure(attemptedOrigin);
+      if (backendPool.getSnapshot().activeUrl === attemptedOrigin) throw error;
+      response = await fetchZip();
+    }
+    if ([502, 503, 504].includes(response.status)) {
+      await backendPool.handleRequestFailure(attemptedOrigin);
+      if (backendPool.getSnapshot().activeUrl !== attemptedOrigin) {
+        response = await fetch(`${backendPool.getApiBaseUrl()}${endpoint}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+      }
+    }
 
     if (!response.ok) {
       let message = `ZIP download failed (${response.status}).`;
@@ -72,6 +150,7 @@ export const downloadZipFile = async (endpoint: string, fileName: string): Promi
 
     let receivedBytes = 0;
     const signatureBytes: number[] = [];
+    let zipTail: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
     const checkedBody = response.body.pipeThrough(
       new TransformStream<Uint8Array, Uint8Array>({
         transform(chunk, controller) {
@@ -82,11 +161,15 @@ export const downloadZipFile = async (endpoint: string, fileName: string): Promi
             throw new Error('The server did not return a valid ZIP archive.');
           }
           receivedBytes += chunk.length;
+          zipTail = appendZipTail(zipTail, chunk);
           controller.enqueue(chunk);
         },
         flush() {
           if (receivedBytes < 2) {
             throw new Error('The server returned an empty ZIP archive.');
+          }
+          if (!hasZipEndRecord(zipTail)) {
+            throw new Error('The ZIP download was interrupted or contains no files.');
           }
         },
       })
@@ -103,6 +186,10 @@ export const downloadZipFile = async (endpoint: string, fileName: string): Promi
   if (!isZipSignature(signature)) {
     throw new Error('The server did not return a valid ZIP archive.');
   }
+  const tail = new Uint8Array(await response.data.slice(-22 - maxZipCommentLength).arrayBuffer());
+  if (!hasZipEndRecord(tail)) {
+    throw new Error('The ZIP download was interrupted or contains no files.');
+  }
   const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/zip' }));
   const link = document.createElement('a');
   link.href = url;
@@ -114,8 +201,9 @@ export const downloadZipFile = async (endpoint: string, fileName: string): Promi
 };
 
 export const getDownloadErrorMessage = async (error: unknown, fallback: string): Promise<string> => {
-  if (error instanceof Error) return error.message;
-  if (!axios.isAxiosError(error)) return fallback;
+  if (!axios.isAxiosError(error)) {
+    return error instanceof Error ? error.message : fallback;
+  }
 
   const data = error.response?.data;
   if (data instanceof Blob) {
@@ -132,7 +220,35 @@ export const getDownloadErrorMessage = async (error: unknown, fallback: string):
   if (typeof data === 'object' && data !== null && 'message' in data && typeof data.message === 'string') {
     return data.message;
   }
-  return fallback;
+  return getApiErrorMessage(error, fallback);
+};
+
+export const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (!axios.isAxiosError(error)) {
+    return error instanceof Error ? error.message : fallback;
+  }
+
+  if (!error.response) {
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      return 'The backend request timed out. Check service health and try again.';
+    }
+    return 'Cannot reach the backend. Verify its service is running, VITE_API_URL is correct, and a backup is configured if needed.';
+  }
+
+  if (error.response.status === 404) {
+    return 'The backend did not find this API endpoint. Check the backend URL and deploy the matching API version.';
+  }
+  if ([502, 503, 504].includes(error.response.status)) {
+    return 'The backend is temporarily unavailable. Check its health and configured backups.';
+  }
+
+  const data: unknown = error.response.data;
+  if (typeof data === 'object' && data !== null && 'message' in data && typeof data.message === 'string') {
+    return data.message;
+  }
+  return error.response.status >= 500
+    ? `The backend returned an error (HTTP ${error.response.status}).`
+    : fallback;
 };
 
 export const openSubmissionFile = async (submissionId: string): Promise<void> => {

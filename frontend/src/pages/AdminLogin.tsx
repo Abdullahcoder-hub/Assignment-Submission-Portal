@@ -57,7 +57,7 @@ export const AdminLogin: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative">
+    <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-x-clip">
       {/* Subtle background ambient light */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none -z-10" />
 
@@ -95,10 +95,11 @@ export const AdminLogin: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Account Email</label>
+            <label htmlFor="admin-email" className="block text-sm font-semibold text-slate-700 mb-1.5">Account Email</label>
             <div className="relative">
               <Mail className="w-5 h-5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
+                id="admin-email"
                 type="email"
                 placeholder="admin@portal.com"
                 value={email}
@@ -110,10 +111,11 @@ export const AdminLogin: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Password</label>
+            <label htmlFor="admin-password" className="block text-sm font-semibold text-slate-700 mb-1.5">Password</label>
             <div className="relative">
               <Lock className="w-5 h-5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
+                id="admin-password"
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••••••"
                 value={password}
@@ -125,7 +127,7 @@ export const AdminLogin: React.FC = () => {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-                aria-label="Toggle password visibility"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>

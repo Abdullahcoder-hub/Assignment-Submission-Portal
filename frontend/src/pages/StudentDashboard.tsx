@@ -1006,7 +1006,7 @@ export const StudentDashboard: React.FC = () => {
       </div>
 
       {/* DASHBOARD TAB NAVIGATION BAR */}
-      <div className="glass-panel-dark p-1.5 rounded-2xl border border-white/10 shadow-xl grid grid-cols-3 sm:grid-cols-6 gap-1.5 backdrop-blur-xl">
+      <div className="glass-panel-dark p-1.5 rounded-2xl border border-white/10 shadow-xl grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 backdrop-blur-xl">
         <button
           onClick={() => handleTabChange('submit')}
           className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
@@ -1037,7 +1037,7 @@ export const StudentDashboard: React.FC = () => {
             activeTab === 'history' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
-          <History className="w-4 h-4" /> <span className="hidden sm:inline">Submissions ({mySubmissions.length})</span><span className="sm:hidden">History</span>
+          <History className="w-4 h-4" /> <span className="hidden lg:inline">Submissions ({mySubmissions.length})</span><span className="lg:hidden">History</span>
         </button>
         <button
           onClick={() => handleTabChange('security')}

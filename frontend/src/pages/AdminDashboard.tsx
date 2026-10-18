@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api, { downloadZipFile, getDownloadErrorMessage, openSubmissionFile } from '../api/axios';
+import api, { getApiErrorMessage, getDownloadErrorMessage, openSubmissionFile } from '../api/axios';
 import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest, RegisteredStudent, Class } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { ClassManagementSection } from '../components/ClassManagementSection';
@@ -10,6 +10,8 @@ import { CRApplicationsTab } from '../components/CRApplicationsTab';
 import { TeacherSharedAssignmentsSection } from '../components/TeacherSharedAssignmentsSection';
 import { ShareAssignmentModal } from '../components/ShareAssignmentModal';
 import { StaffPasswordSettings } from '../components/StaffPasswordSettings';
+import { createClientAssignmentExport } from '../utils/clientAssignmentExport';
+import BackendRegistryPanel from '../components/BackendRegistryPanel';
 import {
   LayoutDashboard,
   BookOpen,
@@ -48,6 +50,7 @@ import {
   Shield,
   ShieldCheck,
   Share2,
+  Server,
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
@@ -73,6 +76,7 @@ export const AdminDashboard: React.FC = () => {
     'classes',
     'teachers',
     'staff',
+    'backends',
     'cr-applications',
     'quizzes',
     'shared-assignments',
@@ -206,6 +210,7 @@ export const AdminDashboard: React.FC = () => {
     }
   });
   const [totalSubmissionsCount, setTotalSubmissionsCount] = useState<number>(0);
+  const [exportingAssignmentId, setExportingAssignmentId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [loadingSubmissions, setLoadingSubmissions] = useState<boolean>(() => {
@@ -279,7 +284,7 @@ export const AdminDashboard: React.FC = () => {
         } catch {}
       }
     } catch (err) {
-      showToast('error', 'Failed to load dashboard statistics.');
+      showToast('error', getApiErrorMessage(err, 'Failed to load dashboard statistics.'));
     } finally {
       setLoadingStats(false);
     }
@@ -297,7 +302,7 @@ export const AdminDashboard: React.FC = () => {
         } catch {}
       }
     } catch (err) {
-      showToast('error', 'Failed to fetch subjects list.');
+      showToast('error', getApiErrorMessage(err, 'Failed to fetch subjects list.'));
     } finally {
       setLoadingSubjects(false);
     }
@@ -315,7 +320,7 @@ export const AdminDashboard: React.FC = () => {
         } catch {}
       }
     } catch (err) {
-      showToast('error', 'Failed to fetch assignments list.');
+      showToast('error', getApiErrorMessage(err, 'Failed to fetch assignments list.'));
     } finally {
       setLoadingAssignments(false);
     }
@@ -344,7 +349,7 @@ export const AdminDashboard: React.FC = () => {
         }
       }
     } catch (err) {
-      showToast('error', 'Failed to fetch submissions.');
+      showToast('error', getApiErrorMessage(err, 'Failed to fetch submissions.'));
     } finally {
       setLoadingSubmissions(false);
     }
@@ -363,7 +368,7 @@ export const AdminDashboard: React.FC = () => {
         setGroups(res.data.groups);
       }
     } catch (err) {
-      showToast('error', 'Failed to fetch groups list.');
+      showToast('error', getApiErrorMessage(err, 'Failed to fetch groups list.'));
     } finally {
       setLoadingGroups(false);
     }
@@ -378,7 +383,7 @@ export const AdminDashboard: React.FC = () => {
         fetchGroups();
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to delete group.');
+      showToast('error', getApiErrorMessage(err, 'Failed to delete group.'));
     }
   };
 
@@ -404,7 +409,7 @@ export const AdminDashboard: React.FC = () => {
         fetchGroups();
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to update group.');
+      showToast('error', getApiErrorMessage(err, 'Failed to update group.'));
     } finally {
       setAdminGroupSaving(false);
     }
@@ -423,7 +428,7 @@ export const AdminDashboard: React.FC = () => {
         setLateRequests(res.data.requests);
       }
     } catch (err) {
-      showToast('error', 'Failed to fetch late submission requests.');
+      showToast('error', getApiErrorMessage(err, 'Failed to fetch late submission requests.'));
     } finally {
       setLoadingLateRequests(false);
     }
@@ -441,7 +446,7 @@ export const AdminDashboard: React.FC = () => {
         fetchLateRequests();
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to update decision.');
+      showToast('error', getApiErrorMessage(err, 'Failed to update decision.'));
     }
   };
 
@@ -455,7 +460,7 @@ export const AdminDashboard: React.FC = () => {
         fetchLateRequests();
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to allow a fourth quiz attempt.');
+      showToast('error', getApiErrorMessage(err, 'Failed to allow a fourth quiz attempt.'));
     }
   };
 
@@ -470,7 +475,7 @@ export const AdminDashboard: React.FC = () => {
         setRegisteredStudents(res.data.students);
       }
     } catch (err) {
-      showToast('error', 'Failed to fetch registered students list.');
+      showToast('error', getApiErrorMessage(err, 'Failed to fetch registered students list.'));
     } finally {
       setLoadingStudents(false);
     }
@@ -495,7 +500,7 @@ export const AdminDashboard: React.FC = () => {
         fetchStudents();
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to update student details.');
+      showToast('error', getApiErrorMessage(err, 'Failed to update student details.'));
     }
   };
 
@@ -507,7 +512,7 @@ export const AdminDashboard: React.FC = () => {
         showToast('success', res.data.message);
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to send password reset email.');
+      showToast('error', getApiErrorMessage(err, 'Failed to send password reset email.'));
     } finally {
       setResetPassStudentId(null);
     }
@@ -522,7 +527,7 @@ export const AdminDashboard: React.FC = () => {
         fetchStudents();
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to delete student.');
+      showToast('error', getApiErrorMessage(err, 'Failed to delete student.'));
     }
   };
 
@@ -537,7 +542,7 @@ export const AdminDashboard: React.FC = () => {
         setDefaultersList(res.data.defaulters);
       }
     } catch (err) {
-      showToast('error', 'Failed to fetch defaulters list.');
+      showToast('error', getApiErrorMessage(err, 'Failed to fetch defaulters list.'));
     } finally {
       setLoadingDefaulters(false);
     }
@@ -557,7 +562,7 @@ export const AdminDashboard: React.FC = () => {
       link.click();
       link.remove();
     } catch (err) {
-      showToast('error', 'Failed to export defaulters CSV.');
+      showToast('error', getApiErrorMessage(err, 'Failed to export defaulters CSV.'));
     }
   };
 
@@ -578,7 +583,7 @@ export const AdminDashboard: React.FC = () => {
       setCustomJoinInput(assignedClass.joinCode);
       setIsJoinCodeActive(assignedClass.isJoinCodeActive);
     } catch (error: any) {
-      showToast('error', error.response?.data?.message || 'Failed to fetch your class join code.');
+      showToast('error', getApiErrorMessage(error, 'Failed to fetch your class join code.'));
     }
   };
 
@@ -599,7 +604,7 @@ export const AdminDashboard: React.FC = () => {
         showToast('success', res.data.message);
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to update join code.');
+      showToast('error', getApiErrorMessage(err, 'Failed to update join code.'));
     }
   };
 
@@ -615,7 +620,7 @@ export const AdminDashboard: React.FC = () => {
         showToast('success', res.data.message);
       }
     } catch (err) {
-      showToast('error', 'Failed to regenerate join code.');
+      showToast('error', getApiErrorMessage(err, 'Failed to regenerate join code.'));
     }
   };
 
@@ -628,7 +633,7 @@ export const AdminDashboard: React.FC = () => {
         showToast('success', res.data.message);
       }
     } catch (err) {
-      showToast('error', 'Failed to toggle join code.');
+      showToast('error', getApiErrorMessage(err, 'Failed to toggle join code.'));
     }
   };
 
@@ -690,7 +695,7 @@ export const AdminDashboard: React.FC = () => {
         }
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to save subject.');
+      showToast('error', getApiErrorMessage(err, 'Failed to save subject.'));
     }
   };
 
@@ -707,7 +712,7 @@ export const AdminDashboard: React.FC = () => {
         await refreshAdminData();
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to delete subject.');
+      showToast('error', getApiErrorMessage(err, 'Failed to delete subject.'));
     }
   };
 
@@ -748,7 +753,7 @@ export const AdminDashboard: React.FC = () => {
         }
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to save assignment.');
+      showToast('error', getApiErrorMessage(err, 'Failed to save assignment.'));
     }
   };
 
@@ -762,7 +767,7 @@ export const AdminDashboard: React.FC = () => {
         await refreshAdminData();
       }
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to delete assignment.');
+      showToast('error', getApiErrorMessage(err, 'Failed to delete assignment.'));
     }
   };
 
@@ -788,19 +793,26 @@ export const AdminDashboard: React.FC = () => {
         window.open(cloudinaryUrl, '_blank');
         showToast('success', 'Opening file directly in browser...');
       } else {
-        showToast('error', 'Failed to download file.');
+        showToast('error', getApiErrorMessage(err, 'Failed to download file.'));
       }
     }
   };
 
   // ZIP DOWNLOAD
   const handleDownloadZip = async (assignmentId: string) => {
+    if (exportingAssignmentId) return;
+    setExportingAssignmentId(assignmentId);
     try {
-      showToast('success', 'Generating ZIP archive of all submissions... Please wait.');
-      await downloadZipFile(`/assignments/${assignmentId}/submissions/download-zip`, 'Assignment_Submissions.zip');
+      showToast('success', 'Preparing submissions on this device. Please keep this page open.');
+      await createClientAssignmentExport(assignmentId, (completed, total) => {
+        showToast('success', `Processing PDF ${completed} of ${total} on this device...`);
+      });
+      showToast('success', 'Assignment PDFs ZIP downloaded successfully.');
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       showToast('error', await getDownloadErrorMessage(err, 'Failed to download ZIP file.'));
+    } finally {
+      setExportingAssignmentId(null);
     }
   };
 
@@ -819,7 +831,7 @@ export const AdminDashboard: React.FC = () => {
       link.click();
       link.remove();
     } catch (err) {
-      showToast('error', 'Failed to export CSV.');
+      showToast('error', getApiErrorMessage(err, 'Failed to export CSV.'));
     }
   };
 
@@ -841,7 +853,7 @@ export const AdminDashboard: React.FC = () => {
       link.click();
       link.remove();
     } catch (err) {
-      showToast('error', 'Failed to export Groups CSV.');
+      showToast('error', getApiErrorMessage(err, 'Failed to export Groups CSV.'));
     }
   };
 
@@ -936,6 +948,18 @@ export const AdminDashboard: React.FC = () => {
               >
                 <Shield className="w-5 h-5" />
                 Staff Management
+              </button>
+
+              <button
+                onClick={() => setActiveTab('backends')}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
+                  activeTab === 'backends'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Server className="w-5 h-5" />
+                Backend Services
               </button>
 
               <button
@@ -1623,9 +1647,12 @@ export const AdminDashboard: React.FC = () => {
                           <button
                             title="Download All as ZIP"
                             onClick={() => handleDownloadZip(ass._id)}
-                            className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition"
+                            disabled={exportingAssignmentId !== null}
+                            className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition disabled:cursor-wait disabled:opacity-50"
                           >
-                            <Download className="w-4 h-4" />
+                            {exportingAssignmentId === ass._id
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <Download className="w-4 h-4" />}
                           </button>
                           <button
                             title="Export CSV"
@@ -1696,7 +1723,7 @@ export const AdminDashboard: React.FC = () => {
                       <div><span className="text-slate-500">Max file</span><p className="font-semibold text-slate-700">{ass.maxFileSize} MB</p></div>
                     </div>
                     <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3">
-                      <button onClick={() => handleDownloadZip(ass._id)} className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-2 text-xs font-bold text-blue-600"><Download className="h-4 w-4" />ZIP</button>
+                      <button onClick={() => handleDownloadZip(ass._id)} disabled={exportingAssignmentId !== null} className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-2 text-xs font-bold text-blue-600 disabled:cursor-wait disabled:opacity-50">{exportingAssignmentId === ass._id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}ZIP</button>
                       <button onClick={() => handleExportCsv(ass._id)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-2 text-xs font-bold text-emerald-600"><FileSpreadsheet className="h-4 w-4" />CSV</button>
                       <button onClick={() => fetchDefaulters(ass)} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-2 text-xs font-bold text-amber-700"><UserX className="h-4 w-4" />Defaulters</button>
                       <button onClick={() => {
@@ -1733,9 +1760,11 @@ export const AdminDashboard: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleDownloadZip(filterAssignmentId)}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition"
+                    disabled={exportingAssignmentId !== null}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition disabled:cursor-wait disabled:opacity-50"
                   >
-                    <Download className="w-4 h-4" /> Download All as ZIP
+                    {exportingAssignmentId === filterAssignmentId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    {exportingAssignmentId === filterAssignmentId ? 'Preparing ZIP...' : 'Download All as ZIP'}
                   </button>
                   <button
                     onClick={() => handleExportCsv(filterAssignmentId)}
@@ -2252,7 +2281,48 @@ export const AdminDashboard: React.FC = () => {
               <input value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} placeholder="Search name, roll or email" className="w-full sm:w-72 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm" />
             </div>
             <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-sm">
+              <div className="space-y-3 p-3 sm:hidden">
+                {loadingStudents ? (
+                  <p className="p-8 text-center text-slate-500">Loading students...</p>
+                ) : registeredStudents.length === 0 ? (
+                  <p className="p-8 text-center text-slate-400">No registered students.</p>
+                ) : registeredStudents.map((studentRecord) => (
+                  <article key={studentRecord._id} className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
+                    <h2 className="font-semibold">{studentRecord.name}</h2>
+                    <p className="mt-2 font-mono text-sm">Roll No: {studentRecord.rollNumber}</p>
+                    <p className="break-all text-sm">Email: {studentRecord.email}</p>
+                    <p className="text-xs text-slate-500">Joined: {formatDate(studentRecord.createdAt)}</p>
+                    {(isSuperAdmin || isCROrAssistant) && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingStudent(studentRecord);
+                            setStudentEditForm({ name: studentRecord.name, rollNumber: studentRecord.rollNumber });
+                            setStudentEditModalOpen(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleResetStudentPassword(studentRecord)}
+                          disabled={resetPassStudentId === studentRecord._id}
+                        >
+                          {resetPassStudentId === studentRecord._id ? 'Sending...' : 'Reset Password'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteStudent(studentRecord._id, studentRecord.name, studentRecord.rollNumber)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+              <table className="hidden w-full min-w-[640px] text-left text-sm sm:table">
                 <thead><tr className="bg-slate-50 text-xs uppercase text-slate-600"><th className="p-4">Name</th><th className="p-4">Roll No</th><th className="p-4">Email</th><th className="p-4">Joined</th>{(isSuperAdmin || isCROrAssistant) && <th className="p-4">Actions</th>}</tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {loadingStudents ? <tr><td colSpan={(isSuperAdmin || isCROrAssistant) ? 5 : 4} className="p-8 text-center text-slate-500">Loading students...</td></tr> : registeredStudents.length === 0 ? <tr><td colSpan={(isSuperAdmin || isCROrAssistant) ? 5 : 4} className="p-8 text-center text-slate-400">No registered students.</td></tr> : registeredStudents.map((studentRecord) => (
@@ -2388,6 +2458,8 @@ export const AdminDashboard: React.FC = () => {
 
         {/* STAFF MANAGEMENT TAB */}
         {activeTab === 'staff' && isSuperAdmin && <StaffManagementSection />}
+
+        {activeTab === 'backends' && isSuperAdmin && <BackendRegistryPanel />}
 
         {/* QUIZZES TAB */}
         {activeTab === 'quizzes' && <QuizManagementSection userRole={role || undefined} />}

@@ -85,9 +85,10 @@ export const ResetPassword: React.FC = () => {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">New Password</label>
+              <label htmlFor="reset-password" className="block text-sm font-semibold text-slate-700 mb-1.5">New Password</label>
               <div className="relative">
                 <input
+                  id="reset-password"
                   type={showNewPassword ? 'text' : 'password'}
                   placeholder="••••••••••••"
                   value={newPassword}
@@ -99,6 +100,7 @@ export const ResetPassword: React.FC = () => {
                   type="button"
                   onClick={() => setShowNewPassword(!showNewPassword)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
                 >
                   {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -107,9 +109,10 @@ export const ResetPassword: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Confirm New Password</label>
+              <label htmlFor="reset-confirm-password" className="block text-sm font-semibold text-slate-700 mb-1.5">Confirm New Password</label>
               <div className="relative">
                 <input
+                  id="reset-confirm-password"
                   type={showConfirmPassword ? 'text' : 'password'}
                   placeholder="••••••••••••"
                   value={confirmPassword}
@@ -121,6 +124,7 @@ export const ResetPassword: React.FC = () => {
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                 >
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>

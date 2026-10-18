@@ -84,20 +84,21 @@ export const VerifyEmail: React.FC = () => {
             <p className="text-sm text-slate-600">{message}</p>
 
             <div className="pt-4 border-t border-slate-200 space-y-3">
-              <p className="text-xs text-slate-500 font-medium">Need a new verification link? Enter your account email address below:</p>
+              <label htmlFor="verify-resend-email" className="block text-xs text-slate-500 font-medium">Need a new verification link? Enter your account email address below:</label>
               <div className="flex gap-2">
                 <input
+                  id="verify-resend-email"
                   type="email"
                   placeholder="you@example.com"
                   value={resendEmail}
                   onChange={(e) => setResendEmail(e.target.value)}
-                  className="flex-1 px-3 py-2 border rounded-xl text-xs"
+                  className="min-w-0 flex-1 px-3 py-2 border rounded-xl text-xs"
                 />
                 <button
                   type="button"
                   onClick={handleResend}
                   disabled={isResending}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1"
+                  className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1"
                 >
                   {isResending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Resend'}
                 </button>

@@ -125,8 +125,9 @@ export const StaffRegister: React.FC = () => {
         ) : (
           <form onSubmit={submit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Account type</label>
+              <label htmlFor="staff-role" className="block text-xs font-bold text-slate-700 mb-1">Account type</label>
               <select
+                id="staff-role"
                 value={role}
                 onChange={(event) => setRole(event.target.value as 'TEACHER' | 'CR' | 'CR_ASSISTANT')}
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white"
@@ -138,30 +139,30 @@ export const StaffRegister: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Full name</label>
+              <label htmlFor="staff-name" className="block text-xs font-bold text-slate-700 mb-1">Full name</label>
               <div className="relative">
                 <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input value={name} onChange={(event) => setName(event.target.value)} required maxLength={100} className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-xl text-sm" placeholder="Your full name" />
+                <input id="staff-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={100} className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-xl text-sm" placeholder="Your full name" />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Email address</label>
+              <label htmlFor="staff-email" className="block text-xs font-bold text-slate-700 mb-1">Email address</label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-xl text-sm" placeholder="you@example.com" />
+                <input id="staff-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-xl text-sm" placeholder="you@example.com" />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
-              <PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" autoComplete="new-password" />
+              <label htmlFor="staff-password" className="block text-xs font-bold text-slate-700 mb-1">Password</label>
+              <PasswordInput id="staff-password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" autoComplete="new-password" />
               <PasswordRequirements password={password} />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Confirm password</label>
-              <PasswordInput value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" autoComplete="new-password" />
+              <label htmlFor="staff-confirm-password" className="block text-xs font-bold text-slate-700 mb-1">Confirm password</label>
+              <PasswordInput id="staff-confirm-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" autoComplete="new-password" />
             </div>
 
             <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2">

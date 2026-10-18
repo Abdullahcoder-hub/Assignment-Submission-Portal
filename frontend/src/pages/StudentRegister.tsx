@@ -156,7 +156,7 @@ export const StudentRegister: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[90vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative">
+    <div className="min-h-[90vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-x-clip">
       {/* Subtle background ambient light */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
@@ -217,12 +217,13 @@ export const StudentRegister: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Class Join Code */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-blue-700 mb-1">
+              <label htmlFor="register-join-code" className="block text-xs font-bold uppercase tracking-wider text-blue-700 mb-1">
                 Class Join Code <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <KeyRound className="w-5 h-5 text-blue-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
+                  id="register-join-code"
                   type="text"
                   placeholder="e.g. CLASS-2026-PORTAL"
                   value={joinCode}
@@ -235,8 +236,9 @@ export const StudentRegister: React.FC = () => {
 
             {/* Full Name */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
+              <label htmlFor="register-name" className="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
               <input
+                id="register-name"
                 type="text"
                 placeholder="e.g. Abdullah Waqar"
                 value={name}
@@ -248,11 +250,12 @@ export const StudentRegister: React.FC = () => {
 
             {/* Roll Number */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="register-roll-number" className="block text-xs font-bold text-slate-700 mb-1">
                 Roll Number <span className="text-slate-400 font-normal">(7 digits, e.g. 2260000)</span>
               </label>
               <div className="relative">
                 <input
+                  id="register-roll-number"
                   type="text"
                   maxLength={7}
                   placeholder="e.g. 2260000"
@@ -317,8 +320,9 @@ export const StudentRegister: React.FC = () => {
 
             {/* Email */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+              <label htmlFor="register-email" className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
               <input
+                id="register-email"
                 type="email"
                 placeholder="student@example.com"
                 value={email}
@@ -330,9 +334,10 @@ export const StudentRegister: React.FC = () => {
 
             {/* Password */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
+              <label htmlFor="register-password" className="block text-xs font-bold text-slate-700 mb-1">Password</label>
               <div className="relative">
                 <input
+                  id="register-password"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••••••"
                   value={password}
@@ -344,6 +349,7 @@ export const StudentRegister: React.FC = () => {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -352,9 +358,10 @@ export const StudentRegister: React.FC = () => {
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Confirm Password</label>
+              <label htmlFor="register-confirm-password" className="block text-xs font-bold text-slate-700 mb-1">Confirm Password</label>
               <div className="relative">
                 <input
+                  id="register-confirm-password"
                   type={showConfirmPassword ? 'text' : 'password'}
                   placeholder="••••••••••••"
                   value={confirmPassword}
@@ -366,6 +373,7 @@ export const StudentRegister: React.FC = () => {
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                 >
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>

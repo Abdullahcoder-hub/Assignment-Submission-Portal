@@ -3,9 +3,8 @@ import mongoose from 'mongoose';
 import path from 'path';
 import os from 'node:os';
 import { createReadStream } from 'node:fs';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
-import archiver from 'archiver';
 import axios from 'axios';
 import Subject from '../models/Subject.js';
 import Assignment from '../models/Assignment.js';
@@ -19,12 +18,76 @@ import { generateSubmissionId } from '../utils/submissionId.js';
 import { escapeRegex, sanitizeFileName, isFileTypeAllowed, isFileSignatureValid, isFileSizeValid, sanitizeCsvField } from '../utils/fileValidation.js';
 import { AuthRequest } from '../middleware/auth.js';
 import moment from 'moment-timezone';
-import { convertFileToPdf, mergePDFs, getGroupSequence, OfficeConversionError } from '../utils/pdfMerge.js';
-import { addMissingStudentIdentity } from '../utils/submissionPdfIdentity.js';
-import { downloadFileToPath } from '../utils/downloadFileToPath.js';
+import { DownloadSizeLimitError, downloadFileToPath } from '../utils/downloadFileToPath.js';
 import { logError } from '../utils/logger.js';
+import { convertFileToPdfFile, OfficeConversionError } from '../utils/pdfMerge.js';
+import { ZipExportLimitError, zipExportLimits } from '../utils/zipExportLimits.js';
+import { resolveExportGroups } from '../utils/resolveExportGroups.js';
 
 const timezone = process.env.TIMEZONE || 'Asia/Karachi';
+const exportableSubmissionExtensions = new Set(['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png']);
+
+const getAssignmentForCrExport = async (assignmentId: string, req: AuthRequest) => {
+  if (!mongoose.isValidObjectId(assignmentId)) {
+    return { assignment: null, status: 404 as const };
+  }
+
+  const assignment = await Assignment.findById(assignmentId)
+    .populate('subjectId', 'name code classId')
+    .lean();
+  if (!assignment) return { assignment: null, status: 404 as const };
+
+  const subject = assignment.subjectId as any;
+  const assignmentClassId = assignment.classId?.toString() || subject?.classId?.toString();
+  if (!req.admin?.assignedClassId || assignmentClassId !== req.admin.assignedClassId) {
+    return { assignment: null, status: 403 as const };
+  }
+
+  return { assignment, status: 200 as const };
+};
+
+const getSubmissionExportFailure = (submissions: Array<{
+  originalFileName: string;
+  rollNumber: string;
+  fileSize: number;
+}>): string | null => {
+  if (submissions.length > zipExportLimits.maxFiles) {
+    return `This export exceeds the ${zipExportLimits.maxFiles}-file limit.`;
+  }
+
+  let totalBytes = 0;
+  const unsupported = new Set<string>();
+  for (const submission of submissions) {
+    if (submission.fileSize > zipExportLimits.maxFileBytes) {
+      return `A submission exceeds the ${Math.floor(zipExportLimits.maxFileBytes / 1024 / 1024)} MB per-file limit.`;
+    }
+    totalBytes += submission.fileSize;
+    if (!exportableSubmissionExtensions.has(path.extname(submission.originalFileName).toLowerCase())) {
+      unsupported.add(`${submission.rollNumber}: ${submission.originalFileName}`);
+    }
+  }
+  if (totalBytes > zipExportLimits.maxTotalBytes) {
+    return `This export exceeds the ${Math.floor(zipExportLimits.maxTotalBytes / 1024 / 1024)} MB total-size limit.`;
+  }
+  if (unsupported.size > 0) {
+    return `Combined PDF export supports PDF, DOC, DOCX, JPG, JPEG, and PNG files. Unsupported submissions: ${[...unsupported].join(', ')}.`;
+  }
+  return null;
+};
+
+const getAssignmentExportSubmissions = (assignmentId: mongoose.Types.ObjectId) =>
+  Submission.find({ assignmentId })
+    .select('_id rollNumber originalFileName fileSize groupId groupName sequenceNumber')
+    .sort({ rollNumber: 1, submittedAt: 1, _id: 1 })
+    .limit(zipExportLimits.maxFiles + 1)
+    .lean();
+
+const sendExportLimitFailure = (res: Response, message: string): void => {
+  res.status(message.includes('Unsupported submissions:') ? 422 : 413).json({
+    success: false,
+    message,
+  });
+};
 
 /**
  * STUDENT SUBMISSION API
@@ -182,6 +245,32 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    let sequenceNumber: number | undefined;
+    if (assignment.submissionType === 'Group') {
+      sequenceNumber = Number(req.body.sequenceNumber);
+      const maxSequence = assignment.maxGroupSize || studentGroup?.maxGroupSize || 4;
+      if (!Number.isSafeInteger(sequenceNumber) || sequenceNumber < 1 || sequenceNumber > maxSequence) {
+        res.status(400).json({
+          success: false,
+          message: `Enter a valid group sequence number between 1 and ${maxSequence}.`,
+        });
+        return;
+      }
+
+      const sequenceAlreadyUsed = await Submission.exists({
+        assignmentId: assignment._id,
+        groupId: studentGroup._id,
+        sequenceNumber,
+      });
+      if (sequenceAlreadyUsed) {
+        res.status(409).json({
+          success: false,
+          message: `Sequence number ${sequenceNumber} is already used in ${studentGroup.groupName}. Choose a different position.`,
+        });
+        return;
+      }
+    }
+
     // 7. Upload File to Cloudinary
     //    For Group assignments: prefix the stored filename with the group name if not already present
     let storedFileName = sanitizeFileName(file.originalname);
@@ -248,7 +337,7 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
         emailStatus: 'Sent',
         groupName: groupName ?? null,
         groupId: studentGroup ? studentGroup._id : undefined,
-        sequenceNumber: req.body.sequenceNumber ? Number(req.body.sequenceNumber) : undefined,
+        sequenceNumber,
       });
     } catch (dbErr: any) {
       logError('[MongoDB Creation Error]', dbErr);
@@ -453,28 +542,6 @@ const getCloudinaryDownloadUrls = (submission: any): string[] => {
   ));
 };
 
-const fetchFileBuffer = async (fileUrls: string[]): Promise<Buffer> => {
-  let lastError: unknown;
-
-  for (const fileUrl of fileUrls.filter(Boolean)) {
-    try {
-      const response = await axios.get(fileUrl, {
-        responseType: 'arraybuffer',
-        maxRedirects: 5,
-        timeout: 30000,
-        validateStatus: (status) => status >= 200 && status < 300,
-      });
-      const buffer = Buffer.from(response.data);
-      if (buffer.length > 0) return buffer;
-      lastError = new Error('Cloudinary returned an empty file.');
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError || new Error('No Cloudinary download URL is available.');
-};
-
 /**
  * ADMIN SINGLE FILE DOWNLOAD
  */
@@ -485,6 +552,15 @@ export const downloadSingleSubmission = async (req: AuthRequest, res: Response):
 
     if (!submission) {
       res.status(404).json({ success: false, message: 'Submission record not found.' });
+      return;
+    }
+
+    const assignmentResult = await getAssignmentForCrExport(submission.assignmentId.toString(), req);
+    if (!assignmentResult.assignment) {
+      res.status(assignmentResult.status).json({
+        success: false,
+        message: assignmentResult.status === 404 ? 'Assignment not found.' : 'You are not authorized to access this submission.',
+      });
       return;
     }
 
@@ -681,193 +757,246 @@ const getGroupNumber = (groupName: string): number => {
   return match ? Number(match[1]) : 0;
 };
 
-/**
- * ADMIN DOWNLOAD ALL SUBMISSIONS AS ZIP
- */
-export const downloadAssignmentZip = async (req: AuthRequest, res: Response): Promise<void> => {
+const sendAssignmentExportPdf = async (req: AuthRequest, res: Response): Promise<void> => {
   let temporaryDirectory: string | undefined;
-  try {
-    const { assignmentId } = req.params;
+  const abortController = new AbortController();
+  const abortRequest = (): void => abortController.abort();
+  let responseStarted = false;
+  const abortOnResponseClose = (): void => {
+    if (!res.writableEnded) abortRequest();
+  };
+  req.once('aborted', abortRequest);
+  res.once('close', abortOnResponseClose);
 
-    const assignment = await Assignment.findById(assignmentId).populate('subjectId', 'name code');
-    if (!assignment) {
-      res.status(404).json({ success: false, message: 'Assignment not found.' });
+  try {
+    const assignmentId = typeof req.params.assignmentId === 'string' ? req.params.assignmentId : '';
+    const submissionId = typeof req.params.submissionId === 'string' ? req.params.submissionId : '';
+    const assignmentResult = await getAssignmentForCrExport(assignmentId, req);
+    if (!assignmentResult.assignment) {
+      res.status(assignmentResult.status).json({
+        success: false,
+        message: assignmentResult.status === 404 ? 'Assignment not found.' : 'You are not authorized to access this assignment.',
+      });
+      return;
+    }
+    const assignmentSubmissions = await getAssignmentExportSubmissions(assignmentResult.assignment._id);
+    if (assignmentSubmissions.length === 0) {
+      res.status(400).json({ success: false, message: 'No submissions found for this assignment.' });
+      return;
+    }
+    const limitFailure = getSubmissionExportFailure(assignmentSubmissions);
+    if (limitFailure) {
+      sendExportLimitFailure(res, limitFailure);
+      return;
+    }
+    if (!mongoose.isValidObjectId(submissionId)) {
+      res.status(404).json({ success: false, message: 'Submission not found for this assignment.' });
       return;
     }
 
-    const submissions = await Submission.find({ assignmentId }).sort({ submittedAt: 1, _id: 1 });
-    if (!submissions || submissions.length === 0) {
+    const submission = await Submission.findOne({
+      _id: submissionId,
+      assignmentId: assignmentResult.assignment._id,
+    })
+      .select('rollNumber cloudinarySecureUrl cloudinaryPublicId cloudinaryResourceType cloudinaryFormat originalFileName fileSize')
+      .lean();
+    if (!submission) {
+      res.status(404).json({ success: false, message: 'Submission not found for this assignment.' });
+      return;
+    }
+
+    const extension = path.extname(submission.originalFileName).toLowerCase();
+    if (!exportableSubmissionExtensions.has(extension)) {
+      res.status(422).json({ success: false, message: 'This submission file type cannot be included in a combined PDF.' });
+      return;
+    }
+
+    if (submission.fileSize > zipExportLimits.maxFileBytes) {
+      throw new ZipExportLimitError('This submission exceeds the per-file export size limit.');
+    }
+
+    if (!submission.cloudinarySecureUrl && !submission.cloudinaryPublicId) {
+      res.status(404).json({ success: false, message: 'The submission file is not available.' });
+      return;
+    }
+
+    if (abortController.signal.aborted) return;
+
+    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'assignment-export-'));
+    const sourcePath = path.join(temporaryDirectory, `source${extension}`);
+    const downloadedBytes = await downloadFileToPath(
+      [submission.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(submission)],
+      sourcePath,
+      zipExportLimits.maxFileBytes,
+      abortController.signal,
+    );
+    if (downloadedBytes > zipExportLimits.maxFileBytes) {
+      throw new ZipExportLimitError('This submission exceeds the per-file export size limit.');
+    }
+
+    let pdfPath = sourcePath;
+    if (extension !== '.pdf') {
+      pdfPath = path.join(temporaryDirectory, 'submission.pdf');
+      await convertFileToPdfFile(sourcePath, submission.originalFileName, pdfPath, abortController.signal);
+    }
+    if (abortController.signal.aborted) return;
+
+    const pdfStats = await stat(pdfPath);
+    if (pdfStats.size === 0 || pdfStats.size > zipExportLimits.maxFileBytes) {
+      throw new ZipExportLimitError('The converted PDF exceeds the per-file export size limit.');
+    }
+
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', pdfStats.size);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${sanitizeFileName(`${submission.rollNumber}.pdf`)}"`,
+    );
+    responseStarted = true;
+    await pipeline(createReadStream(pdfPath), res, { signal: abortController.signal });
+  } catch (error) {
+    if (abortController.signal.aborted) return;
+    logError('[Assignment Export PDF Error]', error);
+    if (!res.headersSent) {
+      if (error instanceof ZipExportLimitError || error instanceof DownloadSizeLimitError) {
+        res.status(413).json({ success: false, message: error.message });
+        return;
+      }
+      if (error instanceof OfficeConversionError) {
+        res.status(422).json({ success: false, message: error.message });
+        return;
+      }
+      res.status(502).json({ success: false, message: 'Unable to retrieve or convert this submission.' });
+    } else if (responseStarted && !res.destroyed) {
+      res.destroy();
+    }
+  } finally {
+    req.off('aborted', abortRequest);
+    res.off('close', abortOnResponseClose);
+    if (temporaryDirectory) {
+      await rm(temporaryDirectory, { recursive: true, force: true }).catch((cleanupError: unknown) => {
+        logError('[Assignment Export PDF Error] Failed to remove temporary files.', cleanupError);
+      });
+    }
+  }
+};
+
+export const getAssignmentExportManifest = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const assignmentId = typeof req.params.assignmentId === 'string' ? req.params.assignmentId : '';
+    const assignmentResult = await getAssignmentForCrExport(assignmentId, req);
+    if (!assignmentResult.assignment) {
+      res.status(assignmentResult.status).json({
+        success: false,
+        message: assignmentResult.status === 404 ? 'Assignment not found.' : 'You are not authorized to access this assignment.',
+      });
+      return;
+    }
+
+    const submissions = await getAssignmentExportSubmissions(assignmentResult.assignment._id);
+    if (submissions.length === 0) {
       res.status(400).json({ success: false, message: 'No submissions found for this assignment.' });
       return;
     }
 
-    const subjectCode = (assignment.subjectId as any)?.code || 'SUB';
-    const cleanAssignmentTitle = sanitizePathSegment(assignment.title);
-    const isGroupAssignment = assignment.submissionType === 'Group';
-    const accountIdentityById = new Map<string, { studentName: string; rollNumber: string }>();
-    if (isGroupAssignment) {
-      const studentIds = [...new Set(submissions.map((submission) => submission.studentId.toString()))];
-      const studentAccounts = await Student.find({ _id: { $in: studentIds } }).select('name rollNumber').lean();
-      studentAccounts.forEach((student) => {
-        accountIdentityById.set(student._id.toString(), {
-          studentName: student.name,
-          rollNumber: student.rollNumber,
-        });
-      });
-    }
-
-    const filesToArchive: Array<{ path: string; name: string }> = [];
-    const stagingDirectory = await mkdtemp(path.join(os.tmpdir(), 'assignment-zip-'));
-    temporaryDirectory = stagingDirectory;
-    let stagedFileCount = 0;
-    const getStagedFilePath = () => path.join(stagingDirectory, `${stagedFileCount++}.bin`);
-
-    if (isGroupAssignment) {
-      // Group assignment: Merge PDFs by group
-      const groupMap = new Map<string, typeof submissions>();
-      // Group submissions by groupId
-      for (const sub of submissions) {
-        if (sub.groupId) {
-          const groupId = sub.groupId.toString();
-          if (!groupMap.has(groupId)) {
-            groupMap.set(groupId, []);
-          }
-          groupMap.get(groupId)!.push(sub);
-        } else {
-          // Individual submissions in group assignment (edge case)
-          const key = 'individual';
-          if (!groupMap.has(key)) {
-            groupMap.set(key, []);
-          }
-          groupMap.get(key)!.push(sub);
-        }
-      }
-
-      // Process each group
-      for (const [groupId, groupSubmissions] of groupMap) {
-        const pdfsToMerge: Array<{ buffer: Buffer; sequenceNumber: number; studentName: string; rollNumber: string }> = [];
-        for (const sub of groupSubmissions) {
-          if (!sub.cloudinarySecureUrl && !sub.cloudinaryPublicId) continue;
-          const identity = accountIdentityById.get(sub.studentId.toString()) ?? {
-            studentName: sub.studentName,
-            rollNumber: sub.rollNumber,
-          };
-          try {
-            const originalFileName = sub.originalFileName || sub.cloudinaryFormat || 'submission';
-            const extension = path.extname(originalFileName).toLowerCase();
-            const archiveName = `${subjectCode}_${cleanAssignmentTitle}/${sanitizePathSegment(identity.rollNumber)}-${sanitizePathSegment(identity.studentName)}${extension || '.bin'}`;
-
-            if (['.zip', '.ppt', '.pptx', '.xls', '.xlsx', '.xlsm', '.xlsb', '.ods', '.csv'].includes(extension)) {
-              const stagedPath = getStagedFilePath();
-              await downloadFileToPath([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)], stagedPath);
-              filesToArchive.push({ path: stagedPath, name: archiveName });
-              continue;
-            }
-
-            const originalBuffer = await fetchFileBuffer([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)]);
-            let fileBuffer: Buffer;
-            if (extension === '.pdf') {
-              fileBuffer = originalBuffer;
-            } else {
-              fileBuffer = await convertFileToPdf(originalBuffer, originalFileName);
-            }
-            fileBuffer = await addMissingStudentIdentity(fileBuffer, identity.studentName, identity.rollNumber);
-
-            const sequenceNumber = sub.sequenceNumber ?? groupSubmissions.indexOf(sub) + 1;
-            pdfsToMerge.push({
-              buffer: fileBuffer,
-              sequenceNumber,
-              studentName: identity.studentName,
-              rollNumber: identity.rollNumber,
-            });
-          } catch (err) {
-            logError('[ZIP Group Error] Failed to prepare a submission for the group PDF.', err);
-            throw err;
-          }
-        }
-
-        // Merge PDFs if we have more than one
-        let finalBuffer: Buffer;
-        let fileName: string;
-
-        if (pdfsToMerge.length > 1) {
-          finalBuffer = await mergePDFs(pdfsToMerge);
-          const groupNumber = groupId === 'individual' ? 'Individual' : getGroupSequence(groupSubmissions[0]?.groupName || '');
-          fileName = `Group ${groupNumber}.pdf`;
-        } else if (pdfsToMerge.length === 1) {
-          finalBuffer = pdfsToMerge[0].buffer;
-          const groupNumber = groupId === 'individual' ? 'Individual' : getGroupSequence(groupSubmissions[0]?.groupName || '');
-          fileName = `Group ${groupNumber}.pdf`;
-        } else {
-          continue; // No PDFs for this group
-        }
-
-        const stagedPath = getStagedFilePath();
-        await writeFile(stagedPath, finalBuffer);
-        filesToArchive.push({
-          path: stagedPath,
-          name: `${subjectCode}_${cleanAssignmentTitle}/${fileName}`,
-        });
-      }
-    } else {
-      // Individual assignment: Keep original naming
-      const usedFileNames = new Set<string>();
-      for (const sub of submissions) {
-        if (!sub.cloudinarySecureUrl && !sub.cloudinaryPublicId) continue;
-        try {
-          const ext = path.extname(sub.originalFileName) || '.pdf';
-          const cleanRoll = sanitizePathSegment(sub.rollNumber);
-          const cleanName = sanitizePathSegment(sub.studentName);
-
-          let targetFileName = `${cleanRoll}-${cleanName}${ext}`;
-
-          let duplicateCounter = 1;
-          while (usedFileNames.has(targetFileName)) {
-            targetFileName = `${cleanRoll}-${cleanName}_${duplicateCounter}${ext}`;
-            duplicateCounter++;
-          }
-          usedFileNames.add(targetFileName);
-
-          const stagedPath = getStagedFilePath();
-          await downloadFileToPath([sub.cloudinarySecureUrl, ...getCloudinaryDownloadUrls(sub)], stagedPath);
-          filesToArchive.push({ path: stagedPath, name: `${subjectCode}_${cleanAssignmentTitle}/${targetFileName}` });
-        } catch (fileErr) {
-          logError('[ZIP Stream File Error]', fileErr);
-          throw fileErr;
-        }
-      }
-    }
-
-    if (filesToArchive.length === 0) {
-      res.status(502).json({ success: false, message: 'Cloudinary files could not be downloaded.' });
+    const limitFailure = getSubmissionExportFailure(submissions);
+    if (limitFailure) {
+      sendExportLimitFailure(res, limitFailure);
       return;
     }
 
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${subjectCode}_${cleanAssignmentTitle}_Submissions.zip"`);
+    const manifestSubmissions = submissions.map((submission) => ({
+      id: submission._id.toString(),
+      rollNumber: submission.rollNumber,
+      originalFileName: submission.originalFileName,
+      fileSize: submission.fileSize,
+      groupId: submission.groupId?.toString() || null,
+      groupName: submission.groupName || null,
+      sequenceNumber: submission.sequenceNumber ?? null,
+    }));
+    let exportSubmissions = manifestSubmissions;
+    if (assignmentResult.assignment.submissionType === 'Group') {
+      const subject = assignmentResult.assignment.subjectId as any;
+      const assignmentObjectId = assignmentResult.assignment._id;
+      const memberRollNumbers = [...new Set(submissions.map(({ rollNumber }) => rollNumber.trim()))];
+      const groups = await Group.find({
+        subjectId: subject._id,
+        $or: [{ assignmentId: assignmentObjectId }, { assignmentId: null }],
+        'members.rollNumber': {
+          $in: memberRollNumbers.map((rollNumber) => new RegExp(`^${escapeRegex(rollNumber)}$`, 'i')),
+        },
+      })
+        .select('_id assignmentId groupName members.rollNumber')
+        .lean();
 
-    const archive = archiver('zip', { zlib: { level: 1 } });
-    const archiveOutput = pipeline(archive, res);
-    for (const file of filesToArchive) {
-      archive.append(createReadStream(file.path), { name: file.name });
+      exportSubmissions = resolveExportGroups(
+        manifestSubmissions,
+        assignmentObjectId.toString(),
+        groups.map((group) => ({
+          id: group._id.toString(),
+          assignmentId: group.assignmentId?.toString() || null,
+          name: group.groupName,
+          memberRollNumbers: group.members.map((member) => member.rollNumber),
+        })),
+      );
     }
 
-    await Promise.all([archive.finalize(), archiveOutput]);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.status(200).json({
+      success: true,
+      assignment: {
+        id: assignmentResult.assignment._id,
+        title: assignmentResult.assignment.title,
+        submissionType: assignmentResult.assignment.submissionType,
+      },
+      limits: {
+        maxFiles: zipExportLimits.maxFiles,
+        maxFileBytes: zipExportLimits.maxFileBytes,
+        maxTotalBytes: zipExportLimits.maxTotalBytes,
+        maxPdfPages: zipExportLimits.maxPdfPages,
+      },
+      submissions: exportSubmissions.map((submission) => ({
+        id: submission.id,
+        rollNumber: submission.rollNumber,
+        originalFileName: submission.originalFileName,
+        fileSize: submission.fileSize,
+        groupId: submission.groupId,
+        groupName: submission.groupName,
+        sequenceNumber: submission.sequenceNumber,
+      })),
+    });
   } catch (error) {
-    logError('[Download ZIP Error]', error);
-    if (!res.headersSent) {
-      if (error instanceof OfficeConversionError) {
-        res.status(503).json({ success: false, message: error.message });
-        return;
-      }
-      res.status(500).json({ success: false, message: 'Failed to generate ZIP archive.' });
-    }
-  } finally {
-    if (temporaryDirectory) {
-      await rm(temporaryDirectory, { recursive: true, force: true }).catch((error: unknown) => {
-        logError('[Download ZIP Error] Failed to remove temporary ZIP files.', error);
+    logError('[Assignment Export Manifest Error]', error);
+    res.status(500).json({ success: false, message: 'Failed to prepare the assignment export.' });
+  }
+};
+
+export const getAssignmentExportPdf = async (req: AuthRequest, res: Response): Promise<void> => {
+  await sendAssignmentExportPdf(req, res);
+};
+
+/**
+ * Legacy server-side ZIP endpoint is disabled; exports are merged and packaged in the CR's browser.
+ */
+export const downloadAssignmentZip = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const assignmentId = typeof req.params.assignmentId === 'string' ? req.params.assignmentId : '';
+    const assignmentResult = await getAssignmentForCrExport(assignmentId, req);
+    if (!assignmentResult.assignment) {
+      res.status(assignmentResult.status).json({
+        success: false,
+        message: assignmentResult.status === 404 ? 'Assignment not found.' : 'You are not authorized to access this assignment.',
       });
+      return;
     }
+    res.status(410).json({
+      success: false,
+      message: 'Refresh the portal to use the updated client-side assignment export.',
+    });
+  } catch (error) {
+    logError('[Assignment ZIP Export Error]', error);
+    res.status(500).json({ success: false, message: 'Failed to prepare the assignment export.' });
   }
 };
 
@@ -876,7 +1005,15 @@ export const downloadAssignmentZip = async (req: AuthRequest, res: Response): Pr
  */
 export const exportAssignmentCsv = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { assignmentId } = req.params;
+    const assignmentId = typeof req.params.assignmentId === 'string' ? req.params.assignmentId : '';
+    const assignmentResult = await getAssignmentForCrExport(assignmentId, req);
+    if (!assignmentResult.assignment) {
+      res.status(assignmentResult.status).json({
+        success: false,
+        message: assignmentResult.status === 404 ? 'Assignment not found.' : 'You are not authorized to access this assignment.',
+      });
+      return;
+    }
 
     const assignment = await Assignment.findById(assignmentId).populate('subjectId', 'name code');
     if (!assignment) {

@@ -11,6 +11,7 @@
     "seed:admin": "tsx scripts/seedAdmin.ts",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
+    "test:backend-registry": "tsx --test tests/backendRegistry.test.ts",
     "test:pdf-identity": "tsx --test tests/submissionPdfIdentity.test.ts"
   },
   "dependencies": {

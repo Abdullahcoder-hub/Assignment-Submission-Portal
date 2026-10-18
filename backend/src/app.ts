@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 
 import healthRoutes from './routes/healthRoutes.js';
+import runtimeRoutes from './routes/runtimeRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import studentAuthRoutes from './routes/studentAuthRoutes.js';
 import adminSettingsRoutes from './routes/adminSettingsRoutes.js';
@@ -180,6 +181,7 @@ app.use('/', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/auth/student', studentAuthRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
+app.use('/api/runtime', runtimeRoutes);
 app.use('/api/admin/students', adminStudentRoutes);
 app.use('/api/admin/staff', adminStaffRoutes);
 app.use('/api/classes', classRoutes);

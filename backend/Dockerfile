@@ -14,10 +14,12 @@ WORKDIR /app
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libreoffice-writer \
+    qpdf \
     fonts-crosextra-caladea \
     fonts-crosextra-carlito \
     fonts-liberation \
     fonts-noto-core \
+  && qpdf --version \
   && soffice --version \
   && rm -rf /var/lib/apt/lists/*
 

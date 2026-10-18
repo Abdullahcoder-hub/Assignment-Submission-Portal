@@ -59,10 +59,11 @@ export const ForgotPassword: React.FC = () => {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email Address</label>
+              <label htmlFor="forgot-email" className="block text-sm font-semibold text-slate-700 mb-1.5">Email Address</label>
               <div className="relative">
                 <Mail className="w-5 h-5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
+                  id="forgot-email"
                   type="email"
                   placeholder="student@example.com"
                   value={email}

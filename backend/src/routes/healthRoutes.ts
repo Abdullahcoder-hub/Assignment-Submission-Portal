@@ -3,12 +3,15 @@ import mongoose from 'mongoose';
 
 const router = Router();
 
-router.get('/health', (req: Request, res: Response) => {
+router.get('/health', (_req: Request, res: Response) => {
   const databaseConnected = mongoose.connection.readyState === 1;
-  res.status(200).json({
-    success: true,
-    message: databaseConnected ? 'API is running' : 'API is running, but database is unavailable',
+  res.status(databaseConnected ? 200 : 503).json({
+    success: databaseConnected,
+    ready: databaseConnected,
+    message: databaseConnected ? 'API is ready' : 'Database is unavailable',
     database: databaseConnected ? 'connected' : 'disconnected',
+    poolId: process.env.BACKEND_POOL_ID || null,
+    apiCompatibilityVersion: process.env.API_COMPATIBILITY_VERSION || 'v1',
   });
 });
 
