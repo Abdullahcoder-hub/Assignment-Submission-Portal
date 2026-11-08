@@ -29,7 +29,7 @@ export const ForgotPassword: React.FC = () => {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center py-12 px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200 p-8 space-y-6">
+      <div className="max-w-md w-full glass-panel rounded-3xl shadow-2xl border border-slate-200/80 p-8 space-y-6">
         <div className="text-center space-y-2">
           <div className="inline-flex p-3 bg-red-600/10 text-red-600 rounded-2xl mb-1">
             <KeyRound className="w-10 h-10" />

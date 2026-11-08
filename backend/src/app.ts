@@ -198,7 +198,7 @@ app.use('/api/shared-assignments', sharedAssignmentRoutes);
 
 
 // 404 Route Handler
-app.use((req, res) => {
+app.use((_req, res) => {
   res.status(404).json({ success: false, message: 'Requested API endpoint not found.' });
 });
 

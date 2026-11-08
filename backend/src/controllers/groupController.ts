@@ -4,6 +4,7 @@ import Group from '../models/Group.js';
 import Subject from '../models/Subject.js';
 import Assignment from '../models/Assignment.js';
 import LateRequest from '../models/LateRequest.js';
+import Submission from '../models/Submission.js';
 import Student from '../models/Student.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
@@ -462,9 +463,21 @@ export const getMyGroupForSubject = async (req: AuthRequest, res: Response): Pro
         .populate('assignmentId', 'title');
     }
 
+    const submittedMembers = group && assignmentId
+      ? await Submission.find({
+          assignmentId,
+          $or: [
+            { groupId: group._id },
+            { rollNumber: { $in: group.members.map((member) => new RegExp(`^${escapeRegex(member.rollNumber.trim())}$`, 'i')) } },
+          ],
+        })
+          .select('studentName rollNumber sequenceNumber submittedAt')
+          .lean()
+      : [];
+
     res.status(200).json({
       success: true,
-      group: group || null,
+      group: group ? { ...group.toObject(), submittedMembers } : null,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch group.' });

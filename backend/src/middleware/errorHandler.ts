@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logError } from '../utils/logger.js';
 
-export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction): void => {
+export const errorHandler = (err: any, _req: Request, res: Response, _next: NextFunction): void => {
   logError('[Global Error Handler]', err);
 
   // Multer error handling

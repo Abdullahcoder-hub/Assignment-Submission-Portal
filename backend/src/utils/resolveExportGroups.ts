@@ -18,7 +18,7 @@ export const resolveExportGroups = <T extends ExportSubmissionGroup>(
   submissions: T[],
   assignmentId: string,
   groups: ExportGroupRecord[],
-): Array<T & { groupId: string; groupName: string }> =>
+): Array<Omit<T, 'groupId' | 'groupName'> & { groupId: string; groupName: string }> =>
   submissions.map((submission) => {
     const rollNumber = normalizeRollNumber(submission.rollNumber);
     const membershipMatches = groups.filter((group) =>

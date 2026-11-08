@@ -15,13 +15,14 @@ import Class from '../models/Class.js';
 import Quiz from '../models/Quiz.js';
 import TeacherAssignment from '../models/TeacherAssignment.js';
 import { deleteFromCloudinary } from '../config/cloudinary.js';
-import { findAndVerifyClassByJoinCode, verifyClassJoinCode } from '../utils/joinCode.js';
+import { findAndVerifyClassByJoinCode } from '../utils/joinCode.js';
 import { validatePasswordStrength } from '../utils/passwordValidator.js';
 import { validateRollNumber } from '../utils/rollValidator.js';
 import { sendStudentVerificationEmail, sendPasswordResetEmail } from '../config/brevo.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { getJwtSecret } from '../config/security.js';
 import { logError } from '../utils/logger.js';
+import { isLateSubmissionGrantActive } from '../utils/lateSubmissionWindow.js';
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = new OAuth2Client(googleClientId);
@@ -597,6 +598,24 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
       .populate('assignmentId', 'title deadline')
       .sort({ submittedAt: -1 })
       .lean();
+    const assignmentIds = [...new Set(mySubmissions.map((submission) => submission.assignmentId.toString()))];
+    const activeLateRequests = assignmentIds.length
+      ? await LateRequest.find({
+          studentId: (student as any)._id,
+          assignmentId: { $in: assignmentIds },
+          requestType: { $in: ['Submission', null] },
+          status: 'Approved',
+        }).select('assignmentId decidedAt').lean()
+      : [];
+    const activeGrantByAssignment = new Map(
+      activeLateRequests
+        .filter((request) => isLateSubmissionGrantActive(request.decidedAt))
+        .map((request) => [request.assignmentId?.toString(), request.decidedAt?.toISOString()])
+    );
+    const submissionsWithLateGrant = mySubmissions.map((submission) => ({
+      ...submission,
+      lateSubmissionApprovedAt: activeGrantByAssignment.get(submission.assignmentId.toString()) || null,
+    }));
 
     // Check if student is also an approved CR or Assistant
     const staffRecord = await Admin.findOne({
@@ -619,7 +638,7 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
         role: (student as any).role,
         staffRole: staffRecord ? staffRecord.role : null,
       },
-      submissions: mySubmissions,
+      submissions: submissionsWithLateGrant,
     });
 
   } catch (error) {

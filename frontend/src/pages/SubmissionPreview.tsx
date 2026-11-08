@@ -207,7 +207,7 @@ export const SubmissionPreview: React.FC = () => {
       <div className="mx-auto max-w-6xl">
         <header className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex min-w-0 items-center gap-3">
-            <FileText className="h-5 w-5 shrink-0 text-indigo-600" />
+            <FileText className="h-5 w-5 shrink-0 text-blue-600" />
             <div className="min-w-0">
               <h1 className="truncate text-sm font-bold text-slate-900">{fileName || 'Submission preview'}</h1>
               <p className="text-xs text-slate-500">File preview</p>
@@ -228,7 +228,7 @@ export const SubmissionPreview: React.FC = () => {
 
         {loading ? (
           <div className="rounded-xl bg-white p-12 text-center text-sm text-slate-600">
-            <Loader2 className="mx-auto mb-3 h-7 w-7 animate-spin text-indigo-600" />
+            <Loader2 className="mx-auto mb-3 h-7 w-7 animate-spin text-blue-600" />
             Loading submission file...
           </div>
         ) : error ? (
@@ -254,7 +254,7 @@ export const SubmissionPreview: React.FC = () => {
             <p className="text-xs text-slate-600">PowerPoint text preview</p>
             {pptxSlides.map((paragraphs, index) => (
               <article key={index} className="min-h-48 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-indigo-700">Slide {index + 1}</h2>
+                <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-blue-700">Slide {index + 1}</h2>
                 {paragraphs.length ? paragraphs.map((paragraph, paragraphIndex) => (
                   <p key={paragraphIndex} className="mb-2 whitespace-pre-wrap text-sm text-slate-800">{paragraph}</p>
                 )) : <p className="text-xs text-slate-500">No text on this slide.</p>}

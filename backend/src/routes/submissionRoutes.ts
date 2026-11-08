@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   createSubmission,
   getSubmissions,
+  getSubmissionSummary,
   getDashboardStats,
   downloadSingleSubmission,
   viewSubmissionFile,
@@ -12,7 +13,6 @@ import {
 } from '../controllers/submissionController.js';
 import { uploadMiddleware } from '../middleware/upload.js';
 import {
-  authenticateAdmin,
   authenticateStudent,
   authenticateStudentOrAdmin,
   forbidTeacher,
@@ -34,6 +34,7 @@ router.get('/:id/view', authenticateStudentOrAdmin, viewSubmissionFile);
 
 // Management endpoints (CR / CR Assistant only)
 router.get('/stats/dashboard', authenticateCROrSuperAdmin, getDashboardStats);
+router.get('/summary', authenticateCR, getSubmissionSummary);
 router.get('/', authenticateCR, getSubmissions);
 router.get('/:id/download', authenticateCR, downloadSingleSubmission);
 router.get('/defaulters/:assignmentId', authenticateCR, getDefaulters);

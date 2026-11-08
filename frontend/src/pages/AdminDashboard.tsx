@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import api, { getApiErrorMessage, getDownloadErrorMessage, openSubmissionFile } from '../api/axios';
+import React, { useState, useEffect, useRef } from 'react';
+import api, { getApiErrorMessage, getDownloadErrorMessage } from '../api/axios';
 import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest, RegisteredStudent, Class } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { ClassManagementSection } from '../components/ClassManagementSection';
@@ -11,7 +11,6 @@ import { TeacherSharedAssignmentsSection } from '../components/TeacherSharedAssi
 import { ShareAssignmentModal } from '../components/ShareAssignmentModal';
 import { StaffPasswordSettings } from '../components/StaffPasswordSettings';
 import { createClientAssignmentExport } from '../utils/clientAssignmentExport';
-import BackendRegistryPanel from '../components/BackendRegistryPanel';
 import {
   LayoutDashboard,
   BookOpen,
@@ -30,31 +29,25 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  Filter,
   Loader2,
   RefreshCw,
-  LogOut,
   FileText,
   KeyRound,
-  Settings,
   Users,
   Check,
   X,
   Crown,
-  AlertTriangle,
   UserCheck,
   UserX,
-  User,
-  Copy,
   GraduationCap,
   Shield,
   ShieldCheck,
   Share2,
-  Server,
+  Menu,
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
-  const { user, role, logout } = useAuth();
+  const { role } = useAuth();
   const isSuperAdmin = role === 'SUPER_ADMIN';
   const isTeacher = role === 'TEACHER';
   const isCR = role === 'CR';
@@ -76,7 +69,6 @@ export const AdminDashboard: React.FC = () => {
     'classes',
     'teachers',
     'staff',
-    'backends',
     'cr-applications',
     'quizzes',
     'shared-assignments',
@@ -137,14 +129,6 @@ export const AdminDashboard: React.FC = () => {
       return [];
     }
   });
-  const [loadingStats, setLoadingStats] = useState<boolean>(() => {
-    try {
-      return !sessionStorage.getItem('admin_cached_stats');
-    } catch {
-      return false;
-    }
-  });
-
   // Subjects state with instant cache rehydration
   const [subjects, setSubjects] = useState<Subject[]>(() => {
     try {
@@ -152,13 +136,6 @@ export const AdminDashboard: React.FC = () => {
       return cached ? JSON.parse(cached) : [];
     } catch {
       return [];
-    }
-  });
-  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(() => {
-    try {
-      return !sessionStorage.getItem('admin_cached_subjects');
-    } catch {
-      return false;
     }
   });
   const [subjectModalOpen, setSubjectModalOpen] = useState<boolean>(false);
@@ -173,13 +150,6 @@ export const AdminDashboard: React.FC = () => {
       return cached ? JSON.parse(cached) : [];
     } catch {
       return [];
-    }
-  });
-  const [loadingAssignments, setLoadingAssignments] = useState<boolean>(() => {
-    try {
-      return !sessionStorage.getItem('admin_cached_assignments');
-    } catch {
-      return false;
     }
   });
   const [assignmentModalOpen, setAssignmentModalOpen] = useState<boolean>(false);
@@ -209,6 +179,9 @@ export const AdminDashboard: React.FC = () => {
       return [];
     }
   });
+  const [assignmentSubmissionCounts, setAssignmentSubmissionCounts] = useState<{ assignmentId: string; submittedCount: number }[]>([]);
+  const [loadingSubmissionSummary, setLoadingSubmissionSummary] = useState<boolean>(false);
+  const [submissionSummaryLoaded, setSubmissionSummaryLoaded] = useState<boolean>(false);
   const [totalSubmissionsCount, setTotalSubmissionsCount] = useState<number>(0);
   const [exportingAssignmentId, setExportingAssignmentId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -260,7 +233,10 @@ export const AdminDashboard: React.FC = () => {
   const [filterSubjectId, setFilterSubjectId] = useState<string>('');
   const [filterAssignmentId, setFilterAssignmentId] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const isSidebarCollapsed = sidebarCollapsed && !mobileSidebarOpen;
 
   // Global notification banner
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -273,7 +249,6 @@ export const AdminDashboard: React.FC = () => {
   // FETCH DASHBOARD STATS
   const fetchDashboardStats = async () => {
     try {
-      setLoadingStats((prev) => !sessionStorage.getItem('admin_cached_stats'));
       const res = await api.get('/submissions/stats/dashboard');
       if (res.data.success) {
         setStats(res.data.stats);
@@ -285,15 +260,12 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch (err) {
       showToast('error', getApiErrorMessage(err, 'Failed to load dashboard statistics.'));
-    } finally {
-      setLoadingStats(false);
     }
   };
 
   // FETCH SUBJECTS
   const fetchSubjects = async () => {
     try {
-      setLoadingSubjects((prev) => !sessionStorage.getItem('admin_cached_subjects'));
       const res = await api.get('/subjects?includeInactive=true');
       if (res.data.success) {
         setSubjects(res.data.subjects);
@@ -303,15 +275,12 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch (err) {
       showToast('error', getApiErrorMessage(err, 'Failed to fetch subjects list.'));
-    } finally {
-      setLoadingSubjects(false);
     }
   };
 
   // FETCH ASSIGNMENTS
   const fetchAssignments = async () => {
     try {
-      setLoadingAssignments((prev) => !sessionStorage.getItem('admin_cached_assignments'));
       const res = await api.get('/assignments');
       if (res.data.success) {
         setAssignments(res.data.assignments);
@@ -321,20 +290,16 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch (err) {
       showToast('error', getApiErrorMessage(err, 'Failed to fetch assignments list.'));
-    } finally {
-      setLoadingAssignments(false);
     }
   };
 
   // FETCH SUBMISSIONS
   const fetchSubmissions = async (page: number = 1) => {
     try {
-      setLoadingSubmissions((prev) => !sessionStorage.getItem('admin_cached_submissions'));
+      setLoadingSubmissions(!sessionStorage.getItem('admin_cached_submissions'));
       let query = `/submissions?page=${page}&limit=10`;
-      if (filterSubjectId) query += `&subjectId=${filterSubjectId}`;
       if (filterAssignmentId) query += `&assignmentId=${filterAssignmentId}`;
       if (filterStatus) query += `&status=${filterStatus}`;
-      if (searchQuery) query += `&search=${encodeURIComponent(searchQuery.trim())}`;
 
       const res = await api.get(query);
       if (res.data.success) {
@@ -342,7 +307,7 @@ export const AdminDashboard: React.FC = () => {
         setTotalSubmissionsCount(res.data.total);
         setCurrentPage(res.data.page);
         setTotalPages(res.data.pages);
-        if (page === 1 && !filterSubjectId && !filterAssignmentId && !filterStatus && !searchQuery) {
+        if (page === 1 && !filterAssignmentId && !filterStatus) {
           try {
             sessionStorage.setItem('admin_cached_submissions', JSON.stringify(res.data.submissions));
           } catch {}
@@ -352,6 +317,21 @@ export const AdminDashboard: React.FC = () => {
       showToast('error', getApiErrorMessage(err, 'Failed to fetch submissions.'));
     } finally {
       setLoadingSubmissions(false);
+    }
+  };
+
+  const fetchSubmissionSummary = async () => {
+    setLoadingSubmissionSummary(true);
+    try {
+      const res = await api.get('/submissions/summary');
+      if (res.data.success) {
+        setAssignmentSubmissionCounts(res.data.assignmentCounts || []);
+        setSubmissionSummaryLoaded(true);
+      }
+    } catch (err) {
+      showToast('error', getApiErrorMessage(err, 'Failed to fetch submission summary.'));
+    } finally {
+      setLoadingSubmissionSummary(false);
     }
   };
 
@@ -673,7 +653,11 @@ export const AdminDashboard: React.FC = () => {
     } else if (activeTab === 'students') {
       fetchStudents();
     }
-  }, [activeTab, currentPage, filterSubjectId, filterAssignmentId, filterStatus, groupFilterSubject, groupFilterAssignment, groupSearch, lateFilterSubject, lateFilterStatus, lateSearch, studentSearch]);
+  }, [activeTab, currentPage, filterAssignmentId, filterStatus, groupFilterSubject, groupFilterAssignment, groupSearch, lateFilterSubject, lateFilterStatus, lateSearch, studentSearch]);
+
+  useEffect(() => {
+    if (activeTab === 'submissions') fetchSubmissionSummary();
+  }, [activeTab]);
 
   // SUBJECT MODAL SUBMIT
   const handleSaveSubject = async (e: React.FormEvent) => {
@@ -890,21 +874,94 @@ export const AdminDashboard: React.FC = () => {
     return <span className="px-2.5 py-1 text-xs font-bold bg-slate-200 text-slate-600 rounded-full">Closed</span>;
   };
 
+  useEffect(() => {
+    const collapseOnOutsideClick = (event: PointerEvent) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+        setSidebarCollapsed(true);
+        setMobileSidebarOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', collapseOnOutsideClick);
+    return () => document.removeEventListener('pointerdown', collapseOnOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileSidebarOpen(false);
+    };
+    const closeOnDesktop = () => {
+      if (window.innerWidth >= 768) setMobileSidebarOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('resize', closeOnDesktop);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('resize', closeOnDesktop);
+    };
+  }, [mobileSidebarOpen]);
+
   return (
     <div className="admin-dashboard min-h-[90vh] flex flex-col md:flex-row bg-transparent min-w-0">
       {/* SIDEBAR */}
-      <aside className="w-full md:w-64 glass-panel-dark text-slate-300 shrink-0 border-r border-white/10 backdrop-blur-xl">
-        <div className="p-6 border-b border-white/10">
-          <h2 className="text-xs uppercase tracking-wider text-blue-400 font-bold">Staff Portal</h2>
-          <p className="text-sm font-semibold text-white mt-1">Management Suite</p>
+      <button
+        type="button"
+        onClick={() => setMobileSidebarOpen(true)}
+        className="md:hidden self-start m-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+        aria-label="Open staff navigation"
+        aria-expanded={mobileSidebarOpen}
+        aria-controls="admin-dashboard-navigation"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          onClick={() => setMobileSidebarOpen(false)}
+          className="fixed inset-x-0 top-16 bottom-0 z-40 bg-slate-950/45 md:hidden"
+          aria-label="Close staff navigation"
+        />
+      )}
+      <aside
+        id="admin-dashboard-navigation"
+        ref={sidebarRef}
+        onPointerEnter={(event) => {
+          if (event.pointerType === 'mouse') setSidebarCollapsed(false);
+        }}
+        onPointerLeave={() => setSidebarCollapsed(true)}
+        data-collapsed={isSidebarCollapsed}
+        className={`glass-panel-dark fixed left-0 top-16 bottom-0 z-50 mt-0 h-[calc(100dvh-4rem)] w-64 max-w-[85vw] overflow-y-auto border-r border-white/10 text-slate-300 backdrop-blur-xl transition-[width,transform] md:sticky md:top-16 md:bottom-auto md:z-auto md:mt-0 md:h-[calc(100vh-4rem)] md:max-w-none md:translate-x-0 md:overflow-y-visible ${
+          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        } ${
+          sidebarCollapsed ? 'md:w-16' : 'md:w-64'
+        }`}
+      >
+        <div className={`p-4 border-b border-white/10 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+          {!isSidebarCollapsed && <div><h2 className="text-xs uppercase tracking-wider text-blue-400 font-bold">Staff Portal</h2><p className="text-sm font-semibold text-white mt-1">Management Suite</p></div>}
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            className="hidden md:block p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
         </div>
 
-        <nav className="p-4 space-y-1">
+        <nav
+          onClickCapture={() => setMobileSidebarOpen(false)}
+          className={`p-3 ${isSidebarCollapsed ? 'grid grid-cols-3 md:grid-cols-1 gap-1' : 'space-y-1'}`}
+        >
           <button
             onClick={() => setActiveTab('dashboard')}
+            title={isSidebarCollapsed ? 'Dashboard' : undefined}
             className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
               activeTab === 'dashboard'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                 : 'hover:bg-white/5 text-slate-400 hover:text-white'
             }`}
           >
@@ -916,9 +973,10 @@ export const AdminDashboard: React.FC = () => {
             <>
               <button
                 onClick={() => setActiveTab('classes')}
+                title={isSidebarCollapsed ? 'Classes & Sections' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'classes'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -928,9 +986,10 @@ export const AdminDashboard: React.FC = () => {
 
               <button
                 onClick={() => setActiveTab('teachers')}
+                title={isSidebarCollapsed ? 'Teacher Assignments' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'teachers'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -940,9 +999,10 @@ export const AdminDashboard: React.FC = () => {
 
               <button
                 onClick={() => setActiveTab('staff')}
+                title={isSidebarCollapsed ? 'Staff Management' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'staff'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -951,22 +1011,11 @@ export const AdminDashboard: React.FC = () => {
               </button>
 
               <button
-                onClick={() => setActiveTab('backends')}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
-                  activeTab === 'backends'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
-                }`}
-              >
-                <Server className="w-5 h-5" />
-                Backend Services
-              </button>
-
-              <button
                 onClick={() => setActiveTab('cr-applications')}
+                title={isSidebarCollapsed ? 'CR Applications' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'cr-applications'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -979,9 +1028,10 @@ export const AdminDashboard: React.FC = () => {
           {!isSuperAdmin && (
             <button
               onClick={() => setActiveTab('quizzes')}
+              title={isSidebarCollapsed ? 'Quizzes (MCQ & Written)' : undefined}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                 activeTab === 'quizzes'
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                   : 'hover:bg-white/5 text-slate-400 hover:text-white'
               }`}
             >
@@ -993,9 +1043,10 @@ export const AdminDashboard: React.FC = () => {
           {isTeacher && (
             <button
               onClick={() => setActiveTab('shared-assignments')}
+              title={isSidebarCollapsed ? 'Shared Assignments' : undefined}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                 activeTab === 'shared-assignments'
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                   : 'hover:bg-white/5 text-slate-400 hover:text-white'
               }`}
             >
@@ -1008,9 +1059,10 @@ export const AdminDashboard: React.FC = () => {
             <>
               <button
                 onClick={() => setActiveTab('subjects')}
+                title={isSidebarCollapsed ? 'Subjects' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'subjects'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -1020,9 +1072,10 @@ export const AdminDashboard: React.FC = () => {
 
               <button
                 onClick={() => setActiveTab('assignments')}
+                title={isSidebarCollapsed ? 'Assignments' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'assignments'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -1032,9 +1085,10 @@ export const AdminDashboard: React.FC = () => {
 
               <button
                 onClick={() => setActiveTab('submissions')}
+                title={isSidebarCollapsed ? 'Submissions' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'submissions'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -1044,9 +1098,10 @@ export const AdminDashboard: React.FC = () => {
 
               <button
                 onClick={() => setActiveTab('groups')}
+                title={isSidebarCollapsed ? 'Group Registrations' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'groups'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -1056,9 +1111,10 @@ export const AdminDashboard: React.FC = () => {
 
               <button
                 onClick={() => setActiveTab('late-requests')}
+                title={isSidebarCollapsed ? 'Late Requests' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'late-requests'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -1068,9 +1124,10 @@ export const AdminDashboard: React.FC = () => {
 
               <button
                 onClick={() => setActiveTab('students')}
+                title={isSidebarCollapsed ? 'Registered Students' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'students'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -1080,9 +1137,10 @@ export const AdminDashboard: React.FC = () => {
 
               <button
                 onClick={() => setActiveTab('settings')}
+                title={isSidebarCollapsed ? 'Class Join Code' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                   activeTab === 'settings'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                     : 'hover:bg-white/5 text-slate-400 hover:text-white'
                 }`}
               >
@@ -1095,9 +1153,10 @@ export const AdminDashboard: React.FC = () => {
           {!isSuperAdmin && (
             <button
               onClick={() => setActiveTab('account')}
+              title={isSidebarCollapsed ? 'My Password' : undefined}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
                 activeTab === 'account'
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
                   : 'hover:bg-white/5 text-slate-400 hover:text-white'
               }`}
             >
@@ -1140,7 +1199,7 @@ export const AdminDashboard: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className="dashboard-stat-grid grid grid-cols-1 min-[375px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
                   <button
                     type="button"
                     onClick={() => setActiveTab('classes')}
@@ -1161,34 +1220,34 @@ export const AdminDashboard: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab('teachers')}
-                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-indigo-300 transition group"
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-blue-300 transition group"
                   >
                     <div className="flex items-center justify-between w-full">
-                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-indigo-600 transition">Teacher Assignments</span>
-                      <div className="p-2 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white rounded-xl text-indigo-600 transition shadow-sm">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-blue-600 transition">Teacher Assignments</span>
+                      <div className="p-2 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white rounded-xl text-blue-600 transition shadow-sm">
                         <ShieldCheck className="w-5 h-5" />
                       </div>
                     </div>
                     <div className="mt-4">
                       <p className="text-xs text-slate-500">Link teachers to class + subject</p>
-                      <p className="text-sm font-bold text-indigo-600 mt-1">Assign Teachers &rarr;</p>
+                      <p className="text-sm font-bold text-blue-600 mt-1">Assign Teachers &rarr;</p>
                     </div>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveTab('staff')}
-                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-purple-300 transition group"
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-blue-300 transition group"
                   >
                     <div className="flex items-center justify-between w-full">
-                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-purple-600 transition">Staff &amp; CR Accounts</span>
-                      <div className="p-2 bg-purple-50 group-hover:bg-purple-600 group-hover:text-white rounded-xl text-purple-600 transition shadow-sm">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-blue-600 transition">Staff &amp; CR Accounts</span>
+                      <div className="p-2 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white rounded-xl text-blue-600 transition shadow-sm">
                         <Shield className="w-5 h-5" />
                       </div>
                     </div>
                     <div className="mt-4">
                       <p className="text-xs text-slate-500">Approve &amp; manage staff accounts</p>
-                      <p className="text-sm font-bold text-purple-600 mt-1">Manage Staff &rarr;</p>
+                      <p className="text-sm font-bold text-blue-600 mt-1">Manage Staff &rarr;</p>
                     </div>
                   </button>
 
@@ -1221,7 +1280,7 @@ export const AdminDashboard: React.FC = () => {
 
                 <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl space-y-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                    <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
                       <FileText className="w-6 h-6" />
                     </div>
                     <div>
@@ -1246,7 +1305,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+                <div className="dashboard-stat-grid grid grid-cols-1 min-[375px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
                   <button
                     type="button"
                     onClick={() => setActiveTab('subjects')}
@@ -1266,11 +1325,11 @@ export const AdminDashboard: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab('assignments')}
-                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-indigo-300 transition group"
+                    className="text-left glass-panel p-5 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col justify-between cursor-pointer card-3d hover:border-blue-300 transition group"
                   >
                     <div className="flex items-center justify-between w-full">
-                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-indigo-600 transition">Assignments</span>
-                      <div className="p-2 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white rounded-xl text-indigo-600 transition shadow-sm">
+                      <span className="text-xs font-bold uppercase text-slate-500 group-hover:text-blue-600 transition">Assignments</span>
+                      <div className="p-2 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white rounded-xl text-blue-600 transition shadow-sm">
                         <FileCheck className="w-5 h-5" />
                       </div>
                     </div>
@@ -1617,7 +1676,7 @@ export const AdminDashboard: React.FC = () => {
                               Individual Only
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 font-bold bg-purple-100 text-purple-800 rounded-md">
+                            <span className="px-2 py-0.5 font-bold bg-blue-100 text-blue-800 rounded-md">
                               Group (Max {ass.maxGroupSize || 4})
                             </span>
                           )}
@@ -1640,7 +1699,7 @@ export const AdminDashboard: React.FC = () => {
                           <button
                             title="Share Submissions with Teacher"
                             onClick={() => setSharingAssignment(ass)}
-                            className="p-1.5 hover:bg-indigo-100 text-indigo-600 rounded-lg transition"
+                            className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition"
                           >
                             <Share2 className="w-4 h-4" />
                           </button>
@@ -1719,7 +1778,7 @@ export const AdminDashboard: React.FC = () => {
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div><span className="text-slate-500">Deadline</span><p className="font-semibold text-slate-700">{formatDate(ass.deadline)}</p></div>
                       <div><span className="text-slate-500">Mode</span><p className="font-semibold text-slate-700">{ass.submissionType === 'Individual' ? 'Individual' : `Group (${(ass as any).minGroupSize || 1}-${ass.maxGroupSize || 4})`}</p></div>
-                      <div><span className="text-slate-500">Late allowed</span><p className="font-semibold text-slate-700">{ass.allowLateSubmission ? 'Yes' : 'No'}</p></div>
+                      <div><span className="text-slate-500">Late access</span><p className="font-semibold text-slate-700">Individual approval required</p></div>
                       <div><span className="text-slate-500">Max file</span><p className="font-semibold text-slate-700">{ass.maxFileSize} MB</p></div>
                     </div>
                     <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3">
@@ -1776,70 +1835,82 @@ export const AdminDashboard: React.FC = () => {
               )}
             </div>
 
-            {/* Filter Bar */}
-            <div className="glass-panel p-4 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search name or roll #"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && fetchSubmissions(1)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500"
-                />
+            {!filterAssignmentId && (
+              <div className="space-y-4">
+                {filterSubjectId && (
+                  <button
+                    onClick={() => {
+                      setFilterSubjectId('');
+                      setCurrentPage(1);
+                    }}
+                    className="text-sm font-semibold text-blue-700 hover:text-blue-900"
+                  >
+                    ← All Subjects
+                  </button>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {(filterSubjectId
+                    ? assignments.filter((assignment) => {
+                        const subjectId = typeof assignment.subjectId === 'string' ? assignment.subjectId : assignment.subjectId?._id;
+                        return subjectId === filterSubjectId;
+                      })
+                    : subjects.filter((subject) =>
+                        assignments.some((assignment) => {
+                          const subjectId = typeof assignment.subjectId === 'string' ? assignment.subjectId : assignment.subjectId?._id;
+                          return subjectId === subject._id;
+                        })
+                      )
+                  ).map((item) => {
+                    if (filterSubjectId) {
+                      const assignment = item as Assignment;
+                      const count = assignmentSubmissionCounts.find((entry) => entry.assignmentId === assignment._id)?.submittedCount || 0;
+                      return (
+                        <button
+                          key={assignment._id}
+                          onClick={() => {
+                            setFilterAssignmentId(assignment._id);
+                            setCurrentPage(1);
+                          }}
+                          className="text-left bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition"
+                        >
+                          <span className="text-xs font-semibold text-slate-500">Assignment</span>
+                          <h2 className="mt-1 font-bold text-slate-900">{assignment.title}</h2>
+                          <p className="mt-3 text-sm font-semibold text-blue-700">
+                            {loadingSubmissionSummary
+                              ? 'Loading submission count...'
+                              : submissionSummaryLoaded ? `${count} ${count === 1 ? 'student' : 'students'} submitted` : 'Count unavailable'}
+                          </p>
+                        </button>
+                      );
+                    }
+
+                    const subject = item as Subject;
+                    return (
+                      <button
+                        key={subject._id}
+                        onClick={() => setFilterSubjectId(subject._id)}
+                        className="text-left bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition"
+                      >
+                        <span className="text-xs font-semibold text-blue-700">{subject.code}</span>
+                        <h2 className="mt-1 font-bold text-slate-900">{subject.name}</h2>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+            )}
 
-              <select
-                value={filterSubjectId}
-                onChange={(e) => {
-                  setFilterSubjectId(e.target.value);
-                  setFilterAssignmentId('');
-                  setCurrentPage(1);
-                }}
-                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
-              >
-                <option value="">All Subjects</option>
-                {subjects.map((sub) => (
-                  <option key={sub._id} value={sub._id}>
-                    {sub.name} ({sub.code})
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filterAssignmentId}
-                onChange={(e) => {
-                  setFilterAssignmentId(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
-              >
-                <option value="">All Assignments</option>
-                {assignments
-                  .filter((a) => !filterSubjectId || (a.subjectId as any)?._id === filterSubjectId || a.subjectId === filterSubjectId)
-                  .map((ass) => (
-                    <option key={ass._id} value={ass._id}>
-                      {ass.title}
-                    </option>
-                  ))}
-              </select>
-
-              <select
-                value={filterStatus}
-                onChange={(e) => {
-                  setFilterStatus(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
-              >
-                <option value="">All Statuses</option>
-                <option value="Submitted">On Time</option>
-                <option value="Late">Late</option>
-                <option value="Submitted Late — CR Approved">Submitted Late — CR Approved</option>
-              </select>
-            </div>
-
+            {filterAssignmentId && (
+            <>
+            <button
+              onClick={() => {
+                setFilterAssignmentId('');
+                setCurrentPage(1);
+              }}
+              className="text-sm font-semibold text-blue-700 hover:text-blue-900"
+            >
+              ← Back to {subjects.find((subject) => subject._id === filterSubjectId)?.name || 'Assignments'}
+            </button>
             {/* Submissions Table */}
             <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-x-auto">
               <table className="hidden sm:table w-full text-left text-sm border-collapse">
@@ -1869,7 +1940,7 @@ export const AdminDashboard: React.FC = () => {
                   ) : submissions.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="text-center py-10 text-slate-400">
-                        No submissions match the selected filters.
+                        {filterStatus ? 'No submissions match this status.' : 'No submissions found for this assignment.'}
                       </td>
                     </tr>
                   ) : (
@@ -1944,6 +2015,8 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
+            </>
+            )}
           </div>
         )}
 
@@ -2207,7 +2280,7 @@ export const AdminDashboard: React.FC = () => {
                             <X className="w-3 h-3" /> Reject
                           </button>
                           {req.requestType === 'Quiz' && req.requestCount === 3 && req.status !== 'Pending' && req.attemptStatus === 'locked' && (
-                            <button onClick={() => handleGrantFourthQuizAttempt(req)} className="px-3 py-1.5 bg-indigo-600 text-white font-bold text-xs rounded-lg">
+                            <button onClick={() => handleGrantFourthQuizAttempt(req)} className="px-3 py-1.5 bg-blue-600 text-white font-bold text-xs rounded-lg">
                               Allow 4th Attempt
                             </button>
                           )}
@@ -2228,7 +2301,7 @@ export const AdminDashboard: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <button onClick={() => handleLateDecision(req._id, 'Approved')} disabled={req.status !== 'Pending'} className="py-2 bg-emerald-600 disabled:bg-emerald-300 text-white text-xs font-bold rounded-lg">{req.requestType === 'GroupRegistration' ? 'Allow Group Registration' : req.requestType === 'Quiz' ? 'Allow Quiz Access' : 'Allow Submission'}</button>
                       <button onClick={() => { setRejectingRequestId(req._id); setRejectionReasonInput(''); }} disabled={req.status !== 'Pending'} className="py-2 bg-red-600 disabled:bg-red-300 text-white text-xs font-bold rounded-lg">Reject</button>
-                      {req.requestType === 'Quiz' && req.requestCount === 3 && req.status !== 'Pending' && req.attemptStatus === 'locked' && <button onClick={() => handleGrantFourthQuizAttempt(req)} className="col-span-2 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg">Allow 4th Attempt</button>}
+                      {req.requestType === 'Quiz' && req.requestCount === 3 && req.status !== 'Pending' && req.attemptStatus === 'locked' && <button onClick={() => handleGrantFourthQuizAttempt(req)} className="col-span-2 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg">Allow 4th Attempt</button>}
                     </div>
                   </article>
                 ))}
@@ -2301,6 +2374,7 @@ export const AdminDashboard: React.FC = () => {
                             setStudentEditForm({ name: studentRecord.name, rollNumber: studentRecord.rollNumber });
                             setStudentEditModalOpen(true);
                           }}
+                          className="min-h-10 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-blue-700"
                         >
                           Edit
                         </button>
@@ -2308,12 +2382,14 @@ export const AdminDashboard: React.FC = () => {
                           type="button"
                           onClick={() => handleResetStudentPassword(studentRecord)}
                           disabled={resetPassStudentId === studentRecord._id}
+                          className="min-h-10 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-700 disabled:opacity-50"
                         >
                           {resetPassStudentId === studentRecord._id ? 'Sending...' : 'Reset Password'}
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteStudent(studentRecord._id, studentRecord.name, studentRecord.rollNumber)}
+                          className="min-h-10 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-700"
                         >
                           Delete
                         </button>
@@ -2458,8 +2534,6 @@ export const AdminDashboard: React.FC = () => {
 
         {/* STAFF MANAGEMENT TAB */}
         {activeTab === 'staff' && isSuperAdmin && <StaffManagementSection />}
-
-        {activeTab === 'backends' && isSuperAdmin && <BackendRegistryPanel />}
 
         {/* QUIZZES TAB */}
         {activeTab === 'quizzes' && <QuizManagementSection userRole={role || undefined} />}
@@ -2712,18 +2786,18 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 {assignmentForm.submissionType === 'Group' && (
-                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl space-y-3">
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
                     <div>
-                      <label className="block text-xs font-bold text-purple-900 mb-1">
+                      <label className="block text-xs font-bold text-blue-900 mb-1">
                         Group Registration Deadline
                       </label>
                       <input
                         type="datetime-local"
                         value={assignmentForm.groupDeadline}
                         onChange={(e) => setAssignmentForm({ ...assignmentForm, groupDeadline: e.target.value })}
-                        className="w-full px-3 py-2 border border-purple-300 rounded-xl text-xs font-semibold bg-white"
+                        className="w-full px-3 py-2 border border-blue-300 rounded-xl text-xs font-semibold bg-white"
                       />
-                      <p className="text-[10px] text-purple-700 mt-0.5">
+                      <p className="text-[10px] text-blue-700 mt-0.5">
                         Students must form groups before this time (defaults to assignment deadline if empty).
                       </p>
                     </div>
@@ -2735,9 +2809,9 @@ export const AdminDashboard: React.FC = () => {
                         onChange={(e) =>
                           setAssignmentForm({ ...assignmentForm, allowLateGroupRegistration: e.target.checked })
                         }
-                        className="rounded text-purple-600"
+                        className="rounded text-blue-600"
                       />
-                      <label htmlFor="allowLateGroup" className="text-xs font-bold text-purple-900">
+                      <label htmlFor="allowLateGroup" className="text-xs font-bold text-blue-900">
                         Allow Late Group Registration after Group Deadline
                       </label>
                     </div>
@@ -2769,20 +2843,9 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-2 pt-1">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="allowLate"
-                      checked={assignmentForm.allowLateSubmission}
-                      onChange={(e) =>
-                        setAssignmentForm({ ...assignmentForm, allowLateSubmission: e.target.checked })
-                      }
-                      className="rounded text-blue-600"
-                    />
-                    <label htmlFor="allowLate" className="text-xs font-bold text-slate-700">
-                      Allow Late Submissions after Deadline
-                    </label>
-                  </div>
+                  <p className="text-xs text-slate-600">
+                    Late upload or re-upload needs individual CR/Admin approval and is available to that student for 5 minutes.
+                  </p>
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"

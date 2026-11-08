@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import Subject from '../models/Subject.js';
 import Assignment from '../models/Assignment.js';
 import Submission from '../models/Submission.js';

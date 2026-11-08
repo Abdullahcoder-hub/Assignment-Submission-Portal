@@ -1,5 +1,4 @@
-import { Request, Response } from 'express';
-import mongoose from 'mongoose';
+import { Response } from 'express';
 import TeacherAssignment from '../models/TeacherAssignment.js';
 import Admin from '../models/Admin.js';
 import Class from '../models/Class.js';

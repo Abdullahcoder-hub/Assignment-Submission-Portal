@@ -12,7 +12,6 @@ import {
   Users,
   Search,
   Loader2,
-  ShieldCheck,
 } from 'lucide-react';
 
 export const TeacherAssignmentSection: React.FC<{ isSuperAdmin?: boolean }> = ({ isSuperAdmin = true }) => {
@@ -128,7 +127,7 @@ export const TeacherAssignmentSection: React.FC<{ isSuperAdmin?: boolean }> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-indigo-600" />
+            <GraduationCap className="w-5 h-5 text-blue-600" />
             Teacher Subject & Class Assignments
           </h2>
           <p className="text-sm text-slate-500 mt-1">
@@ -140,7 +139,7 @@ export const TeacherAssignmentSection: React.FC<{ isSuperAdmin?: boolean }> = ({
         {isSuperAdmin && teachers.length > 0 && (
           <button
             onClick={handleOpenAssign}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm transition"
           >
             <Plus className="w-4 h-4" />
             Assign Teacher
@@ -173,7 +172,7 @@ export const TeacherAssignmentSection: React.FC<{ isSuperAdmin?: boolean }> = ({
             placeholder="Search by teacher, class, subject..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
@@ -189,7 +188,7 @@ export const TeacherAssignmentSection: React.FC<{ isSuperAdmin?: boolean }> = ({
       {/* Table of Assignments */}
       {loading ? (
         <div className="text-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
           <p className="text-sm text-slate-500 mt-2">Loading teacher assignments...</p>
         </div>
       ) : filtered.length === 0 ? (
@@ -220,7 +219,7 @@ export const TeacherAssignmentSection: React.FC<{ isSuperAdmin?: boolean }> = ({
                     <tr key={a._id} className="hover:bg-slate-50/80 transition">
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                          <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
                             {teacher?.name?.[0] || 'T'}
                           </div>
                           <div>
@@ -284,7 +283,7 @@ export const TeacherAssignmentSection: React.FC<{ isSuperAdmin?: boolean }> = ({
                   required
                   value={selectedTeacherId}
                   onChange={(e) => setSelectedTeacherId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">-- Choose Teacher --</option>
                   {teachers.map((t) => (
@@ -301,7 +300,7 @@ export const TeacherAssignmentSection: React.FC<{ isSuperAdmin?: boolean }> = ({
                   required
                   value={selectedClassId}
                   onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">-- Choose Class --</option>
                   {classes.map((c) => (
@@ -318,7 +317,7 @@ export const TeacherAssignmentSection: React.FC<{ isSuperAdmin?: boolean }> = ({
                   required
                   value={selectedSubjectId}
                   onChange={(e) => setSelectedSubjectId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">-- Choose Subject --</option>
                   {subjects.map((s) => (
@@ -340,7 +339,7 @@ export const TeacherAssignmentSection: React.FC<{ isSuperAdmin?: boolean }> = ({
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition disabled:opacity-50"
                 >
                   {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   Assign Teacher

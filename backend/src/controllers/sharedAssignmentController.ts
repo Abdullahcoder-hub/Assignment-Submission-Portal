@@ -8,7 +8,6 @@ import archiver from 'archiver';
 import moment from 'moment-timezone';
 import SharedAssignment from '../models/SharedAssignment.js';
 import Assignment from '../models/Assignment.js';
-import Subject from '../models/Subject.js';
 import Class from '../models/Class.js';
 import Admin from '../models/Admin.js';
 import Submission from '../models/Submission.js';

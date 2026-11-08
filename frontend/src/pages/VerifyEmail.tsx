@@ -59,7 +59,7 @@ export const VerifyEmail: React.FC = () => {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center py-12 px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200 p-8 text-center space-y-6">
+      <div className="max-w-md w-full glass-panel rounded-3xl shadow-2xl border border-slate-200/80 p-8 text-center space-y-6">
         {loading ? (
           <div className="space-y-3 py-6">
             <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto" />

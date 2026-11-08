@@ -22,6 +22,7 @@ export const ClassManagementSection: React.FC<{ isSuperAdmin?: boolean }> = ({ i
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [deletingClassId, setDeletingClassId] = useState<string | null>(null);
 
   // Modal State
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -142,6 +143,26 @@ export const ClassManagementSection: React.FC<{ isSuperAdmin?: boolean }> = ({ i
       }
     } catch (err: any) {
       setFeedback({ success: false, message: 'Failed to toggle join code.' });
+    }
+  };
+
+  const handleDeleteClass = async (classItem: Class) => {
+    if (!window.confirm(`Delete "${classItem.name}"? Classes with students or linked academic records cannot be deleted.`)) return;
+
+    setDeletingClassId(classItem._id);
+    try {
+      const res = await api.delete(`/classes/${classItem._id}`);
+      if (res.data.success) {
+        setFeedback({ success: true, message: 'Class deleted successfully.' });
+        await fetchClasses();
+      }
+    } catch (err: any) {
+      setFeedback({
+        success: false,
+        message: err.response?.data?.message || 'Failed to delete class.',
+      });
+    } finally {
+      setDeletingClassId(null);
     }
   };
 
@@ -278,12 +299,25 @@ export const ClassManagementSection: React.FC<{ isSuperAdmin?: boolean }> = ({ i
                     </div>
 
                     {isSuperAdmin && (
+                      <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleOpenEdit(c)}
+                        title="Edit Class"
                         className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
+                      <button
+                        onClick={() => handleDeleteClass(c)}
+                        disabled={deletingClassId === c._id}
+                        title="Delete Class"
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                      >
+                        {deletingClassId === c._id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Trash2 className="w-4 h-4" />}
+                      </button>
+                      </div>
                     )}
                   </div>
 
@@ -327,7 +361,7 @@ export const ClassManagementSection: React.FC<{ isSuperAdmin?: boolean }> = ({ i
 
                     <div className="flex items-center justify-between text-slate-600">
                       <span className="flex items-center gap-1.5 text-slate-500">
-                        <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                        <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
                         CR Assistant:
                       </span>
                       <span className="font-semibold text-slate-800 truncate max-w-[140px]">{assistantName}</span>
@@ -335,10 +369,10 @@ export const ClassManagementSection: React.FC<{ isSuperAdmin?: boolean }> = ({ i
 
                     <div className="flex items-center justify-between text-slate-600">
                       <span className="flex items-center gap-1.5 text-slate-500">
-                        <Users className="w-3.5 h-3.5 text-indigo-500" />
+                        <Users className="w-3.5 h-3.5 text-blue-500" />
                         Enrolled Students:
                       </span>
-                      <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">
+                      <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
                         {c.studentCount || 0}
                       </span>
                     </div>

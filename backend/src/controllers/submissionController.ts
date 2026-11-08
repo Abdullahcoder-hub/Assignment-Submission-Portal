@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import mongoose from 'mongoose';
 import path from 'path';
 import os from 'node:os';
@@ -23,8 +23,21 @@ import { logError } from '../utils/logger.js';
 import { convertFileToPdfFile, OfficeConversionError } from '../utils/pdfMerge.js';
 import { ZipExportLimitError, zipExportLimits } from '../utils/zipExportLimits.js';
 import { resolveExportGroups } from '../utils/resolveExportGroups.js';
+import { LATE_SUBMISSION_WINDOW_MS } from '../utils/lateSubmissionWindow.js';
 
 const timezone = process.env.TIMEZONE || 'Asia/Karachi';
+
+const getClassSubmissionScope = async (assignedClassId: string) => {
+  const classId = new mongoose.Types.ObjectId(assignedClassId);
+  const subjectIds = await Subject.find({ classId }).distinct('_id');
+  const assignmentIds = await Assignment.find({
+    $or: [{ classId }, { subjectId: { $in: subjectIds } }],
+  }).distinct('_id');
+
+  return {
+    $or: [{ classId }, { assignmentId: { $in: assignmentIds } }],
+  };
+};
 const exportableSubmissionExtensions = new Set(['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png']);
 
 const getAssignmentForCrExport = async (assignmentId: string, req: AuthRequest) => {
@@ -105,10 +118,10 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
     const { subjectId, assignmentId } = req.body;
     const file = req.file;
 
-    const studentId = req.student.id;
-    const studentName = req.student.name;
-    const rollNumber = req.student.rollNumber;
-    const email = req.student.email;
+    let studentId = req.student.id;
+    let studentName = req.student.name;
+    let rollNumber = req.student.rollNumber;
+    let email = req.student.email;
 
     if (!subjectId) {
       res.status(400).json({ success: false, message: 'Please select a subject.' });
@@ -145,65 +158,86 @@ export const createSubmission = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    // 4. Deadline Check
-    const now = new Date();
-    const isPastDeadline = now > new Date(assignment.deadline);
-    let submissionStatus: 'Submitted' | 'Late' | 'Submitted Late — CR Approved' = 'Submitted';
-
-    if (isPastDeadline) {
-      if (assignment.allowLateSubmission) {
-        submissionStatus = 'Late';
-      } else {
-        // Check if student or group has an approved late request for this assignment
-        const group = await Group.findOne({ subjectId, 'members.studentId': studentId });
-        const filter: any = { assignmentId, status: 'Approved' };
-        if (group) {
-          filter.$or = [{ groupId: group._id }, { studentId }];
-        } else {
-          filter.studentId = studentId;
-        }
-
-        const approvedLateReq = await LateRequest.findOne(filter);
-        if (!approvedLateReq) {
-          res.status(400).json({
-            success: false,
-            isPastDeadline: true,
-            lateRequestRequired: true,
-            message: 'Submission deadline has passed. Please submit a Late Submission Request to your CR for approval.',
-          });
-          return;
-        }
-
-        submissionStatus = 'Submitted Late — CR Approved';
-      }
-    }
-
-    const isLate = isPastDeadline;
-
-    // 5. Group Enforcement — block Group-type submissions if student is not in a group
-    let groupName: string | null = null;
     let studentGroup: any = null;
+    let groupName: string | null = null;
     if (assignment.submissionType === 'Group') {
-      const cleanRollForGroup = rollNumber.trim();
       studentGroup = await Group.findOne({
         subjectId,
         assignmentId,
         $or: [
-          { 'members.studentId': studentId },
-          { 'members.rollNumber': { $regex: new RegExp(`^${escapeRegex(cleanRollForGroup)}$`, 'i') } },
+          { 'members.studentId': req.student.id },
+          { 'members.rollNumber': { $regex: new RegExp(`^${escapeRegex(req.student.rollNumber.trim())}$`, 'i') } },
         ],
       });
 
       if (!studentGroup) {
         res.status(400).json({
           success: false,
-          message:
-            'You must be registered in a group for this assignment before submitting. Please create or join a group first.',
+          message: 'You must be registered in a group for this assignment before submitting.',
         });
         return;
       }
 
+      const requestedStudentId = String(req.body.submissionForStudentId || req.student.id);
+      if (requestedStudentId !== req.student.id) {
+        const targetStudent = await Student.findById(requestedStudentId)
+          .select('name rollNumber email classId')
+          .lean();
+        const isGroupMember = targetStudent && studentGroup.members.some((member: any) =>
+          member.studentId?.toString() === requestedStudentId
+          || member.rollNumber.toLowerCase() === targetStudent.rollNumber.toLowerCase()
+        );
+        if (!targetStudent || !isGroupMember) {
+          res.status(403).json({ success: false, message: 'You can only submit for a registered member of your assignment group.' });
+          return;
+        }
+        studentId = targetStudent._id.toString();
+        studentName = targetStudent.name;
+        rollNumber = targetStudent.rollNumber;
+        email = targetStudent.email;
+      }
       groupName = studentGroup.groupName;
+    } else if (req.body.submissionForStudentId && req.body.submissionForStudentId !== req.student.id) {
+      res.status(400).json({ success: false, message: 'Submitting for another student is only available for group assignments.' });
+      return;
+    }
+
+    // 4. Deadline Check
+    const now = new Date();
+    const isPastDeadline = now > new Date(assignment.deadline);
+    let submissionStatus: 'Submitted' | 'Late' | 'Submitted Late — CR Approved' = 'Submitted';
+
+    if (isPastDeadline) {
+      const approvalCutoff = new Date(now.getTime() - LATE_SUBMISSION_WINDOW_MS);
+      const approvedLateReq = await LateRequest.findOne({
+        assignmentId,
+        studentId,
+        requestType: { $in: ['Submission', null] },
+        status: 'Approved',
+        decidedAt: { $gt: approvalCutoff, $lte: now },
+      });
+      if (!approvedLateReq) {
+        res.status(400).json({
+          success: false,
+          isPastDeadline: true,
+          lateRequestRequired: true,
+          message: 'The deadline has passed or your 5-minute approval window expired. Request late access from your CR.',
+        });
+        return;
+      }
+
+      submissionStatus = 'Submitted Late — CR Approved';
+    }
+
+    const isLate = isPastDeadline;
+
+    // 5. Group Enforcement — block Group-type submissions if student is not in a group
+    if (assignment.submissionType === 'Group') {
+      if (!studentGroup.members.some((member: any) => member.studentId?.toString() === studentId
+        || member.rollNumber.toLowerCase() === rollNumber.trim().toLowerCase())) {
+        res.status(403).json({ success: false, message: 'The selected student is not in your assignment group.' });
+        return;
+      }
     }
 
     // 6. File Validation (Type & Size)
@@ -437,7 +471,10 @@ export const getSubmissions = async (req: AuthRequest, res: Response): Promise<v
     const filter: any = {};
 
     if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId) {
-      filter.classId = req.admin.assignedClassId;
+      filter.$and = [
+        ...(filter.$and || []),
+        await getClassSubmissionScope(req.admin.assignedClassId),
+      ];
     }
 
     if (subjectId) filter.subjectId = subjectId;
@@ -473,6 +510,25 @@ export const getSubmissions = async (req: AuthRequest, res: Response): Promise<v
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch submissions.' });
+  }
+};
+
+export const getSubmissionSummary = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const filter: Record<string, unknown> = {};
+    if (['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') && req.admin?.assignedClassId) {
+      Object.assign(filter, await getClassSubmissionScope(req.admin.assignedClassId));
+    }
+
+    const assignmentCounts = await Submission.aggregate([
+      { $match: filter },
+      { $group: { _id: '$assignmentId', submittedCount: { $sum: 1 } } },
+      { $project: { _id: 0, assignmentId: { $toString: '$_id' }, submittedCount: 1 } },
+    ]);
+
+    res.status(200).json({ success: true, assignmentCounts });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch submission summary.' });
   }
 };
 
@@ -735,6 +791,26 @@ export const deleteStudentSubmission = async (req: AuthRequest, res: Response): 
       return;
     }
 
+    const now = new Date();
+    const assignment = await Assignment.findById(submission.assignmentId).select('deadline').lean();
+    if (!assignment) {
+      res.status(404).json({ success: false, message: 'The linked assignment no longer exists.' });
+      return;
+    }
+    if (now > assignment.deadline) {
+      const approvedLateRequest = await LateRequest.findOne({
+        assignmentId: submission.assignmentId,
+        studentId,
+        requestType: { $in: ['Submission', null] },
+        status: 'Approved',
+        decidedAt: { $gt: new Date(now.getTime() - LATE_SUBMISSION_WINDOW_MS), $lte: now },
+      }).select('_id').lean();
+      if (!approvedLateRequest) {
+        res.status(403).json({ success: false, message: 'The deadline has passed. Delete or re-upload is allowed only during your 5-minute CR/Admin approval window.' });
+        return;
+      }
+    }
+
     // Delete Cloudinary file
     if (submission.cloudinaryPublicId) {
       await deleteFromCloudinary(submission.cloudinaryPublicId, submission.cloudinaryResourceType);
@@ -750,11 +826,6 @@ export const deleteStudentSubmission = async (req: AuthRequest, res: Response): 
     logError('[Student Delete Error]', error);
     res.status(500).json({ success: false, message: 'Failed to delete submission for re-upload.' });
   }
-};
-
-const getGroupNumber = (groupName: string): number => {
-  const match = groupName?.match(/(?:Group|Team|#)?\s*(\d+)/i);
-  return match ? Number(match[1]) : 0;
 };
 
 const sendAssignmentExportPdf = async (req: AuthRequest, res: Response): Promise<void> => {

@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import mongoose, { HydratedDocument } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
 import CRApplication from '../models/CRApplication.js';
 import Student from '../models/Student.js';
 import Class from '../models/Class.js';

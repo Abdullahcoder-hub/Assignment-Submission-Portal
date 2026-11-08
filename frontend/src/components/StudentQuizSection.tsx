@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../api/axios';
-import { Quiz, QuizSubmission, Subject, Class } from '../types';
+import { Quiz, Subject } from '../types';
 import {
   FileCheck,
   Clock,
@@ -10,8 +10,6 @@ import {
   Download,
   HelpCircle,
   Loader2,
-  BookOpen,
-  Send,
   Check,
   AlertTriangle,
   RefreshCw,
@@ -19,7 +17,6 @@ import {
 
 export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName?: string; rollNumber?: string }> = ({
   studentClassId,
-  studentName,
   rollNumber,
 }) => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -251,7 +248,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <FileCheck className="w-5 h-5 text-indigo-600" />
+            <FileCheck className="w-5 h-5 text-blue-600" />
             Class Quizzes & Examinations
           </h2>
           <p className="text-sm text-slate-500 mt-1">
@@ -287,7 +284,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
       {/* Quizzes List */}
       {loading ? (
         <div className="text-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
           <p className="text-sm text-slate-500 mt-2">Loading class quizzes...</p>
         </div>
       ) : quizzes.length === 0 ? (
@@ -300,7 +297,6 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {quizzes.map((q) => {
             const subjectDoc = q.subjectId as Subject;
-            const classDoc = q.classId as Class;
             const isSubmitted = Boolean(q.mySubmission);
             const isPastDeadline = new Date() > new Date(q.deadline);
 
@@ -314,7 +310,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                     <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
                       {subjectDoc?.name || 'Subject'} ({subjectDoc?.code})
                     </span>
-                    <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100">
+                    <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
                       {q.quizType}
                     </span>
                   </div>
@@ -326,7 +322,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                   <div className="mt-4 space-y-2 text-xs text-slate-600 border-t border-slate-100 pt-3">
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5 text-slate-500">
-                        <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                        <Clock className="w-3.5 h-3.5 text-blue-500" />
                         Duration:
                       </span>
                       <span className="font-semibold text-slate-800">{q.durationMinutes || 30} mins</span>
@@ -391,7 +387,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                   ) : q.myAttemptStatus === 'in_progress' || q.myAttemptStatus === 'unlocked' ? (
                     <button
                       onClick={() => handleStartQuiz(q)}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                      className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
                     >
                       Resume Quiz
                     </button>
@@ -412,7 +408,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                   ) : (
                     <button
                       onClick={() => handleStartQuiz(q)}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                      className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
                     >
                       Start Quiz
                     </button>
@@ -430,7 +426,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
           <div className="bg-white w-full h-full max-w-none max-h-none rounded-none shadow-xl overflow-hidden flex flex-col">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Active Examination</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Active Examination</span>
                 <h3 className="font-bold text-slate-900 text-lg">{activeQuiz.title}</h3>
                 <p className="text-xs text-slate-500">Progress autosaves. Refreshing or leaving will not lock your attempt.</p>
               </div>
@@ -446,19 +442,19 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                 <h3 className="text-xl font-bold text-slate-900">Quiz Submitted Successfully!</h3>
                 <p className="text-sm text-slate-600">
                   Your answers have been recorded with Submission ID:{' '}
-                  <code className="font-mono font-bold text-indigo-700">{submissionReceipt.submissionId}</code>
+                  <code className="font-mono font-bold text-blue-700">{submissionReceipt.submissionId}</code>
                 </p>
 
                 <div className="max-w-sm mx-auto p-4 bg-slate-50 rounded-2xl border border-slate-200 text-left space-y-2 text-xs">
                   {activeQuiz.resultsPublished && submissionReceipt.totalScore !== undefined
-                    ? <div className="flex justify-between"><span className="text-slate-500">Your result:</span><span className="font-bold text-indigo-700 text-sm">{submissionReceipt.totalScore} / {activeQuiz.totalMarks}</span></div>
+                    ? <div className="flex justify-between"><span className="text-slate-500">Your result:</span><span className="font-bold text-blue-700 text-sm">{submissionReceipt.totalScore} / {activeQuiz.totalMarks}</span></div>
                     : <p className="text-center text-slate-600">Your result will appear here after your teacher declares it.</p>}
                 </div>
 
                 <div className="pt-4 flex items-center justify-center gap-3">
                   <button
                     onClick={() => handleDownloadDocx(submissionReceipt.submissionId)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
                   >
                     <Download className="w-4 h-4" />
                     Download Official DOCX Receipt
@@ -482,7 +478,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                 {activeQuiz.questions.map((q, idx) => (
                   <div key={q.questionId} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-xs font-bold text-indigo-700">
+                      <span className="text-xs font-bold text-blue-700">
                         Question {idx + 1} ({q.questionType} - {q.marks} Mark{q.marks > 1 ? 's' : ''})
                       </span>
                     </div>
@@ -499,7 +495,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                               onClick={() => handleSelectOption(q.questionId, optIdx)}
                               className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
                                 isSelected
-                                  ? 'bg-indigo-50 border-indigo-300 ring-1 ring-indigo-300 text-indigo-900 font-medium'
+                                  ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-300 text-blue-900 font-medium'
                                   : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
                               }`}
                             >
@@ -508,7 +504,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                                 name={`q-${q.questionId}`}
                                 checked={isSelected}
                                 onChange={() => handleSelectOption(q.questionId, optIdx)}
-                                className="text-indigo-600 focus:ring-indigo-500"
+                                className="text-blue-600 focus:ring-blue-500"
                               />
                               <span className="text-xs font-bold text-slate-400">
                                 {String.fromCharCode(65 + optIdx)}.
@@ -527,7 +523,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                           placeholder="Type your detailed answer here..."
                           value={studentAnswers[q.questionId]?.writtenAnswerText || ''}
                           onChange={(e) => handleWrittenTextChange(q.questionId, e.target.value)}
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                     )}
@@ -538,7 +534,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition disabled:opacity-50"
                   >
                     {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     Submit Quiz Answers
@@ -576,7 +572,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                   placeholder="Explain why you could not submit on time..."
                   value={lateReason}
                   onChange={(e) => setLateReason(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -591,7 +587,7 @@ export const StudentQuizSection: React.FC<{ studentClassId?: string; studentName
                 <button
                   type="submit"
                   disabled={submittingLate}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition disabled:opacity-50"
                 >
                   {submittingLate && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   Submit Request

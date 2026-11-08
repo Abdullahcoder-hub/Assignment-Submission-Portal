@@ -482,7 +482,7 @@ export const authenticateCROrSuperAdmin = async (req: AuthRequest, res: Response
 /**
  * Optional Auth - Populates req.admin or req.student if a valid token is present
  */
-export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+export const optionalAuth = async (req: AuthRequest, _res: Response, next: NextFunction): Promise<void> => {
   try {
     const token = extractToken(req);
     if (!token) {
@@ -525,5 +525,4 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
   }
   next();
 };
-
 

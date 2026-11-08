@@ -10,7 +10,6 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
-  UserCheck,
 } from 'lucide-react';
 
 interface ShareAssignmentModalProps {
@@ -35,7 +34,6 @@ export const ShareAssignmentModal: React.FC<ShareAssignmentModalProps> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const subjectId = typeof assignment.subjectId === 'object' ? (assignment.subjectId as any)._id : assignment.subjectId;
-  const subjectName = typeof assignment.subjectId === 'object' ? (assignment.subjectId as any).name : 'Subject';
   const subjectCode = typeof assignment.subjectId === 'object' ? (assignment.subjectId as any).code : '';
 
   useEffect(() => {

@@ -13,7 +13,6 @@ import {
   Upload,
   Calendar,
   Clock,
-  BookOpen,
   Users,
   Search,
   Loader2,
@@ -21,8 +20,6 @@ import {
   HelpCircle,
   Eye,
   Check,
-  X,
-  FileText,
 } from 'lucide-react';
 
 export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRole = 'TEACHER' }) => {
@@ -220,25 +217,6 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err: any) {
       setFeedback({ success: false, message: err.response?.data?.message || 'Failed to download the quiz PDF.' });
-    }
-  };
-
-  const handleDownloadGradesCsv = async () => {
-    if (!selectedQuizForSubmissions) return;
-    try {
-      const response = await api.get(`/quizzes/${selectedQuizForSubmissions._id}/submissions/csv`, {
-        responseType: 'blob',
-      });
-      const url = URL.createObjectURL(new Blob([response.data], { type: 'text/csv;charset=utf-8' }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${selectedQuizForSubmissions.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Quiz_Grades.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err: any) {
-      setFeedback({ success: false, message: err.response?.data?.message || 'Failed to download the grades CSV.' });
     }
   };
 
@@ -487,7 +465,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <FileCheck className="w-5 h-5 text-indigo-600" />
+            <FileCheck className="w-5 h-5 text-blue-600" />
             Quiz & Examination Management
           </h2>
           <p className="text-sm text-slate-500 mt-1">
@@ -498,7 +476,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
         {userRole === 'TEACHER' && (
           <button
             onClick={handleOpenCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm transition"
           >
             <Plus className="w-4 h-4" />
             Create New Quiz
@@ -528,7 +506,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                     <button onClick={() => handleQuizRequestDecision(request._id, 'Rejected')} className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-bold">Reject</button>
                   </>}
                   {request.status !== 'Pending' && request.requestCount === 3 && request.attemptStatus === 'locked' && (
-                    <button onClick={() => handleGrantFourthAttempt(request)} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold">Allow 4th Attempt</button>
+                    <button onClick={() => handleGrantFourthAttempt(request)} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold">Allow 4th Attempt</button>
                   )}
                 </div>
               </div>
@@ -562,7 +540,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
             placeholder="Search quizzes..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
@@ -578,7 +556,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
       {/* Quizzes Grid */}
       {loading ? (
         <div className="text-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
           <p className="text-sm text-slate-500 mt-2">Loading quizzes...</p>
         </div>
       ) : filteredQuizzes.length === 0 ? (
@@ -593,8 +571,6 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
             const classDoc = q.classId as Class;
             const subjectDoc = q.subjectId as Subject;
             const crDoc = q.crId as AdminUser;
-            const teacherDoc = q.teacherId as AdminUser;
-
             return (
               <div
                 key={q._id}
@@ -609,7 +585,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                       <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
                         {subjectDoc?.name || 'Subject'}
                       </span>
-                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100">
+                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
                         {q.quizType}
                       </span>
                     </div>
@@ -618,7 +594,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => handleOpenEditModal(q)}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
                           title="Edit quiz"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -641,7 +617,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                   <div className="mt-4 space-y-2 text-xs text-slate-600 border-t border-slate-100 pt-3">
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5 text-slate-500">
-                        <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                        <Clock className="w-3.5 h-3.5 text-blue-500" />
                         Duration:
                       </span>
                       <span className="font-semibold text-slate-800">{q.durationMinutes || 30} mins</span>
@@ -669,7 +645,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
 
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5 text-slate-500">
-                        <ShieldCheck className="w-3.5 h-3.5 text-purple-500" />
+                        <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
                         Assigned CR:
                       </span>
                       <span className="font-medium text-slate-800 truncate max-w-[130px]">
@@ -687,7 +663,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
 
                   <button
                     onClick={() => handleViewSubmissions(q)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl transition"
                   >
                     <Eye className="w-3.5 h-3.5" />
                     Submissions
@@ -705,13 +681,13 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
           <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl border border-slate-100 overflow-hidden max-h-[90vh] flex flex-col">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Quiz Submissions</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Quiz Submissions</span>
                 <h3 className="font-bold text-slate-900 text-base sm:text-lg">{selectedQuizForSubmissions.title}</h3>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
                 {userRole === 'TEACHER' && (
                   <>
-                    <button onClick={handleDownloadQuizPdf} className="px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg">
+                    <button onClick={handleDownloadQuizPdf} className="px-3 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg">
                       <Download className="inline w-3.5 h-3.5 mr-1" /> Download All as PDF
                     </button>
                     <button onClick={handleDownloadGradesExcel} className="px-3 py-2 bg-slate-600 text-white text-xs font-bold rounded-lg">
@@ -752,7 +728,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
             <div className="p-5 overflow-y-auto flex-1 space-y-4">
               {loadingSubmissions ? (
                 <div className="text-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
                   <p className="text-sm text-slate-500 mt-2">Loading submissions...</p>
                 </div>
               ) : quizSubmissions.length === 0 ? (
@@ -781,8 +757,8 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                           <td className="px-4 py-3 font-mono font-bold text-slate-900">{sub.rollNumber}</td>
                           <td className="px-4 py-3 font-medium text-slate-800">{sub.studentName}</td>
                           {userRole === 'TEACHER' && <>
-                            <td className="px-4 py-3 text-indigo-600 font-semibold">{sub.mcqScore}</td>
-                            <td className="px-4 py-3 text-purple-600 font-semibold">{sub.writtenScore}</td>
+                            <td className="px-4 py-3 text-blue-600 font-semibold">{sub.mcqScore}</td>
+                            <td className="px-4 py-3 text-blue-600 font-semibold">{sub.writtenScore}</td>
                             <td className="px-4 py-3 font-bold text-slate-900">{sub.totalScore} / {selectedQuizForSubmissions.totalMarks}</td>
                             <td className="px-4 py-3">
                               {sub.isGraded
@@ -795,7 +771,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                               <button
                                 onClick={() => handleOpenGradeModal(sub)}
                                 disabled={loadingGradingSubmissionId === sub._id}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
                               >
                                 {loadingGradingSubmissionId === sub._id
                                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -837,7 +813,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                 .filter((a) => a.questionType === 'Written')
                 .map((ans, idx) => (
                   <div key={ans.questionId} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
-                    <span className="text-xs font-bold text-indigo-700">Written Question {idx + 1}</span>
+                    <span className="text-xs font-bold text-blue-700">Written Question {idx + 1}</span>
                     <div className="p-3 bg-white rounded-lg border border-slate-200 text-xs sm:text-sm text-slate-800 whitespace-pre-wrap">
                       <strong className="block text-slate-500 text-xs mb-1">Student's Answer:</strong>
                       {ans.writtenAnswerText || '[No Answer Submitted]'}
@@ -857,7 +833,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                               [ans.questionId]: Number(e.target.value),
                             })
                           }
-                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
 
@@ -873,7 +849,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                               [ans.questionId]: e.target.value,
                             })
                           }
-                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                     </div>
@@ -891,7 +867,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                 <button
                   type="submit"
                   disabled={savingGrade}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-sm transition disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition disabled:opacity-50"
                 >
                   {savingGrade && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   Save Grades
@@ -925,7 +901,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                     disabled={Boolean(editingQuizId)}
                     value={selectedClassId}
                     onChange={(e) => setSelectedClassId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">-- Select Class --</option>
                     {classes.map((c) => (
@@ -943,7 +919,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                     disabled={Boolean(editingQuizId)}
                     value={selectedSubjectId}
                     onChange={(e) => setSelectedSubjectId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">-- Select Subject --</option>
                     {subjects.map((s) => (
@@ -963,7 +939,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                   placeholder="e.g. Midterm Quiz: Polymorphism & Inheritance"
                   value={quizTitle}
                   onChange={(e) => setQuizTitle(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -973,7 +949,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                   <select
                     value={quizType}
                     onChange={(e: any) => setQuizType(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="MCQ">Multiple Choice (MCQ)</option>
                     <option value="Written">Written Questions</option>
@@ -989,7 +965,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                     max="180"
                     value={durationMinutes}
                     onChange={(e) => setDurationMinutes(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -1000,7 +976,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                     required
                     value={deadline}
                     onChange={(e) => setDeadline(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -1012,7 +988,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                 )}
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                    <HelpCircle className="w-4 h-4 text-indigo-600" />
+                    <HelpCircle className="w-4 h-4 text-blue-600" />
                     Questions ({questions.length})
                   </h4>
 
@@ -1020,14 +996,14 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                     <button
                       type="button"
                       onClick={() => handleAddQuestion('MCQ')}
-                      className="px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition"
+                      className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl transition"
                     >
                       + Add MCQ
                     </button>
                     <button
                       type="button"
                       onClick={() => handleAddQuestion('Written')}
-                      className="px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-xl transition"
+                      className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl transition"
                     >
                       + Add Written
                     </button>
@@ -1037,7 +1013,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                 {questions.map((q, qIdx) => (
                   <div key={q.questionId} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">
+                      <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
                         Question {qIdx + 1} ({q.questionType})
                       </span>
 
@@ -1072,7 +1048,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                       placeholder={`Enter question text for Question ${qIdx + 1}...`}
                       value={q.questionText}
                       onChange={(e) => handleQuestionTextChange(qIdx, e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
 
                     {q.questionType === 'MCQ' && q.options && (
@@ -1128,7 +1104,7 @@ export const QuizManagementSection: React.FC<{ userRole?: string }> = ({ userRol
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition disabled:opacity-50"
                 >
                   {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   {editingQuizId ? 'Save Changes' : 'Publish Quiz'}

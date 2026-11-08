@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { openSubmissionFile } from '../api/axios';
 import { Subject, Assignment, Submission, StudentUser, SubmissionReceipt, Group, LateRequest, CRApplication, Class } from '../types';
@@ -8,8 +8,6 @@ import { PasswordInput } from '../components/PasswordInput';
 import { PasswordRequirements } from '../components/PasswordRequirements';
 import {
   User,
-  BookOpen,
-  FileCheck,
   Upload,
   CheckCircle2,
   AlertCircle,
@@ -17,21 +15,21 @@ import {
   Clock,
   Send,
   Loader2,
-  Calendar,
   AlertTriangle,
   History,
-  ShieldCheck,
   Trash2,
   Users,
   UserPlus,
   Repeat,
   Plus,
   Check,
-  X,
   Crown,
   KeyRound,
   Edit2,
   Eye,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
@@ -50,6 +48,10 @@ export const StudentDashboard: React.FC = () => {
     if (savedTab !== 'cr-application' && validTabs.includes(savedTab)) return savedTab;
     return 'submit';
   });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const isSidebarCollapsed = sidebarCollapsed && !mobileSidebarOpen;
 
   const setActiveTab = (tab: TabType) => {
     setActiveTabState(tab);
@@ -171,7 +173,11 @@ export const StudentDashboard: React.FC = () => {
   const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
   const [passMsg, setPassMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deadlineTick, setDeadlineTick] = useState(() => Date.now());
-  const [sequenceNumber, setSequenceNumber] = useState<number>(1);
+  const [uploadGroup, setUploadGroup] = useState<Group | null>(null);
+  const [selectedSubmissionMemberId, setSelectedSubmissionMemberId] = useState<string>(student.id);
+  const [selectedSubmissionMemberIds, setSelectedSubmissionMemberIds] = useState<string[]>([student.id]);
+  const [receiptMembers, setReceiptMembers] = useState<string[]>([]);
+  const [loadingUploadGroup, setLoadingUploadGroup] = useState<boolean>(false);
 
   // CR Application State
   const [crAppStatus, setCRAppStatus] = useState<CRApplication | null>(null);
@@ -184,9 +190,39 @@ export const StudentDashboard: React.FC = () => {
   const [crAppMsg, setCRAppMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setDeadlineTick(Date.now()), 60000);
+    const timer = window.setInterval(() => setDeadlineTick(Date.now()), 10000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const collapseOnOutsideClick = (event: PointerEvent) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+        setSidebarCollapsed(true);
+        setMobileSidebarOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', collapseOnOutsideClick);
+    return () => document.removeEventListener('pointerdown', collapseOnOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileSidebarOpen(false);
+    };
+    const closeOnDesktop = () => {
+      if (window.innerWidth >= 768) setMobileSidebarOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('resize', closeOnDesktop);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('resize', closeOnDesktop);
+    };
+  }, [mobileSidebarOpen]);
 
   const handleChangePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -299,7 +335,7 @@ export const StudentDashboard: React.FC = () => {
 
     const fetchProfilePromise = async () => {
       try {
-        setLoadingHistory((prev) => !sessionStorage.getItem('portal_cached_my_submissions'));
+        setLoadingHistory(!sessionStorage.getItem('portal_cached_my_submissions'));
         const res = await api.get('/auth/student/me');
         if (res.data.success) {
           setMySubmissions(res.data.submissions);
@@ -319,7 +355,7 @@ export const StudentDashboard: React.FC = () => {
 
   const refreshSubmissionHistory = async () => {
     try {
-      setLoadingHistory((prev) => !sessionStorage.getItem('portal_cached_my_submissions'));
+      setLoadingHistory(!sessionStorage.getItem('portal_cached_my_submissions'));
       const res = await api.get('/auth/student/me');
       if (res.data.success) {
         setMySubmissions(res.data.submissions);
@@ -343,6 +379,19 @@ export const StudentDashboard: React.FC = () => {
       refreshSubmissionHistory();
     }
   }, [activeTab, receipt]);
+
+  useEffect(() => {
+    if (activeTab !== 'history') return;
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await api.get('/auth/student/me');
+        if (res.data.success) setMySubmissions(res.data.submissions || []);
+      } catch (error) {
+        console.error('Failed to refresh late submission access.', error);
+      }
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [activeTab]);
 
   const fetchCRAppData = async () => {
     try {
@@ -464,26 +513,70 @@ export const StudentDashboard: React.FC = () => {
     if (!selectedAssignmentId) {
       setSelectedAssignment(null);
       setLateReqStatus(null);
+      setUploadGroup(null);
+      setSelectedSubmissionMemberId(student.id);
+      setSelectedSubmissionMemberIds([student.id]);
       return;
     }
     const found = assignments.find((a) => a._id === selectedAssignmentId);
     setSelectedAssignment(found || null);
+    setSelectedSubmissionMemberId(student.id);
+    setSelectedSubmissionMemberIds([student.id]);
+    setUploadGroup(null);
 
     // Check late request status if past deadline
     if (found) {
       const isPast = new Date() > new Date(found.deadline);
-      if (isPast && !found.allowLateSubmission) {
-        fetchLateRequestStatus(found._id);
-      } else {
+      if (!isPast) {
         setLateReqStatus(null);
       }
     }
-  }, [selectedAssignmentId, assignments]);
+  }, [selectedAssignmentId, assignments, student.id]);
 
-  const fetchLateRequestStatus = async (assignmentId: string) => {
+  useEffect(() => {
+    if (!selectedAssignment || selectedAssignment.submissionType !== 'Group' || !selectedSubjectId) {
+      setUploadGroup(null);
+      setLoadingUploadGroup(false);
+      return;
+    }
+
+    let active = true;
+    const fetchUploadGroup = async () => {
+      setLoadingUploadGroup(true);
+      try {
+        const res = await api.get(`/groups/my-group/${selectedSubjectId}?assignmentId=${selectedAssignment._id}`);
+        if (!active) return;
+        const group: Group | null = res.data.group || null;
+        setUploadGroup(group);
+        const ownIndex = group?.members.findIndex((member) =>
+          member.studentId === student.id || member.rollNumber.toLowerCase() === student.rollNumber.toLowerCase()
+        ) ?? -1;
+        const alreadySubmitted = group?.submittedMembers?.some(
+          (submission) => submission.rollNumber.toLowerCase() === student.rollNumber.toLowerCase()
+        );
+        if (ownIndex >= 0 && !alreadySubmitted) {
+          setSelectedSubmissionMemberIds([student.id]);
+        } else {
+          setSelectedSubmissionMemberIds([]);
+        }
+      } catch (err: any) {
+        if (active) setErrorMsg(err.response?.data?.message || 'Unable to load your assignment group.');
+      } finally {
+        if (active) setLoadingUploadGroup(false);
+      }
+    };
+
+    void fetchUploadGroup();
+    return () => {
+      active = false;
+    };
+  }, [selectedAssignment, selectedSubjectId, student.id, student.rollNumber]);
+
+  const fetchLateRequestStatus = async (assignmentId: string, studentId: string = student.id) => {
     try {
       setLoadingLateStatus(true);
-      const res = await api.get(`/late-requests/my-status?assignmentId=${assignmentId}`);
+      const params = new URLSearchParams({ assignmentId, studentId });
+      const res = await api.get(`/late-requests/my-status?${params.toString()}`);
       if (res.data.success) {
         setLateReqStatus(res.data.request);
       }
@@ -494,8 +587,38 @@ export const StudentDashboard: React.FC = () => {
     }
   };
 
-  const handleCreateLateRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (!selectedAssignment || Date.now() <= new Date(selectedAssignment.deadline).getTime()) return;
+    void fetchLateRequestStatus(selectedAssignment._id, selectedSubmissionMemberId);
+  }, [selectedAssignment?._id, selectedAssignment?.deadline, selectedSubmissionMemberId]);
+
+  useEffect(() => {
+    if (!selectedAssignment || Date.now() <= new Date(selectedAssignment.deadline).getTime()) return;
+    if (lateReqStatus?.status === 'Approved' || lateReqStatus?.status === 'Rejected') return;
+
+    const interval = window.setInterval(() => {
+      void fetchLateRequestStatus(selectedAssignment._id, selectedSubmissionMemberId);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [selectedAssignment?._id, selectedAssignment?.deadline, selectedSubmissionMemberId, lateReqStatus?.status]);
+
+  useEffect(() => {
+    const hasLateApproval = Boolean(
+      (lateReqStatus?.status === 'Approved'
+        && lateReqStatus.decidedAt
+        && Date.now() < new Date(lateReqStatus.decidedAt).getTime() + 5 * 60 * 1000)
+      || mySubmissions.some((submission) =>
+        submission.lateSubmissionApprovedAt
+        && Date.now() < new Date(submission.lateSubmissionApprovedAt).getTime() + 5 * 60 * 1000
+      )
+    );
+    if (!hasLateApproval) return;
+
+    const timer = window.setInterval(() => setDeadlineTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [lateReqStatus?.status, mySubmissions]);
+
+  const handleCreateLateRequest = async () => {
     if (!selectedSubjectId || !selectedAssignmentId) return;
 
     try {
@@ -855,6 +978,7 @@ export const StudentDashboard: React.FC = () => {
       const res = await api.delete(`/submissions/student/${submissionId}`);
       if (res.data.success) {
         setReceipt(null);
+        setReceiptMembers([]);
         setSelectedFile(null);
         await fetchStudentData();
         setActiveTab('submit');
@@ -886,6 +1010,15 @@ export const StudentDashboard: React.FC = () => {
       return;
     }
 
+    const isGroupSubmission = selectedAssignment?.submissionType === 'Group';
+    const submissionMemberIds = isGroupSubmission
+      ? selectedSubmissionMemberIds
+      : [student.id];
+    if (isGroupSubmission && submissionMemberIds.length === 0) {
+      setErrorMsg('Select at least one group member who has not submitted yet.');
+      return;
+    }
+
     if (selectedAssignment) {
       const ext = selectedFile.name.split('.').pop()?.toLowerCase() || '';
       const allowed = selectedAssignment.allowedFileTypes.map((t) => t.replace('.', '').toLowerCase());
@@ -904,24 +1037,94 @@ export const StudentDashboard: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const formData = new FormData();
-      formData.append('subjectId', selectedSubjectId);
-      formData.append('assignmentId', selectedAssignmentId);
-      formData.append('file', selectedFile);
-      // Add sequence number for group assignments
-      if (selectedAssignment?.submissionType === 'Group') {
-        formData.append('sequenceNumber', String(sequenceNumber));
+      if (isGroupSubmission && isPastDeadline) {
+        const lateRequests = await Promise.all(submissionMemberIds.map(async (memberId) => {
+          const params = new URLSearchParams({ assignmentId: selectedAssignmentId, studentId: memberId });
+          const response = await api.get(`/late-requests/my-status?${params.toString()}`);
+          const request = response.data.request as LateRequest | null;
+          const expiresAt = request?.decidedAt ? new Date(request.decidedAt).getTime() + 5 * 60 * 1000 : 0;
+          return { memberId, request, approved: request?.status === 'Approved' && Date.now() < expiresAt };
+        }));
+        const deniedMembers = lateRequests
+          .filter((entry) => !entry.approved)
+          .map((entry) => uploadGroup?.members.find((member) =>
+            (member.studentId || (member.rollNumber.toLowerCase() === student.rollNumber.toLowerCase() ? student.id : '')) === entry.memberId
+          )?.name || 'A selected member');
+        if (deniedMembers.length > 0) {
+          setErrorMsg(`Late upload approval is required for: ${deniedMembers.join(', ')}.`);
+          return;
+        }
       }
 
-      const res = await api.post('/submissions', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const membersToSubmit = isGroupSubmission
+        ? (uploadGroup?.members || []).flatMap((member, index) => {
+            const memberId = member.studentId
+              || (member.rollNumber.toLowerCase() === student.rollNumber.toLowerCase() ? student.id : '');
+            return submissionMemberIds.includes(memberId) ? [{ member, memberId, sequenceNumber: index + 1 }] : [];
+          })
+        : [{ member: null, memberId: student.id, sequenceNumber: undefined }];
+      const submittedReceipts: SubmissionReceipt[] = [];
+      const submissionErrors: string[] = [];
 
-      if (res.data.success) {
-        setReceipt(res.data.submission);
+      for (const target of membersToSubmit) {
+        const formData = new FormData();
+        formData.append('subjectId', selectedSubjectId);
+        formData.append('assignmentId', selectedAssignmentId);
+        formData.append('file', selectedFile);
+        if (isGroupSubmission) {
+          formData.append('sequenceNumber', String(target.sequenceNumber));
+          if (target.memberId !== student.id) {
+            formData.append('submissionForStudentId', target.memberId);
+          }
+        }
+
+        try {
+          const res = await api.post('/submissions', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          if (res.data.success) {
+            submittedReceipts.push(res.data.submission as SubmissionReceipt);
+          } else {
+            submissionErrors.push(`${target.member?.name || student.name}: ${res.data.message || 'Submission failed.'}`);
+          }
+        } catch (err: any) {
+          submissionErrors.push(`${target.member?.name || student.name}: ${err.response?.data?.message || 'Submission failed.'}`);
+        }
+      }
+
+      if (submittedReceipts.length > 0) {
         await refreshSubmissionHistory();
+        if (isGroupSubmission && selectedAssignment) {
+          try {
+            const groupRes = await api.get(`/groups/my-group/${selectedSubjectId}?assignmentId=${selectedAssignment._id}`);
+            const updatedGroup: Group | null = groupRes.data.group || null;
+            setUploadGroup(updatedGroup);
+            const remainingMemberIds = (updatedGroup?.members || []).flatMap((member) => {
+              const memberId = member.studentId
+                || (member.rollNumber.toLowerCase() === student.rollNumber.toLowerCase() ? student.id : '');
+              const hasSubmitted = updatedGroup?.submittedMembers?.some(
+                (submission) => submission.rollNumber.toLowerCase() === member.rollNumber.toLowerCase()
+              );
+              return submissionMemberIds.includes(memberId) && !hasSubmitted ? [memberId] : [];
+            });
+            setSelectedSubmissionMemberIds(remainingMemberIds);
+            setSelectedSubmissionMemberId(remainingMemberIds[0] || student.id);
+          } catch {
+            setErrorMsg('Submissions succeeded, but group upload status could not refresh. Reload to see updated members.');
+          }
+        }
+      }
+      if (submissionErrors.length > 0) {
+        setErrorMsg(
+          submittedReceipts.length > 0
+            ? `Submitted for ${submittedReceipts.length} member(s). Some submissions failed: ${submissionErrors.join(' ')}`
+            : submissionErrors.join(' ')
+        );
+      } else if (submittedReceipts.length === 0) {
+        setErrorMsg('No submissions were completed.');
       } else {
-        setErrorMsg(res.data.message || 'Failed to submit assignment.');
+        setReceipt(submittedReceipts[submittedReceipts.length - 1]);
+        setReceiptMembers(submittedReceipts.map((submission) => submission.studentName));
       }
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || 'Something went wrong on the server.');
@@ -942,11 +1145,31 @@ export const StudentDashboard: React.FC = () => {
   };
 
   const isPastDeadline = selectedAssignment ? new Date() > new Date(selectedAssignment.deadline) : false;
-  const isLateBlocked = isPastDeadline && selectedAssignment && !selectedAssignment.allowLateSubmission;
-  const canSubmitNow = !isLateBlocked || (lateReqStatus && lateReqStatus.status === 'Approved');
+  const lateApprovalExpiresAt = lateReqStatus?.decidedAt
+    ? new Date(lateReqStatus.decidedAt).getTime() + 5 * 60 * 1000
+    : 0;
+  const hasActiveLateApproval = lateReqStatus?.status === 'Approved'
+    && deadlineTick < lateApprovalExpiresAt;
+  const canSubmitNow = !isPastDeadline || hasActiveLateApproval;
+  const canSubmitForSelection = canSubmitNow
+    && (selectedAssignment?.submissionType !== 'Group'
+      || (!loadingUploadGroup && !!uploadGroup && selectedSubmissionMemberIds.length > 0));
+  const canReuploadSubmission = (submission: Submission): boolean => {
+    const assignment = typeof submission.assignmentId === 'object' ? submission.assignmentId : null;
+    if (!assignment?.deadline) return false;
+    if (deadlineTick <= new Date(assignment.deadline).getTime()) return true;
+    if (!submission.lateSubmissionApprovedAt) return false;
+    return deadlineTick < new Date(submission.lateSubmissionApprovedAt).getTime() + 5 * 60 * 1000;
+  };
+  const reuploadWindowSeconds = (submission: Submission): number => {
+    if (!submission.lateSubmissionApprovedAt) return 0;
+    return Math.max(0, Math.ceil(
+      (new Date(submission.lateSubmissionApprovedAt).getTime() + 5 * 60 * 1000 - deadlineTick) / 1000
+    ));
+  };
 
   return (
-    <div className="student-dashboard w-full max-w-6xl mx-auto py-6 sm:py-8 px-3 sm:px-4 space-y-6 sm:space-y-8 min-w-0 relative">
+    <div className="student-dashboard min-h-[90vh] flex flex-col md:flex-row bg-transparent min-w-0 relative">
       {/* FLOATING PROMINENT ERROR NOTIFICATION (NEVER REQUIRE SCROLLING) */}
       {(errorMsg || (groupMsg && groupMsg.type === 'error') || (passMsg && passMsg.type === 'error')) && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 max-w-xl w-[92%] bg-red-600 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-red-400">
@@ -968,17 +1191,92 @@ export const StudentDashboard: React.FC = () => {
         </div>
       )}
 
+      <button
+        type="button"
+        onClick={() => setMobileSidebarOpen(true)}
+        className="md:hidden self-start m-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+        aria-label="Open student navigation"
+        aria-expanded={mobileSidebarOpen}
+        aria-controls="student-dashboard-navigation"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          onClick={() => setMobileSidebarOpen(false)}
+          className="fixed inset-x-0 top-16 bottom-0 z-40 bg-slate-950/45 md:hidden"
+          aria-label="Close student navigation"
+        />
+      )}
+      <aside
+          id="student-dashboard-navigation"
+          ref={sidebarRef}
+          onPointerEnter={(event) => {
+            if (event.pointerType === 'mouse') setSidebarCollapsed(false);
+          }}
+          onPointerLeave={() => setSidebarCollapsed(true)}
+          data-collapsed={isSidebarCollapsed}
+          className={`glass-panel-dark fixed left-0 top-16 bottom-0 z-50 mt-0 h-[calc(100dvh-4rem)] w-64 max-w-[85vw] overflow-y-auto border-r border-white/10 text-slate-300 backdrop-blur-xl transition-[width,transform] md:sticky md:top-16 md:bottom-auto md:z-auto md:mt-0 md:h-[calc(100vh-4rem)] md:max-w-none md:translate-x-0 md:overflow-y-visible ${
+            mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          } ${
+            sidebarCollapsed ? 'md:w-16' : 'md:w-64'
+          }`}
+        >
+          <div className="flex items-center justify-between p-4 border-b border-white/10">
+            {!isSidebarCollapsed && <div><h2 className="text-xs uppercase tracking-wider text-blue-400 font-bold">Student Portal</h2><p className="text-sm font-semibold text-white mt-1">Learning Suite</p></div>}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              className="hidden md:block p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition ml-auto"
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
+          <nav
+            onClickCapture={() => setMobileSidebarOpen(false)}
+            className={`p-3 grid gap-1.5 ${
+            isSidebarCollapsed ? 'grid-cols-3 sm:grid-cols-6 md:grid-cols-1' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-1'
+          }`}>
+            {([
+              ['submit', 'Submit Assignment', Upload],
+              ['quizzes', 'Quizzes', FileText],
+              ['groups', 'Groups', Users],
+              ['history', `Submissions (${mySubmissions.length})`, History],
+              ['security', 'Security', KeyRound],
+              ['cr-application', 'CR Application', Crown],
+            ] as const).map(([tab, label, Icon]) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => handleTabChange(tab)}
+                title={isSidebarCollapsed ? label : undefined}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-center md:justify-start'} gap-3 px-3 py-3 text-xs sm:text-sm font-semibold rounded-xl transition ${
+                  activeTab === tab
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
+                    : 'hover:bg-white/10 text-slate-200 hover:text-white'
+                }`}
+              >
+                <Icon className="w-5 h-5 shrink-0" />
+                {!isSidebarCollapsed && <span>{label}</span>}
+              </button>
+            ))}
+          </nav>
+      </aside>
+      <main className="flex-1 min-w-0 w-full p-4 sm:p-6 lg:p-8 max-w-7xl space-y-6">
+
       {/* PROFILE SUMMARY HEADER */}
-      <div className="glass-panel-dark text-white rounded-3xl p-5 sm:p-6 shadow-2xl flex items-center justify-between gap-4 border border-white/10 relative overflow-hidden backdrop-blur-xl">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -z-0" />
-        <div className="flex items-center gap-4 min-w-0 relative z-10">
-          <div className="p-3.5 bg-gradient-to-tr from-blue-600/30 to-indigo-600/30 border border-blue-400/30 text-blue-400 rounded-2xl shrink-0 shadow-inner">
+      <div className="glass-panel text-slate-900 rounded-3xl p-5 sm:p-6 shadow-xl flex items-center justify-between gap-4 border border-slate-200 relative overflow-hidden">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="p-3.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-2xl shrink-0">
             <User className="w-8 h-8 sm:w-10 sm:h-10" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-lg sm:text-2xl font-extrabold truncate tracking-tight">{student?.name}</h1>
-              <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold rounded-full shrink-0">
+              <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-full shrink-0">
                 Verified Student
               </span>
               {student?.staffRole && (
@@ -990,63 +1288,19 @@ export const StudentDashboard: React.FC = () => {
                     if (result.success) navigate('/admin/dashboard');
                     else setErrorMsg(result.message || 'Could not open the staff portal.');
                   }}
-                  className="px-2.5 py-0.5 bg-purple-500/30 text-purple-200 border border-purple-400/40 text-xs font-bold rounded-full shrink-0 hover:bg-purple-500/50 transition flex items-center gap-1"
+                  className="px-2.5 py-0.5 bg-blue-100 text-blue-800 border border-blue-300 text-xs font-bold rounded-full shrink-0 hover:bg-blue-200 transition flex items-center gap-1"
                 >
-                  <Crown className="w-3 h-3 text-amber-300" />
+                  <Crown className="w-3 h-3 text-amber-600" />
                   {student.staffRole === 'CR_ASSISTANT' ? 'CR Assistant' : 'Class CR'} Portal &rarr;
                 </a>
               )}
             </div>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1 break-words">
-              Roll Number: <span className="font-mono font-bold text-white">{student?.rollNumber}</span>
-              <span className="hidden sm:inline"> &bull; Email: <span className="text-slate-300">{student?.email}</span></span>
+            <p className="text-xs sm:text-sm text-slate-700 mt-1 break-words">
+              Roll Number: <span className="font-mono font-bold text-slate-900">{student?.rollNumber}</span>
+              <span className="hidden sm:inline"> &bull; Email: <span className="text-slate-700">{student?.email}</span></span>
             </p>
           </div>
         </div>
-      </div>
-
-      {/* DASHBOARD TAB NAVIGATION BAR */}
-      <div className="glass-panel-dark p-1.5 rounded-2xl border border-white/10 shadow-xl grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 backdrop-blur-xl">
-        <button
-          onClick={() => handleTabChange('submit')}
-          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-            activeTab === 'submit' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <Upload className="w-4 h-4" /> Submit
-        </button>
-        <button
-          onClick={() => handleTabChange('quizzes')}
-          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-            activeTab === 'quizzes' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <FileText className="w-4 h-4" /> Quizzes
-        </button>
-        <button
-          onClick={() => handleTabChange('groups')}
-          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-            activeTab === 'groups' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <Users className="w-4 h-4" /> Groups
-        </button>
-        <button
-          onClick={() => handleTabChange('history')}
-          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-            activeTab === 'history' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <History className="w-4 h-4" /> <span className="hidden lg:inline">Submissions ({mySubmissions.length})</span><span className="lg:hidden">History</span>
-        </button>
-        <button
-          onClick={() => handleTabChange('security')}
-          className={`py-3 px-2 text-xs sm:text-sm font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-            activeTab === 'security' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25' : 'text-slate-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <KeyRound className="w-4 h-4" /> Security
-        </button>
       </div>
 
       {/* SUBMISSION RECEIPT VIEW */}
@@ -1054,11 +1308,23 @@ export const StudentDashboard: React.FC = () => {
         <div className="glass-panel rounded-3xl shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden">
           <div className="bg-emerald-600 p-6 text-white text-center">
             <CheckCircle2 className="w-10 h-10 mx-auto mb-2" />
-            <h2 className="text-2xl font-bold">✓ Assignment Submitted Successfully</h2>
+            <h2 className="text-2xl font-bold">
+              {receiptMembers.length > 1 ? '✓ Group Assignment Submitted Successfully' : '✓ Assignment Submitted Successfully'}
+            </h2>
             <p className="text-emerald-100 text-xs mt-1">Receipt ID: {receipt.submissionId}</p>
+            {receiptMembers.length > 1 && (
+              <p className="text-emerald-100 text-xs mt-1">
+                Submitted for: {receiptMembers.join(', ')}
+              </p>
+            )}
           </div>
 
           <div className="p-6 sm:p-8 space-y-6">
+            {errorMsg && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                {errorMsg}
+              </p>
+            )}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-3">
               <div className="flex justify-between border-b pb-2 text-sm">
                 <span className="text-slate-500 font-medium">Submission ID</span>
@@ -1103,7 +1369,11 @@ export const StudentDashboard: React.FC = () => {
             </div>
 
             <button
-              onClick={() => setReceipt(null)}
+              onClick={() => {
+                setReceipt(null);
+                setReceiptMembers([]);
+                setErrorMsg(null);
+              }}
               className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow"
             >
               Submit Another Assignment
@@ -1196,7 +1466,7 @@ export const StudentDashboard: React.FC = () => {
                         👤 Individual Assignment
                       </span>
                     ) : (
-                      <span className="px-2.5 py-0.5 text-xs font-bold bg-purple-100 text-purple-800 rounded-md border border-purple-200">
+                      <span className="px-2.5 py-0.5 text-xs font-bold bg-blue-100 text-blue-800 rounded-md border border-blue-200">
                         👥 Group Assignment (Max {selectedAssignment.maxGroupSize || 4} members)
                       </span>
                     )}
@@ -1224,7 +1494,7 @@ export const StudentDashboard: React.FC = () => {
                   </div>
                   <div>
                     Submission Mode:{' '}
-                    <span className="font-bold text-purple-700">
+                    <span className="font-bold text-blue-700">
                       {selectedAssignment.submissionType === 'Individual' ? 'Solo (Individual)' : `Group (Up to ${selectedAssignment.maxGroupSize || 4} members)`}
                     </span>
                   </div>
@@ -1233,70 +1503,56 @@ export const StudentDashboard: React.FC = () => {
                 {/* DEADLINE PASSED NOTICE */}
                 {isPastDeadline && (
                   <div className="mt-3 p-4 rounded-xl border space-y-3">
-                    {selectedAssignment.allowLateSubmission ? (
-                      <div className="p-3 bg-amber-100 border border-amber-300 rounded-lg flex items-center gap-2 text-xs font-semibold text-amber-800">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>The deadline has passed. Late submissions are enabled for this assignment.</span>
+                    {loadingLateStatus ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> Checking late request status...
+                      </div>
+                    ) : lateReqStatus?.status === 'Approved' && hasActiveLateApproval ? (
+                      <div className="p-3 bg-emerald-100 border border-emerald-300 rounded-lg flex items-center gap-2 text-xs font-bold text-emerald-800">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Approved for {selectedSubmissionMemberId === student.id ? 'you' : uploadGroup?.members.find((member) => member.studentId === selectedSubmissionMemberId)?.name || 'the selected member'}. Upload within 5 minutes; {Math.max(0, Math.ceil((lateApprovalExpiresAt - deadlineTick) / 1000))} seconds remain.</span>
+                      </div>
+                    ) : lateReqStatus?.status === 'Pending' ? (
+                      <div className="p-3 bg-amber-100 border border-amber-300 rounded-lg flex items-center gap-2 text-xs font-bold text-amber-800">
+                        <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>{selectedSubmissionMemberId === student.id ? 'Your' : "The selected member's"} Late Submission Request is pending CR/Admin approval.</span>
                       </div>
                     ) : (
-                      <div>
-                        {loadingLateStatus ? (
-                          <div className="flex items-center gap-2 text-xs text-slate-500">
-                            <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> Checking late request status...
-                          </div>
-                        ) : lateReqStatus?.status === 'Approved' ? (
-                          <div className="p-3 bg-emerald-100 border border-emerald-300 rounded-lg flex items-center gap-2 text-xs font-bold text-emerald-800">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <span>Late submission request has been APPROVED by your CR! You can submit your file now.</span>
-                          </div>
-                        ) : lateReqStatus?.status === 'Pending' ? (
-                          <div className="p-3 bg-amber-100 border border-amber-300 rounded-lg flex items-center gap-2 text-xs font-bold text-amber-800">
-                            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
-                            <span>Your Late Submission Request is PENDING approval by your CR.</span>
-                          </div>
-                        ) : lateReqStatus?.status === 'Rejected' ? (
-                          <div className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-2 text-xs font-bold text-red-800">
-                            <X className="w-4 h-4 text-red-600 shrink-0" />
-                            <span>Your Late Submission Request was REJECTED by your CR.</span>
-                          </div>
-                        ) : (
-                          <div className="p-4 bg-amber-50 border border-amber-300 rounded-xl space-y-3">
-                            <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
-                              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                              <span>Submission deadline has passed. Late submissions require CR approval.</span>
-                            </div>
-                            {lateReqSuccessMsg && (
-                              <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-semibold">
-                                {lateReqSuccessMsg}
-                              </div>
-                            )}
-                            <div className="space-y-2">
-                              <label className="block text-xs font-semibold text-slate-700">
-                                Reason for late request:
-                              </label>
-                              <textarea
-                                value={lateReason}
-                                onChange={(e) => setLateReason(e.target.value)}
-                                placeholder="Explain why you could not submit on time..."
-                                rows={2}
-                                className="w-full p-2.5 bg-white border border-amber-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500"
-                              />
-                              <button
-                                type="button"
-                                onClick={handleCreateLateRequest}
-                                disabled={submittingLateReq}
-                                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition flex items-center gap-2"
-                              >
-                                {submittingLateReq ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <Send className="w-3.5 h-3.5" />
-                                )}
-                                Send Late Request to CR
-                              </button>
-                            </div>
-                          </div>
+                      <div className="p-4 bg-amber-50 border border-amber-300 rounded-xl space-y-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>
+                            {lateReqStatus?.status === 'Rejected'
+                              ? 'Your previous request was rejected.'
+                              : lateReqStatus?.status === 'Approved'
+                                ? 'The 5-minute approval window expired.'
+                                : 'The deadline has passed. Late access requires individual CR/Admin approval.'}
+                          </span>
+                        </div>
+                        {lateReqSuccessMsg && (
+                          <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-semibold">{lateReqSuccessMsg}</div>
                         )}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-semibold text-slate-700">Reason for late request:</label>
+                          <textarea
+                            value={lateReason}
+                            onChange={(e) => setLateReason(e.target.value)}
+                            placeholder="Explain why you could not submit on time..."
+                            rows={2}
+                            className="w-full p-2.5 bg-white border border-amber-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCreateLateRequest}
+                            disabled={submittingLateReq || selectedSubmissionMemberId !== student.id}
+                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition flex items-center gap-2"
+                          >
+                            {submittingLateReq ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                            {selectedSubmissionMemberId !== student.id
+                              ? 'Selected member must request access'
+                              : lateReqStatus ? 'Request a new 5-minute access window' : 'Send Late Request to CR'}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1304,8 +1560,91 @@ export const StudentDashboard: React.FC = () => {
               </div>
             )}
 
+            {isPastDeadline && !canSubmitNow && (
+              <p className="px-6 pb-6 text-center text-sm font-semibold text-slate-500">
+                View only: upload is available before the deadline or during your 5-minute approved window.
+              </p>
+            )}
+
             {/* File Upload Box (Only enabled if canSubmitNow) */}
-            {canSubmitNow && (
+            {selectedAssignment?.submissionType === 'Group' && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Uploading for group member <span className="text-red-500">*</span>
+                </label>
+                {loadingUploadGroup ? (
+                  <p className="text-xs text-slate-600">Loading your group members...</p>
+                ) : uploadGroup ? (
+                  <>
+                    <p className="text-xs text-slate-600">
+                      Select everyone included in this file. Each selected member gets a submission record using their group sequence.
+                    </p>
+                    <div className="space-y-2">
+                      {uploadGroup.members.map((member, index) => {
+                        const isCurrentStudent = member.rollNumber.toLowerCase() === student.rollNumber.toLowerCase();
+                        const memberId = member.studentId || (isCurrentStudent ? student.id : '');
+                        const alreadySubmitted = uploadGroup.submittedMembers?.some(
+                          (submission) => submission.rollNumber.toLowerCase() === member.rollNumber.toLowerCase()
+                        ) || false;
+                        const checked = Boolean(memberId && selectedSubmissionMemberIds.includes(memberId));
+                        return (
+                          <label
+                            key={member.rollNumber}
+                            className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
+                              alreadySubmitted ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'
+                            } ${!memberId || alreadySubmitted ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={isSubmitting || alreadySubmitted || !memberId}
+                              onChange={(event) => {
+                                if (event.target.checked) {
+                                  setSelectedSubmissionMemberIds((current) => [...new Set([...current, memberId])]);
+                                  setSelectedSubmissionMemberId(memberId);
+                                } else {
+                                  setSelectedSubmissionMemberIds((current) => {
+                                    const next = current.filter((id) => id !== memberId);
+                                    if (selectedSubmissionMemberId === memberId) {
+                                      setSelectedSubmissionMemberId(next[0] || student.id);
+                                    }
+                                    return next;
+                                  });
+                                }
+                              }}
+                              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="min-w-0 flex-1 text-sm font-semibold text-slate-800">
+                              {member.name} ({member.rollNumber})
+                              {isCurrentStudent ? ' — You' : ''}
+                              <span className="ml-2 text-xs font-medium text-slate-500">Sequence {index + 1}</span>
+                            </span>
+                            <span className={`shrink-0 text-xs font-bold ${alreadySubmitted ? 'text-emerald-700' : memberId ? 'text-blue-700' : 'text-amber-700'}`}>
+                              {alreadySubmitted
+                                ? 'File uploaded'
+                                : memberId
+                                ? 'Not submitted'
+                                : 'Account not linked'}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {isPastDeadline && selectedSubmissionMemberId !== student.id && (
+                      <p className="text-xs font-semibold text-amber-800">
+                        After the deadline, each member must request access from their own account and receive approval before their file can be submitted.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs font-semibold text-amber-800">
+                    No group is registered for this assignment. Register or join a group before uploading.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {canSubmitForSelection && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Assignment File <span className="text-red-500">*</span>
@@ -1360,33 +1699,10 @@ export const StudentDashboard: React.FC = () => {
               </div>
             )}
 
-            {/* Sequence Number for Group Assignments */}
-            {canSubmitNow && selectedAssignment?.submissionType === 'Group' && (
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Your Position in Group <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min={1}
-                    max={selectedAssignment.maxGroupSize || 4}
-                    value={sequenceNumber}
-                    onChange={(e) => setSequenceNumber(Number(e.target.value))}
-                    disabled={isSubmitting}
-                    className="w-24 px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold"
-                  />
-                  <p className="text-xs text-slate-600">
-                    Enter your sequence number (1, 2, 3, etc.) - this determines the order in the merged PDF
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {canSubmitNow && (
+            {canSubmitForSelection && (
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || (selectedAssignment?.submissionType === 'Group' && selectedSubmissionMemberIds.length === 0)}
                 className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-base rounded-xl shadow-lg transition flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
@@ -1397,7 +1713,9 @@ export const StudentDashboard: React.FC = () => {
                 ) : (
                   <>
                     <Send className="w-5 h-5" />
-                    Submit Assignment
+                    {selectedAssignment?.submissionType === 'Group' && selectedSubmissionMemberIds.length > 1
+                      ? `Submit for ${selectedSubmissionMemberIds.length} Students`
+                      : 'Submit Assignment'}
                   </>
                 )}
               </button>
@@ -1480,7 +1798,7 @@ export const StudentDashboard: React.FC = () => {
                     {getDeadlineCountdown(selectedGroupAssignment.groupDeadline || selectedGroupAssignment.deadline).text}
                   </span>
                   {selectedGroupAssignment.allowLateGroupRegistration && (
-                    <span className="px-2.5 py-1 text-[11px] font-bold bg-purple-100 text-purple-800 rounded-full border border-purple-200">
+                    <span className="px-2.5 py-1 text-[11px] font-bold bg-blue-100 text-blue-800 rounded-full border border-blue-200">
                       Late Registration Allowed
                     </span>
                   )}
@@ -1918,7 +2236,7 @@ export const StudentDashboard: React.FC = () => {
                       <td className="p-4">
                         <span className="font-semibold text-slate-800">{(sub.assignmentId as any)?.title || 'Assignment'}</span>
                         {sub.groupName && (
-                          <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-md border border-purple-200 align-middle">
+                          <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 rounded-md border border-blue-200 align-middle">
                             👥 {sub.groupName}
                           </span>
                         )}
@@ -1952,20 +2270,19 @@ export const StudentDashboard: React.FC = () => {
                               View File
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteSubmission(sub._id)}
-                            disabled={deletingId === sub._id}
-                            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-md border border-red-200 transition flex items-center gap-1"
-                            title="Wrong file uploaded? Delete and re-upload."
-                          >
-                            {deletingId === sub._id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3 h-3" />
-                            )}
-                            Delete & Re-upload
-                          </button>
+                          {canReuploadSubmission(sub) ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSubmission(sub._id)}
+                              disabled={deletingId === sub._id}
+                              className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-md border border-red-200 transition flex items-center gap-1"
+                              title="Wrong file uploaded? Delete and re-upload."
+                            >
+                              {deletingId === sub._id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                              Delete & Re-upload
+                              {deadlineTick > new Date((sub.assignmentId as Assignment).deadline).getTime() && ` (${reuploadWindowSeconds(sub)}s)`}
+                            </button>
+                          ) : <span className="text-xs text-slate-500">View only · deadline passed</span>}
                         </div>
                       </td>
                     </tr>
@@ -1992,7 +2309,7 @@ export const StudentDashboard: React.FC = () => {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-slate-800 break-words">{(sub.assignmentId as any)?.title || 'Assignment'}</p>
                     {sub.groupName && (
-                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-md border border-purple-200">
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 rounded-md border border-blue-200">
                         👥 {sub.groupName}
                       </span>
                     )}
@@ -2009,14 +2326,19 @@ export const StudentDashboard: React.FC = () => {
                         <Eye className="w-3.5 h-3.5" /> View File
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteSubmission(sub._id)}
-                      disabled={deletingId === sub._id}
-                      className="flex-1 py-2 bg-red-50 text-red-700 text-xs font-bold rounded-lg border border-red-200"
-                    >
-                      {deletingId === sub._id ? 'Deleting...' : 'Delete & Re-upload'}
-                    </button>
+                    {canReuploadSubmission(sub) && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSubmission(sub._id)}
+                        disabled={deletingId === sub._id}
+                        className="flex-1 py-2 bg-red-50 text-red-700 text-xs font-bold rounded-lg border border-red-200"
+                      >
+                        {deletingId === sub._id ? 'Deleting...' : 'Delete & Re-upload'}
+                        {deadlineTick > new Date((sub.assignmentId as Assignment).deadline).getTime()
+                          ? ` (${reuploadWindowSeconds(sub)}s)`
+                          : ''}
+                      </button>
+                    )}
                   </div>
                 </article>
               ))
@@ -2154,7 +2476,7 @@ export const StudentDashboard: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 pb-6">
               <div>
                 <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2.5">
-                  <Crown className="w-6 h-6 text-purple-600" />
+                  <Crown className="w-6 h-6 text-blue-600" />
                   Class Representative & Assistant Application
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -2174,7 +2496,7 @@ export const StudentDashboard: React.FC = () => {
             {/* Current Application Status Card */}
             {crAppLoading ? (
               <div className="py-12 text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto" />
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
                 <p className="text-xs text-slate-500 mt-2 font-medium">Checking application status...</p>
               </div>
             ) : crAppStatus ? (
@@ -2306,7 +2628,7 @@ export const StudentDashboard: React.FC = () => {
                     <select
                       value={crAppRoleType}
                       onChange={(e) => setCRAppRoleType(e.target.value as 'CR' | 'CR_ASSISTANT')}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="CR">Class Representative (CR)</option>
                       <option value="CR_ASSISTANT">CR Assistant</option>
@@ -2321,7 +2643,7 @@ export const StudentDashboard: React.FC = () => {
                       value={crAppClassId}
                       onChange={(e) => setCRAppClassId(e.target.value)}
                       required
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">-- Choose Class --</option>
                       {crAppClasses.map((cls) => (
@@ -2343,7 +2665,7 @@ export const StudentDashboard: React.FC = () => {
                     value={crAppReason}
                     onChange={(e) => setCRAppReason(e.target.value)}
                     maxLength={500}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500"
                   />
                   <p className="text-[11px] text-slate-400 mt-1 text-right">{crAppReason.length}/500</p>
                 </div>
@@ -2351,7 +2673,7 @@ export const StudentDashboard: React.FC = () => {
                 <button
                   type="submit"
                   disabled={crAppSubmitting}
-                  className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2"
+                  className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2"
                 >
                   {crAppSubmitting ? (
                     <>
@@ -2410,7 +2732,6 @@ export const StudentDashboard: React.FC = () => {
                     </button>
                   )}
                 </div>
-
                 {editMembers.map((m, idx) => (
                   <div key={idx} className="p-3 bg-slate-50 border rounded-xl space-y-3">
                     <div className="flex items-center gap-2">
@@ -2491,6 +2812,7 @@ export const StudentDashboard: React.FC = () => {
           </div>
         </div>
       )}
+      </main>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 import Quiz, { IQuizQuestion } from '../models/Quiz.js';
@@ -6,13 +6,12 @@ import QuizSubmission from '../models/QuizSubmission.js';
 import QuizAttempt from '../models/QuizAttempt.js';
 import Class from '../models/Class.js';
 import Subject from '../models/Subject.js';
-import Student from '../models/Student.js';
 import LateRequest from '../models/LateRequest.js';
 import TeacherAssignment from '../models/TeacherAssignment.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { generateQuizSubmissionDocx } from '../utils/docxGenerator.js';
 import { generateSubmissionId } from '../utils/submissionId.js';
-import { escapeRegex, sanitizeCsvField } from '../utils/fileValidation.js';
+import { sanitizeCsvField } from '../utils/fileValidation.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import ExcelJS from 'exceljs';
 
@@ -709,7 +708,6 @@ export const submitQuiz = async (req: AuthRequest, res: Response): Promise<void>
 
 
     // Map answers and Auto-grade MCQ questions on server side
-    const questionMap = new Map(quiz.questions.map((q) => [q.questionId, q]));
     let mcqScore = 0;
     let writtenQuestionsCount = 0;
     const processedAnswers: any[] = [];

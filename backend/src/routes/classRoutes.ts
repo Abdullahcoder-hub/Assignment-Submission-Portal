@@ -4,6 +4,7 @@ import {
   getClassById,
   createClass,
   updateClass,
+  deleteClass,
   regenerateClassJoinCode,
   updateClassJoinCode,
   toggleClassJoinCode,
@@ -21,6 +22,7 @@ router.get('/:id/students', authenticateStaff, getClassStudents);
 // Super Admin / Admin class management
 router.post('/', authenticateAdmin, createClass);
 router.put('/:id', authenticateAdmin, updateClass);
+router.delete('/:id', authenticateAdmin, deleteClass);
 router.post('/:id/regenerate-code', authenticateStaff, regenerateClassJoinCode);
 router.put('/:id/join-code', authenticateStaff, updateClassJoinCode);
 router.post('/:id/toggle-code', authenticateStaff, toggleClassJoinCode);

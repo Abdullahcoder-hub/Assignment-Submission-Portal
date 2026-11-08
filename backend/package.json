@@ -9,7 +9,7 @@
     "start": "node dist/scripts/seedAdmin.js && node dist/src/server.js",
     "secure:uploads": "tsx scripts/secureUploads.ts",
     "seed:admin": "tsx scripts/seedAdmin.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --project tests/tsconfig.json --noEmit",
     "lint": "tsc --noEmit",
     "test:backend-registry": "tsx --test tests/backendRegistry.test.ts",
     "test:pdf-identity": "tsx --test tests/submissionPdfIdentity.test.ts"

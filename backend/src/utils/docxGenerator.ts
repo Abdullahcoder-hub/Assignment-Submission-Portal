@@ -1,4 +1,4 @@
-import { Document, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, Packer } from 'docx';
+import { Document, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, Packer } from 'docx';
 
 export interface DocxQuizPayload {
   studentName: string;

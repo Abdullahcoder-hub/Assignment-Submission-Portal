@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { User, Lock, Mail, KeyRound, Loader2, AlertCircle, CheckCircle2, Shield, Eye, EyeOff, Send } from 'lucide-react';
+import { User, KeyRound, Loader2, AlertCircle, CheckCircle2, Eye, EyeOff, Send } from 'lucide-react';
 import api from '../api/axios';
 import { PasswordRequirements } from '../components/PasswordRequirements';
 import { getPasswordRequirementStatus } from '../utils/passwordRequirements';
 
 export const StudentRegister: React.FC = () => {
-  const { studentRegister, googleLoginStudent } = useAuth();
-  const navigate = useNavigate();
+  const { studentRegister } = useAuth();
 
   const [name, setName] = useState<string>('');
   const [rollNumber, setRollNumber] = useState<string>('');
@@ -158,11 +157,11 @@ export const StudentRegister: React.FC = () => {
   return (
     <div className="min-h-[90vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-x-clip">
       {/* Subtle background ambient light */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
       <div className="max-w-md w-full glass-panel rounded-3xl shadow-2xl border border-slate-200/80 dark:border-white/10 p-8 space-y-6">
         <div className="text-center space-y-2">
-          <div className="inline-flex p-3 bg-gradient-to-tr from-blue-600/10 to-indigo-600/20 text-blue-600 rounded-2xl mb-1 shadow-inner border border-blue-500/20">
+          <div className="inline-flex p-3 bg-gradient-to-tr from-blue-600/10 to-blue-600/20 text-blue-600 rounded-2xl mb-1 shadow-inner border border-blue-500/20">
             <User className="w-9 h-9" />
           </div>
           <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Student Account Registration</h2>
@@ -257,6 +256,7 @@ export const StudentRegister: React.FC = () => {
                 <input
                   id="register-roll-number"
                   type="text"
+                  inputMode="numeric"
                   maxLength={7}
                   placeholder="e.g. 2260000"
                   value={rollNumber}
@@ -348,7 +348,7 @@ export const StudentRegister: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center text-slate-400 hover:text-slate-600 p-1"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -372,7 +372,7 @@ export const StudentRegister: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center text-slate-400 hover:text-slate-600 p-1"
                   aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                 >
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

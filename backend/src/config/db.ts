@@ -13,7 +13,7 @@ export const connectDB = async (syncGroupIndexes = true): Promise<void> => {
       dns.setServers(dnsServers);
     }
 
-    const conn = await mongoose.connect(connStr, {
+    await mongoose.connect(connStr, {
       serverSelectionTimeoutMS: 10000,
       maxPoolSize: 50,
       minPoolSize: 5,

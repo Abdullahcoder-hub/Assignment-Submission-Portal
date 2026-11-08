@@ -4,11 +4,9 @@ import { SharedAssignment } from '../types';
 import {
   Archive,
   FileSpreadsheet,
-  Download,
   Search,
   RefreshCw,
   Loader2,
-  Calendar,
   Clock,
   User,
   BookOpen,
@@ -182,7 +180,7 @@ export const TeacherSharedAssignmentsSection: React.FC = () => {
                         {subject?.code || 'SUBJECT'}
                       </span>
                       {targetClass && (
-                        <span className="px-2.5 py-1 text-xs font-medium rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
+                        <span className="px-2.5 py-1 text-xs font-medium rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 flex items-center gap-1">
                           <GraduationCap className="w-3 h-3" />
                           {targetClass.name} ({targetClass.section || 'General'})
                         </span>

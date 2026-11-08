@@ -5,16 +5,37 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { StudentLogin } from './pages/StudentLogin';
-import { StudentRegister } from './pages/StudentRegister';
-import { StudentDashboard } from './pages/StudentDashboard';
-import { VerifyEmail } from './pages/VerifyEmail';
-import { ForgotPassword } from './pages/ForgotPassword';
-import { ResetPassword } from './pages/ResetPassword';
-import { AdminLogin } from './pages/AdminLogin';
-import { AdminDashboard } from './pages/AdminDashboard';
-import { StaffRegister } from './pages/StaffRegister';
-import { SubmissionPreview } from './pages/SubmissionPreview';
+const StudentLogin = React.lazy(() =>
+  import('./pages/StudentLogin').then(({ StudentLogin: Page }) => ({ default: Page }))
+);
+const StudentRegister = React.lazy(() =>
+  import('./pages/StudentRegister').then(({ StudentRegister: Page }) => ({ default: Page }))
+);
+const VerifyEmail = React.lazy(() =>
+  import('./pages/VerifyEmail').then(({ VerifyEmail: Page }) => ({ default: Page }))
+);
+const ForgotPassword = React.lazy(() =>
+  import('./pages/ForgotPassword').then(({ ForgotPassword: Page }) => ({ default: Page }))
+);
+const ResetPassword = React.lazy(() =>
+  import('./pages/ResetPassword').then(({ ResetPassword: Page }) => ({ default: Page }))
+);
+const AdminLogin = React.lazy(() =>
+  import('./pages/AdminLogin').then(({ AdminLogin: Page }) => ({ default: Page }))
+);
+const StaffRegister = React.lazy(() =>
+  import('./pages/StaffRegister').then(({ StaffRegister: Page }) => ({ default: Page }))
+);
+const SubmissionPreview = React.lazy(() =>
+  import('./pages/SubmissionPreview').then(({ SubmissionPreview: Page }) => ({ default: Page }))
+);
+
+const StudentDashboard = React.lazy(() =>
+  import('./pages/StudentDashboard').then(({ StudentDashboard: Dashboard }) => ({ default: Dashboard }))
+);
+const AdminDashboard = React.lazy(() =>
+  import('./pages/AdminDashboard').then(({ AdminDashboard: Dashboard }) => ({ default: Dashboard }))
+);
 
 const HomeRedirect: React.FC = () => {
   const { isAuthenticated, role, isLoading } = useAuth();
@@ -32,33 +53,35 @@ export const App: React.FC = () => {
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
           <Navbar />
           <div className="flex-1">
-            <Routes>
-              {/* Home Route */}
-              <Route path="/" element={<HomeRedirect />} />
+            <React.Suspense fallback={null}>
+              <Routes>
+                {/* Home Route */}
+                <Route path="/" element={<HomeRedirect />} />
 
-              {/* Student Auth Routes */}
-              <Route path="/student/login" element={<StudentLogin />} />
-              <Route path="/register" element={<StudentRegister />} />
-              <Route path="/staff/register" element={<StaffRegister />} />
-              <Route path="/verify-email" element={<VerifyEmail />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/submission-preview/:id" element={<SubmissionPreview />} />
+                {/* Student Auth Routes */}
+                <Route path="/student/login" element={<StudentLogin />} />
+                <Route path="/register" element={<StudentRegister />} />
+                <Route path="/staff/register" element={<StaffRegister />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/submission-preview/:id" element={<SubmissionPreview />} />
 
-              {/* Student Protected Dashboard */}
-              <Route element={<ProtectedRoute requiredRole="STUDENT" />}>
-                <Route path="/student/dashboard" element={<StudentDashboard />} />
-              </Route>
+                {/* Student Protected Dashboard */}
+                <Route element={<ProtectedRoute requiredRole="STUDENT" />}>
+                  <Route path="/student/dashboard" element={<StudentDashboard />} />
+                </Route>
 
-              {/* Admin Auth Routes */}
-              <Route path="/admin/login" element={<AdminLogin />} />
-              <Route element={<ProtectedRoute requiredRole="ADMIN" />}>
-                <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              </Route>
+                {/* Admin Auth Routes */}
+                <Route path="/admin/login" element={<AdminLogin />} />
+                <Route element={<ProtectedRoute requiredRole="ADMIN" />}>
+                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                </Route>
 
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+                {/* Fallback */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </React.Suspense>
           </div>
           <Footer />
         </div>

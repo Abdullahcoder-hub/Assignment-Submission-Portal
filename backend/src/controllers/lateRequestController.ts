@@ -3,7 +3,6 @@ import LateRequest from '../models/LateRequest.js';
 import Assignment from '../models/Assignment.js';
 import Subject from '../models/Subject.js';
 import Group from '../models/Group.js';
-import Admin from '../models/Admin.js';
 import Student from '../models/Student.js';
 import jwt from 'jsonwebtoken';
 import { sendLateRequestEmail } from '../config/brevo.js';
@@ -17,6 +16,7 @@ import Quiz from '../models/Quiz.js';
 import Class from '../models/Class.js';
 import QuizAttempt from '../models/QuizAttempt.js';
 import TeacherAssignment from '../models/TeacherAssignment.js';
+import { isLateSubmissionGrantActive } from '../utils/lateSubmissionWindow.js';
 
 const decisionToken = (requestId: string, decision: 'Approved' | 'Rejected') => jwt.sign(
   { requestId, decision, purpose: 'late-request-decision' },
@@ -227,7 +227,9 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
       assignmentId,
       requestType: requestType === 'Submission' ? { $in: ['Submission', null] } : requestType,
     };
-    if (group) {
+    if (requestType === 'Submission') {
+      filter.studentId = studentId;
+    } else if (group) {
       filter.$or = [{ groupId: group._id }, { studentId }];
     } else {
       filter.studentId = studentId;
@@ -235,7 +237,15 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
 
     let existingRequest = await LateRequest.findOne(filter);
 
-    if (existingRequest && !(requestType === 'GroupRegistration' && existingRequest.status === 'Rejected')) {
+    const expiredApprovedSubmissionRequest = requestType === 'Submission'
+      && existingRequest?.status === 'Approved'
+      && !isLateSubmissionGrantActive(existingRequest.decidedAt);
+    const rejectedSubmissionRequest = requestType === 'Submission'
+      && existingRequest?.status === 'Rejected';
+    if (existingRequest
+      && !expiredApprovedSubmissionRequest
+      && !rejectedSubmissionRequest
+      && !(requestType === 'GroupRegistration' && existingRequest.status === 'Rejected')) {
       res.status(200).json({
         success: true,
         message: existingRequest.status === 'Approved'
@@ -261,7 +271,13 @@ export const createLateRequest = async (req: AuthRequest, res: Response): Promis
       requestedAt: new Date(),
     };
     let newRequest = existingRequest;
-    if (existingRequest?.status === 'Rejected' && requestType === 'GroupRegistration') {
+    if ((expiredApprovedSubmissionRequest || rejectedSubmissionRequest) && existingRequest) {
+      Object.assign(existingRequest, requestFields);
+      existingRequest.decidedAt = undefined;
+      existingRequest.decidedBy = undefined;
+      existingRequest.rejectionReason = '';
+      newRequest = await existingRequest.save();
+    } else if (existingRequest?.status === 'Rejected' && requestType === 'GroupRegistration') {
       Object.assign(existingRequest, requestFields);
       existingRequest.decidedAt = undefined;
       existingRequest.decidedBy = undefined;
@@ -384,10 +400,38 @@ export const getMyLateRequestStatus = async (req: AuthRequest, res: Response): P
       return;
     }
 
-    const studentId = req.student.id;
+    let studentId = req.student.id;
 
-    // Find if student is in a group for this assignment
     const assignment = await Assignment.findById(assignmentId);
+    const requestedStudentId = String(req.query.studentId || '');
+    if (requestedStudentId && requestedStudentId !== studentId) {
+      if (requestType !== 'Submission' || assignment?.submissionType !== 'Group') {
+        res.status(403).json({ success: false, message: "You cannot view another student's late request." });
+        return;
+      }
+
+      const targetStudent = await Student.findById(requestedStudentId).select('_id').lean();
+      let memberGroup = assignment
+        ? await Group.findOne({
+          subjectId: assignment.subjectId,
+          assignmentId,
+          'members.studentId': { $all: [studentId, requestedStudentId] },
+        })
+        : null;
+      if (!memberGroup && assignment) {
+        memberGroup = await Group.findOne({
+          subjectId: assignment.subjectId,
+          assignmentId: null,
+          'members.studentId': { $all: [studentId, requestedStudentId] },
+        });
+      }
+      if (!targetStudent || !memberGroup) {
+        res.status(403).json({ success: false, message: 'Late request status is only available to members of your assignment group.' });
+        return;
+      }
+      studentId = requestedStudentId;
+    }
+
     let group = null;
     if (assignment) {
       group = await Group.findOne({ subjectId: assignment.subjectId, 'members.studentId': studentId });
@@ -397,7 +441,9 @@ export const getMyLateRequestStatus = async (req: AuthRequest, res: Response): P
       assignmentId,
       requestType: requestType === 'Submission' ? { $in: ['Submission', null] } : requestType,
     };
-    if (group) {
+    if (requestType === 'Submission') {
+      filter.studentId = studentId;
+    } else if (group) {
       filter.$or = [{ groupId: group._id }, { studentId }];
     } else {
       filter.studentId = studentId;

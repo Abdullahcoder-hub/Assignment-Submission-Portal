@@ -12,7 +12,6 @@ import {
 } from '../controllers/groupController.js';
 import {
   authenticateStudent,
-  authenticateAdmin,
   authenticateStudentOrAdmin,
   forbidTeacher,
   authenticateCR,

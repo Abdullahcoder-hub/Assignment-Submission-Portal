@@ -1,9 +1,19 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import mongoose from 'mongoose';
 import Class from '../models/Class.js';
 import Admin from '../models/Admin.js';
 import Student from '../models/Student.js';
 import TeacherAssignment from '../models/TeacherAssignment.js';
+import Subject from '../models/Subject.js';
+import Assignment from '../models/Assignment.js';
+import Submission from '../models/Submission.js';
+import SharedAssignment from '../models/SharedAssignment.js';
+import Quiz from '../models/Quiz.js';
+import QuizSubmission from '../models/QuizSubmission.js';
+import QuizAttempt from '../models/QuizAttempt.js';
+import LateRequest from '../models/LateRequest.js';
+import Group from '../models/Group.js';
+import CRApplication from '../models/CRApplication.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { generateRandomJoinCode } from '../utils/joinCode.js';
 
@@ -261,6 +271,53 @@ export const updateClass = async (req: AuthRequest, res: Response): Promise<void
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to update class.' });
+  }
+};
+
+/**
+ * Delete a class only when it has no linked records.
+ */
+export const deleteClass = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const classDoc = await Class.findById(id);
+    if (!classDoc) {
+      res.status(404).json({ success: false, message: 'Class not found.' });
+      return;
+    }
+
+    const linkedRecordCounts = await Promise.all([
+      Student.countDocuments({ classId: id }),
+      TeacherAssignment.countDocuments({ classId: id }),
+      Subject.countDocuments({ classId: id }),
+      Assignment.countDocuments({ classId: id }),
+      Submission.countDocuments({ classId: id }),
+      SharedAssignment.countDocuments({ classId: id }),
+      Quiz.countDocuments({ classId: id }),
+      QuizSubmission.countDocuments({ classId: id }),
+      QuizAttempt.countDocuments({ classId: id }),
+      LateRequest.countDocuments({ classId: id }),
+      Group.countDocuments({ classId: id }),
+      CRApplication.countDocuments({ classId: id }),
+    ]);
+
+    if (linkedRecordCounts.some((count) => count > 0)) {
+      res.status(409).json({
+        success: false,
+        message: 'Cannot delete a class while it has linked students or academic records. Remove or move them first.',
+      });
+      return;
+    }
+
+    await Admin.updateMany(
+      { assignedClassId: classDoc._id },
+      { $unset: { assignedClassId: 1 } }
+    );
+    await classDoc.deleteOne();
+
+    res.status(200).json({ success: true, message: 'Class deleted successfully.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to delete class.' });
   }
 };
 

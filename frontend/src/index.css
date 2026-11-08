@@ -5,7 +5,6 @@
   body {
     margin: 0;
     min-height: 100vh;
-    overflow-x: hidden;
     background-color: #0f172a;
     background-image: 
       radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.12) 0px, transparent 50%),
@@ -96,6 +95,16 @@ button:not(:disabled):active {
   box-sizing: border-box;
 }
 
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 /* Custom Subtle Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
@@ -120,12 +129,22 @@ button:not(:disabled):active {
   .student-dashboard {
     width: 100%;
     max-width: 100%;
-    padding: 1rem 0.75rem;
-    overflow-x: clip;
+    padding: 0;
   }
 
-  .student-dashboard > :not([hidden]) ~ :not([hidden]) {
-    margin-top: 1rem;
+  .student-dashboard aside nav {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .student-dashboard aside nav > button {
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .student-dashboard > *,
@@ -204,19 +223,66 @@ button:not(:disabled):active {
   }
 }
 
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 44px;
+  }
+}
+
 @media (max-width: 767px) {
-  .admin-dashboard aside nav {
+  .admin-dashboard aside nav,
+  .student-dashboard aside nav {
     display: flex;
-    gap: 0.5rem;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
+    flex-direction: column;
+    gap: 0.25rem;
   }
 
-  .admin-dashboard aside nav > button {
-    width: auto;
-    flex: 0 0 auto;
-    white-space: nowrap;
+  .admin-dashboard aside nav > button,
+  .student-dashboard aside nav > button {
+    width: 100%;
+    flex: none;
+    white-space: normal;
+  }
+}
+
+.dashboard-stat-grid > button {
+  min-width: 0;
+  min-height: 7rem;
+}
+
+.admin-dashboard aside[data-collapsed="true"] nav,
+.student-dashboard aside[data-collapsed="true"] nav {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0.5rem;
+}
+
+.admin-dashboard aside[data-collapsed="true"] nav > button,
+.student-dashboard aside[data-collapsed="true"] nav > button {
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  margin-inline: auto;
+  padding: 0;
+  gap: 0;
+  font-size: 0;
+}
+
+.admin-dashboard aside[data-collapsed="true"] nav > button svg,
+.student-dashboard aside[data-collapsed="true"] nav > button svg {
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

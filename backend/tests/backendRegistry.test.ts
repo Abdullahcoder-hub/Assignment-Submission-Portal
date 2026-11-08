@@ -15,7 +15,7 @@ test('rejects malformed or credential-bearing backend URLs', () => {
     'https://backend.example.com/api?token=secret',
     'https://backend.example.com/private',
   ]) {
-    assert.throws(() => normalizeBackendUrl(url), undefined, url);
+    assert.throws(() => normalizeBackendUrl(url), /.+/, url);
   }
 });
 

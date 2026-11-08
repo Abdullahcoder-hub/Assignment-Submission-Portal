@@ -152,12 +152,13 @@ export interface Submission {
   status: 'Submitted' | 'Late' | 'Submitted Late — CR Approved';
   emailStatus: 'Sent' | 'Failed';
   groupName?: string | null;
+  lateSubmissionApprovedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface GroupMember {
-  studentId: string;
+  studentId?: string;
   name: string;
   rollNumber: string;
 }
@@ -169,6 +170,12 @@ export interface Group {
   assignmentId?: Assignment | string;
   leader: GroupMember;
   members: GroupMember[];
+  submittedMembers?: {
+    studentName: string;
+    rollNumber: string;
+    sequenceNumber?: number;
+    submittedAt: string;
+  }[];
   maxGroupSize: number;
   createdAt: string;
   updatedAt: string;

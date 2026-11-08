@@ -83,8 +83,8 @@ export const CRApplicationsTab: React.FC = () => {
 
   const getRoleBadge = (roleType: string) => {
     if (roleType === 'CR_ASSISTANT')
-      return <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold text-xs">CR Assistant</span>;
-    return <span className="px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-semibold text-xs flex items-center gap-1"><Crown className="w-3 h-3" />Class CR</span>;
+      return <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-xs">CR Assistant</span>;
+    return <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-xs flex items-center gap-1"><Crown className="w-3 h-3" />Class CR</span>;
   };
 
   const filtered = applications.filter((app) => {
@@ -113,7 +113,7 @@ export const CRApplicationsTab: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Crown className="w-5 h-5 text-purple-600" />
+            <Crown className="w-5 h-5 text-blue-600" />
             CR / CR Assistant Applications
           </h2>
           <p className="text-sm text-slate-500 mt-1">
@@ -147,14 +147,14 @@ export const CRApplicationsTab: React.FC = () => {
             placeholder="Search by name, email, roll, class..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div className="flex items-center gap-2 self-end">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="ALL">All Statuses</option>
             <option value="PENDING">Pending</option>
@@ -174,7 +174,7 @@ export const CRApplicationsTab: React.FC = () => {
       {/* Table */}
       {loading ? (
         <div className="text-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto" />
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
           <p className="text-sm text-slate-500 mt-2">Loading applications...</p>
         </div>
       ) : filtered.length === 0 ? (

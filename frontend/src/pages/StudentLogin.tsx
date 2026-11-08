@@ -215,7 +215,7 @@ export const StudentLogin: React.FC = () => {
 
       <div className="max-w-md w-full glass-panel rounded-3xl shadow-2xl border border-slate-200/80 dark:border-white/10 p-8 space-y-6">
         <div className="text-center space-y-2">
-          <div className="inline-flex p-3 bg-gradient-to-tr from-blue-600/10 to-indigo-600/20 text-blue-600 rounded-2xl mb-1 shadow-inner border border-blue-500/20">
+          <div className="inline-flex p-3 bg-gradient-to-tr from-blue-600/10 to-blue-600/20 text-blue-600 rounded-2xl mb-1 shadow-inner border border-blue-500/20">
             <User className="w-9 h-9" />
           </div>
           <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Portal Sign In</h2>
@@ -271,7 +271,7 @@ export const StudentLogin: React.FC = () => {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label htmlFor="login-password" className="block text-sm font-semibold text-slate-700">Password</label>
-              <Link to="/forgot-password" className="text-xs font-semibold text-blue-600 hover:underline">
+              <Link to="/forgot-password" className="inline-flex min-h-11 items-center px-1 text-xs font-semibold text-blue-600 hover:underline">
                 Forgot Password?
               </Link>
             </div>
@@ -289,7 +289,7 @@ export const StudentLogin: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center text-slate-400 hover:text-slate-600 p-1"
                 aria-label="Toggle password visibility"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -337,7 +337,7 @@ export const StudentLogin: React.FC = () => {
             type="button"
             onClick={handleGoogleClick}
             disabled={isSubmitting}
-            className="w-full py-2 border border-dashed border-slate-300 hover:bg-slate-50 text-slate-500 font-medium text-xs rounded-xl transition flex items-center justify-center gap-2"
+            className="w-full min-h-11 py-2 border border-dashed border-slate-300 hover:bg-slate-50 text-slate-500 font-medium text-xs rounded-xl transition flex items-center justify-center gap-2"
           >
             Simulate Google Login (Dev Mode)
           </button>
@@ -345,7 +345,7 @@ export const StudentLogin: React.FC = () => {
 
         <div className="text-center text-xs text-slate-500 pt-2">
           Don't have a student account?{' '}
-          <Link to="/register" className="font-bold text-blue-600 hover:underline">
+          <Link to="/register" className="inline-flex min-h-11 items-center font-bold text-blue-600 hover:underline">
             Register with Class Join Code
           </Link>
         </div>
@@ -372,12 +372,14 @@ export const StudentLogin: React.FC = () => {
 
             <form onSubmit={handleGoogleJoinSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label htmlFor="google-roll-number" className="block text-xs font-bold text-slate-700 mb-1">
                   Roll Number <span className="text-slate-400 font-normal">(7 digits, e.g. 2260000)</span>
                 </label>
                 <div className="relative">
                   <input
+                    id="google-roll-number"
                     type="text"
+                    inputMode="numeric"
                     maxLength={7}
                     placeholder="e.g. 2260000"
                     value={googleRollNumber}

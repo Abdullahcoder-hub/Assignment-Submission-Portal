@@ -127,7 +127,6 @@ class BackendPool {
   private poolId: string | null = expectedPoolId;
   private apiCompatibilityVersion = defaultVersion;
   private listeners = new Set<() => void>();
-  private intervalId: number | undefined;
   private lastSwitchAt = 0;
   private eventReporter?: (event: BackendEvent) => void;
 
@@ -152,7 +151,7 @@ class BackendPool {
       this.activeUrl = this.getPrimary()?.url || this.backends[0]?.url || '';
     }
     if (typeof window !== 'undefined') {
-      this.intervalId = window.setInterval(() => void this.checkAll(), probeIntervalMs);
+      window.setInterval(() => void this.checkAll(), probeIntervalMs);
       window.addEventListener('focus', () => void this.checkAll());
       void this.checkAll();
     }
@@ -210,16 +209,6 @@ class BackendPool {
     this.health.set(url, state);
     this.emit();
   };
-
-  private initialHealth = (): BackendHealth =>
-    this.health.get(this.activeUrl) || {
-      status: 'unknown',
-      lastCheck: null,
-      lastSuccess: null,
-      healthySince: null,
-      consecutiveSuccesses: 0,
-      failures: 0,
-    };
 
   private async probe(url: string): Promise<boolean> {
     const previous = this.health.get(url) || {

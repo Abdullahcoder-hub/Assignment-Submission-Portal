@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
-  Clock,
   Send,
   Loader2,
   BookOpen,
@@ -391,7 +390,7 @@ export const StudentSubmission: React.FC = () => {
         <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
           {/* Subject Dropdown */}
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">
+            <label htmlFor="submission-roll-number" className="block text-sm font-bold text-slate-700 mb-2">
               Subject <span className="text-red-500">*</span>
             </label>
             <select
@@ -489,7 +488,9 @@ export const StudentSubmission: React.FC = () => {
               Full Name <span className="text-red-500">*</span>
             </label>
             <input
+              id="submission-roll-number"
               type="text"
+              inputMode="numeric"
               placeholder="e.g. Abdullah Waqar"
               value={studentName}
               onChange={(e) => setStudentName(e.target.value)}

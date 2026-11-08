@@ -11,7 +11,7 @@ import {
   validateBackendList,
 } from '../utils/backendRegistry.js';
 
-export const getJoinCode = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getJoinCode = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     const settings = await getOrCreateClassJoinCode();
     res.status(200).json({
@@ -44,7 +44,7 @@ export const updateJoinCode = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-export const regenerateCode = async (req: AuthRequest, res: Response): Promise<void> => {
+export const regenerateCode = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     const newCode = await regenerateClassJoinCode();
     res.status(200).json({
@@ -58,7 +58,7 @@ export const regenerateCode = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-export const toggleCode = async (req: AuthRequest, res: Response): Promise<void> => {
+export const toggleCode = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     const settings = await getOrCreateClassJoinCode();
     settings.isJoinCodeActive = !settings.isJoinCodeActive;
@@ -75,7 +75,7 @@ export const toggleCode = async (req: AuthRequest, res: Response): Promise<void>
   }
 };
 
-export const getAdmins = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getAdmins = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     const admins = await Admin.find({}).select('name email _id').lean();
     res.status(200).json({
