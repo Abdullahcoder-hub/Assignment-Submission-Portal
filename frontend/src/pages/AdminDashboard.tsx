@@ -378,7 +378,7 @@ export const AdminDashboard: React.FC = () => {
       let query = '/groups?';
       if (groupFilterSubject) query += `subjectId=${groupFilterSubject}&`;
       if (groupFilterAssignment) query += `assignmentId=${groupFilterAssignment}&`;
-      if (groupSearch) query += `search=${encodeURIComponent(groupSearch.trim())}&`;
+      if (groupFilterAssignment && groupSearch) query += `search=${encodeURIComponent(groupSearch.trim())}&`;
       const res = await api.get(query);
       if (res.data.success) {
         setGroups(res.data.groups);
@@ -2076,79 +2076,120 @@ export const AdminDashboard: React.FC = () => {
                 <p className="text-slate-500 text-sm">View subject-wise registered groups and export CSV.</p>
               </div>
 
-              <button
-                onClick={handleExportGroupsCsv}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow transition"
-              >
-                <FileSpreadsheet className="w-4 h-4" /> Export Groups CSV
-              </button>
+              {groupFilterAssignment && (
+                <button
+                  onClick={handleExportGroupsCsv}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow transition"
+                >
+                  <FileSpreadsheet className="w-4 h-4" /> Export Groups CSV
+                </button>
+              )}
             </div>
 
-            {/* Filter bar */}
-            <div className="glass-panel p-4 rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search group name or roll #"
-                  value={groupSearch}
-                  onChange={(e) => setGroupSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <select
-                value={groupFilterSubject}
-                onChange={(e) => {
-                  setGroupFilterSubject(e.target.value);
-                  setGroupFilterAssignment('');
-                }}
-                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
-              >
-                <option value="">All Subjects</option>
-                {subjects.map((sub) => (
-                  <option key={sub._id} value={sub._id}>
-                    {sub.name} ({sub.code})
-                  </option>
+            {!groupFilterSubject && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {subjects.filter((subject) => assignments.some((assignment) => {
+                  const assignmentSubjectId = typeof assignment.subjectId === 'string'
+                    ? assignment.subjectId
+                    : assignment.subjectId?._id;
+                  return assignmentSubjectId === subject._id;
+                })).map((subject) => (
+                  <button
+                    key={subject._id}
+                    onClick={() => {
+                      setGroupFilterSubject(subject._id);
+                      setGroupFilterAssignment('');
+                      setGroupSearch('');
+                    }}
+                    className="text-left bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition"
+                  >
+                    <span className="text-xs font-semibold text-blue-700">{subject.code}</span>
+                    <h2 className="mt-1 font-bold text-slate-900">{subject.name}</h2>
+                  </button>
                 ))}
-              </select>
+              </div>
+            )}
 
-              <select
-                value={groupFilterAssignment}
-                onChange={(e) => setGroupFilterAssignment(e.target.value)}
-                disabled={!groupFilterSubject}
-                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <option value="">
-                  {groupFilterSubject ? 'All Active Assignments' : 'Select Subject First'}
-                </option>
-                {assignments
-                  .filter((assignment) => {
-                    const assignmentSubjectId = typeof assignment.subjectId === 'string'
-                      ? assignment.subjectId
-                      : assignment.subjectId._id;
-                    return assignmentSubjectId === groupFilterSubject && assignment.isActive;
-                  })
-                  .map((assignment) => (
-                    <option key={assignment._id} value={assignment._id}>
-                      {assignment.title}
-                    </option>
-                  ))}
-              </select>
-            </div>
+            {groupFilterSubject && !groupFilterAssignment && (
+              <div className="space-y-4">
+                <button
+                  onClick={() => {
+                    setGroupFilterSubject('');
+                    setGroups([]);
+                  }}
+                  className="text-sm font-semibold text-blue-700 hover:text-blue-900"
+                >
+                  ← All Subjects
+                </button>
+                {loadingGroups ? (
+                  <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> Loading group counts...
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {assignments.filter((assignment) => {
+                      const assignmentSubjectId = typeof assignment.subjectId === 'string'
+                        ? assignment.subjectId
+                        : assignment.subjectId?._id;
+                      return assignmentSubjectId === groupFilterSubject;
+                    }).map((assignment) => {
+                      const count = groups.filter((group) => {
+                        const assignmentId = typeof group.assignmentId === 'string'
+                          ? group.assignmentId
+                          : group.assignmentId?._id;
+                        return assignmentId === assignment._id;
+                      }).length;
+                      return (
+                        <button
+                          key={assignment._id}
+                          onClick={() => setGroupFilterAssignment(assignment._id)}
+                          className="text-left bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition"
+                        >
+                          <span className="text-xs font-semibold text-slate-500">Assignment</span>
+                          <h2 className="mt-1 font-bold text-slate-900">{assignment.title}</h2>
+                          <p className="mt-3 text-sm font-semibold text-blue-700">
+                            {count} {count === 1 ? 'group' : 'groups'} registered
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
-            {/* Groups Grid / Cards */}
-            <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-hidden p-6">
-              {loadingGroups ? (
-                <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> Loading groups...
+            {groupFilterAssignment && (
+              <div className="space-y-4">
+                <button
+                  onClick={() => {
+                    setGroupFilterAssignment('');
+                    setGroupSearch('');
+                  }}
+                  className="text-sm font-semibold text-blue-700 hover:text-blue-900"
+                >
+                  ← Back to {subjects.find((subject) => subject._id === groupFilterSubject)?.name || 'Assignments'}
+                </button>
+                <div className="relative max-w-md">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search group name or roll #"
+                    value={groupSearch}
+                    onChange={(e) => setGroupSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
-              ) : groups.length === 0 ? (
-                <div className="text-center py-10 text-slate-400 text-sm">
-                  No student groups registered yet.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="glass-panel rounded-3xl border border-slate-200/80 dark:border-white/10 shadow-xl overflow-hidden p-6">
+                  {loadingGroups ? (
+                    <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> Loading groups...
+                    </div>
+                  ) : groups.length === 0 ? (
+                    <div className="text-center py-10 text-slate-400 text-sm">
+                      No student groups registered for this assignment.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {groups.map((grp) => (
                     <div key={grp._id} className="p-5 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -2200,7 +2241,9 @@ export const AdminDashboard: React.FC = () => {
                   ))}
                 </div>
               )}
-            </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
