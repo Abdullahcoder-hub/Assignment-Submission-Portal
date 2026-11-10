@@ -34,9 +34,13 @@ import {
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
-  const { user, replaceToken, switchToStaffPortal, logout } = useAuth();
+  const { user, replaceToken, switchToStaffPortal, logout, refreshStudentProfile } = useAuth();
   const navigate = useNavigate();
   const student = user as StudentUser;
+  const isRegisteredCR = student?.staffRole === 'CR' || student?.staffRole === 'CR_ASSISTANT';
+  const studentClassId = typeof student?.classId === 'string'
+    ? student.classId
+    : student?.classId?._id;
 
   const validTabs = ['submit', 'quizzes', 'groups', 'history', 'security', 'cr-application'] as const;
   type TabType = typeof validTabs[number];
@@ -183,13 +187,20 @@ export const StudentDashboard: React.FC = () => {
 
   // CR Application State
   const [crAppStatus, setCRAppStatus] = useState<CRApplication | null>(null);
-  const [crAppLoading, setCRAppLoading] = useState(false);
+  const [crAppLoading, setCRAppLoading] = useState(true);
   const [crAppClasses, setCRAppClasses] = useState<Class[]>([]);
   const [crAppClassId, setCRAppClassId] = useState('');
   const [crAppRoleType, setCRAppRoleType] = useState<'CR' | 'CR_ASSISTANT'>('CR');
   const [crAppReason, setCRAppReason] = useState('');
   const [crAppSubmitting, setCRAppSubmitting] = useState(false);
   const [crAppMsg, setCRAppMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const isCRAppRoleFilled = (roleType: 'CR' | 'CR_ASSISTANT') => {
+    const selectedClass = crAppClasses.find((cls) => cls._id === crAppClassId);
+    const assignedStaff = roleType === 'CR' ? selectedClass?.crId : selectedClass?.assistantId;
+    if (!assignedStaff) return false;
+    if (typeof assignedStaff === 'string') return true;
+    return assignedStaff.isActive && assignedStaff.approvalStatus === 'Approved';
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => setDeadlineTick(Date.now()), 10000);
@@ -229,7 +240,8 @@ export const StudentDashboard: React.FC = () => {
   const handleChangePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPassMsg(null);
-    if (!currentPassword || !newPassword) {
+    const hasPassword = student.hasPassword === true;
+    if ((hasPassword && !currentPassword) || !newPassword || !confirmPassword) {
       setPassMsg({ type: 'error', text: 'Please fill in all password fields.' });
       return;
     }
@@ -239,17 +251,16 @@ export const StudentDashboard: React.FC = () => {
     }
     try {
       setChangingPass(true);
-      const res = await api.post('/auth/student/change-password', {
-        currentPassword,
-        newPassword,
-        confirmPassword,
-      });
+      const res = hasPassword
+        ? await api.post('/auth/student/change-password', { currentPassword, newPassword, confirmPassword })
+        : await api.post('/auth/student/set-password', { newPassword, confirmPassword });
       if (res.data.success) {
         if (res.data.token) replaceToken(res.data.token);
         setPassMsg({ type: 'success', text: res.data.message });
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
+        await refreshStudentProfile();
       }
     } catch (err: any) {
       setPassMsg({ type: 'error', text: err.response?.data?.message || 'Failed to change password.' });
@@ -398,15 +409,24 @@ export const StudentDashboard: React.FC = () => {
   const fetchCRAppData = async () => {
     try {
       setCRAppLoading(true);
-      const [statusRes, classesRes] = await Promise.allSettled([
+      const [, statusRes, classesRes] = await Promise.allSettled([
+        refreshStudentProfile(),
         api.get('/cr-applications/my-status'),
         api.get('/classes'),
       ]);
       if (statusRes.status === 'fulfilled' && statusRes.value.data.success) {
-        setCRAppStatus(statusRes.value.data.application || null);
+        setCRAppStatus(
+          statusRes.value.data.application
+          || statusRes.value.data.applications?.[0]
+          || null,
+        );
       }
       if (classesRes.status === 'fulfilled' && classesRes.value.data.success) {
-        setCRAppClasses(classesRes.value.data.classes || []);
+        const ownClass = (classesRes.value.data.classes || []).filter(
+          (cls: Class) => cls._id === studentClassId,
+        );
+        setCRAppClasses(ownClass);
+        setCRAppClassId(ownClass[0]?._id || '');
       }
     } catch {
       // silent
@@ -419,13 +439,20 @@ export const StudentDashboard: React.FC = () => {
     if (activeTab === 'cr-application') {
       fetchCRAppData();
     }
-  }, [activeTab]);
+  }, [activeTab, studentClassId]);
 
   const handleCRAppSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCRAppMsg(null);
     if (!crAppClassId) {
       setCRAppMsg({ type: 'error', text: 'Please select a class.' });
+      return;
+    }
+    if (isCRAppRoleFilled(crAppRoleType)) {
+      setCRAppMsg({
+        type: 'error',
+        text: `This class already has an active ${crAppRoleType === 'CR' ? 'CR' : 'CR Assistant'}.`,
+      });
       return;
     }
     try {
@@ -2442,10 +2469,12 @@ export const StudentDashboard: React.FC = () => {
         <div className="glass-panel rounded-3xl shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden max-w-2xl mx-auto">
           <div className="bg-slate-900/90 backdrop-blur-md p-6 text-white border-b border-white/10">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <KeyRound className="w-5 h-5 text-blue-400" /> Account Security & Change Password
+              <KeyRound className="w-5 h-5 text-blue-400" /> Account Security & {student.hasPassword ? 'Change Password' : 'Set Password'}
             </h2>
             <p className="text-slate-400 text-xs mt-1">
-              Update your account password. Make sure to choose a strong password.
+              {student.hasPassword
+                ? 'Update your account password. Make sure to choose a strong password.'
+                : 'Set a password for your Google account to enable password sign-in.'}
             </p>
           </div>
 
@@ -2467,7 +2496,7 @@ export const StudentDashboard: React.FC = () => {
               </div>
             )}
 
-            <div>
+            {student.hasPassword && <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                 Current Password <span className="text-red-500">*</span>
               </label>
@@ -2478,7 +2507,7 @@ export const StudentDashboard: React.FC = () => {
                 required
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800 font-semibold text-sm"
               />
-            </div>
+            </div>}
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
@@ -2518,7 +2547,7 @@ export const StudentDashboard: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <KeyRound className="w-5 h-5" /> Update Password
+                  <KeyRound className="w-5 h-5" /> {student.hasPassword ? 'Update Password' : 'Set Password'}
                 </>
               )}
             </button>
@@ -2588,6 +2617,11 @@ export const StudentDashboard: React.FC = () => {
               <div className="py-12 text-center">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
                 <p className="text-xs text-slate-500 mt-2 font-medium">Checking application status...</p>
+              </div>
+            ) : isRegisteredCR ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-semibold text-emerald-800">
+                You are already registered as {student.staffRole === 'CR_ASSISTANT' ? 'CR Assistant' : 'Class Representative (CR)'}.
+                If you are removed from this position, refresh this page to apply again.
               </div>
             ) : crAppStatus ? (
               <div className="space-y-5">
@@ -2682,7 +2716,7 @@ export const StudentDashboard: React.FC = () => {
             ) : null}
 
             {/* Application Form — shown if no active application or if previous was rejected */}
-            {(!crAppStatus || crAppStatus.status === 'REJECTED') && !crAppLoading && (
+            {!isRegisteredCR && (!crAppStatus || crAppStatus.status === 'REJECTED' || crAppStatus.status === 'APPROVED') && !crAppLoading && (
               <form onSubmit={handleCRAppSubmit} className="space-y-5 pt-2">
                 <div className="border-t border-slate-200 dark:border-white/10 pt-6">
                   <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
@@ -2720,8 +2754,12 @@ export const StudentDashboard: React.FC = () => {
                       onChange={(e) => setCRAppRoleType(e.target.value as 'CR' | 'CR_ASSISTANT')}
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="CR">Class Representative (CR)</option>
-                      <option value="CR_ASSISTANT">CR Assistant</option>
+                      <option value="CR" disabled={isCRAppRoleFilled('CR')}>
+                        Class Representative (CR){isCRAppRoleFilled('CR') ? ' — Position Filled' : ''}
+                      </option>
+                      <option value="CR_ASSISTANT" disabled={isCRAppRoleFilled('CR_ASSISTANT')}>
+                        CR Assistant{isCRAppRoleFilled('CR_ASSISTANT') ? ' — Position Filled' : ''}
+                      </option>
                     </select>
                   </div>
 
@@ -2731,17 +2769,23 @@ export const StudentDashboard: React.FC = () => {
                     </label>
                     <select
                       value={crAppClassId}
-                      onChange={(e) => setCRAppClassId(e.target.value)}
+                      disabled
                       required
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 disabled:cursor-not-allowed"
                     >
-                      <option value="">-- Choose Class --</option>
+                      {!crAppClassId && <option value="">Your class is unavailable</option>}
                       {crAppClasses.map((cls) => (
                         <option key={cls._id} value={cls._id}>
                           {cls.name} (Section: {cls.section}, Sem: {cls.semester})
                         </option>
                       ))}
                     </select>
+                    <p className="mt-1.5 text-xs text-slate-500">Applications are limited to your enrolled class.</p>
+                    {crAppClassId && isCRAppRoleFilled(crAppRoleType) && (
+                      <p className="mt-1.5 text-xs font-semibold text-red-600">
+                        This class already has an active {crAppRoleType === 'CR' ? 'CR' : 'CR Assistant'}. Each class can have only one of each role.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -2762,8 +2806,8 @@ export const StudentDashboard: React.FC = () => {
 
                 <button
                   type="submit"
-                  disabled={crAppSubmitting}
-                  className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2"
+                  disabled={crAppSubmitting || !crAppClassId || isCRAppRoleFilled(crAppRoleType)}
+                  className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2"
                 >
                   {crAppSubmitting ? (
                     <>

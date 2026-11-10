@@ -241,6 +241,7 @@ export interface StudentUser {
   role: 'STUDENT';
   staffRole?: 'CR' | 'CR_ASSISTANT' | null;
   staffId?: string;
+  hasPassword?: boolean;
 }
 
 export interface RegisteredStudent {

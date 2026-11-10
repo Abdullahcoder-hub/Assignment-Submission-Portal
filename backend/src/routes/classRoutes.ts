@@ -23,8 +23,8 @@ router.get('/:id/students', authenticateStaff, getClassStudents);
 router.post('/', authenticateAdmin, createClass);
 router.put('/:id', authenticateAdmin, updateClass);
 router.delete('/:id', authenticateAdmin, deleteClass);
-router.post('/:id/regenerate-code', authenticateStaff, regenerateClassJoinCode);
-router.put('/:id/join-code', authenticateStaff, updateClassJoinCode);
-router.post('/:id/toggle-code', authenticateStaff, toggleClassJoinCode);
+router.post('/:id/regenerate-code', authenticateAdmin, regenerateClassJoinCode);
+router.put('/:id/join-code', authenticateAdmin, updateClassJoinCode);
+router.post('/:id/toggle-code', authenticateAdmin, toggleClassJoinCode);
 
 export default router;

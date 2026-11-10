@@ -23,6 +23,9 @@ export const ClassManagementSection: React.FC<{ isSuperAdmin?: boolean }> = ({ i
   const [search, setSearch] = useState<string>('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [deletingClassId, setDeletingClassId] = useState<string | null>(null);
+  const [editingJoinCodeId, setEditingJoinCodeId] = useState<string | null>(null);
+  const [joinCodeDraft, setJoinCodeDraft] = useState('');
+  const [savingJoinCode, setSavingJoinCode] = useState(false);
 
   // Modal State
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -142,7 +145,26 @@ export const ClassManagementSection: React.FC<{ isSuperAdmin?: boolean }> = ({ i
         fetchClasses();
       }
     } catch (err: any) {
-      setFeedback({ success: false, message: 'Failed to toggle join code.' });
+      setFeedback({
+        success: false,
+        message: err.response?.data?.message || err.message || 'Failed to toggle join code.',
+      });
+    }
+  };
+
+  const handleUpdateJoinCode = async (classId: string) => {
+    try {
+      setSavingJoinCode(true);
+      const res = await api.put(`/classes/${classId}/join-code`, { joinCode: joinCodeDraft });
+      if (res.data.success) {
+        setFeedback({ success: true, message: res.data.message });
+        setEditingJoinCodeId(null);
+        fetchClasses();
+      }
+    } catch (err: any) {
+      setFeedback({ success: false, message: err.response?.data?.message || 'Failed to update join code.' });
+    } finally {
+      setSavingJoinCode(false);
     }
   };
 
@@ -337,7 +359,7 @@ export const ClassManagementSection: React.FC<{ isSuperAdmin?: boolean }> = ({ i
                         {copiedCode === c.joinCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
 
-                      {!isSuperAdmin && (
+                      {isSuperAdmin && (
                         <button
                           onClick={() => handleRegenerateCode(c._id)}
                           title="Regenerate Join Code"
@@ -346,8 +368,47 @@ export const ClassManagementSection: React.FC<{ isSuperAdmin?: boolean }> = ({ i
                           <RefreshCw className="w-3.5 h-3.5" />
                         </button>
                       )}
+
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => {
+                            setJoinCodeDraft(c.joinCode);
+                            setEditingJoinCodeId(c._id);
+                          }}
+                          title="Edit Join Code"
+                          className="p-1.5 text-slate-500 hover:text-blue-600 bg-white border border-slate-200 rounded-lg transition shadow-xs"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
+                  {isSuperAdmin && editingJoinCodeId === c._id && (
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        handleUpdateJoinCode(c._id);
+                      }}
+                      className="mt-2 flex gap-2"
+                    >
+                      <input
+                        value={joinCodeDraft}
+                        onChange={(event) => setJoinCodeDraft(event.target.value.toUpperCase())}
+                        minLength={4}
+                        maxLength={32}
+                        pattern="[A-Z0-9-]{4,32}"
+                        required
+                        aria-label="Custom class join code"
+                        className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1 font-mono text-sm uppercase"
+                      />
+                      <button type="submit" disabled={savingJoinCode} className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white disabled:opacity-50">
+                        Save
+                      </button>
+                      <button type="button" onClick={() => setEditingJoinCodeId(null)} className="rounded-lg bg-slate-200 px-3 py-1 text-xs font-bold text-slate-700">
+                        Cancel
+                      </button>
+                    </form>
+                  )}
 
                   {/* CR, Assistant & Student Stats */}
                   <div className="mt-4 space-y-2 text-xs">
@@ -389,7 +450,7 @@ export const ClassManagementSection: React.FC<{ isSuperAdmin?: boolean }> = ({ i
                     {c.isJoinCodeActive ? 'Join Code Active' : 'Join Code Disabled'}
                   </span>
 
-                  {!isSuperAdmin && (
+                  {isSuperAdmin && (
                     <button
                       onClick={() => handleToggleJoinCode(c._id)}
                       className="text-xs text-slate-500 hover:text-slate-800 font-medium underline"

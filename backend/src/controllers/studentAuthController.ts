@@ -258,6 +258,7 @@ export const loginStudent = async (req: Request, res: Response): Promise<void> =
       isActive: true,
       approvalStatus: 'Approved',
       role: { $in: ['CR', 'CR_ASSISTANT'] },
+      assignedClassId: { $exists: true, $ne: null },
     }).lean();
 
     const effectiveStaffId = staffRecord ? staffRecord._id.toString() : undefined;
@@ -299,6 +300,7 @@ export const loginStudent = async (req: Request, res: Response): Promise<void> =
         rollNumber: student.rollNumber,
         classId: (student as any).classId,
         role: student.role,
+        hasPassword: Boolean(student.passwordHash),
         staffRole: staffRecord ? staffRecord.role : null,
         staffId: effectiveStaffId,
       },
@@ -320,6 +322,7 @@ export const createStudentStaffSession = async (req: AuthRequest, res: Response)
       isActive: true,
       isEmailVerified: true,
       approvalStatus: 'Approved',
+      assignedClassId: { $exists: true, $ne: null },
     }).lean();
     if (!staffRecord) {
       res.status(403).json({ success: false, message: 'No approved CR account is linked to this student.' });
@@ -465,6 +468,7 @@ export const googleAuthStudent = async (req: Request, res: Response): Promise<vo
         rollNumber: student.rollNumber,
         classId: student.classId,
         role: student.role,
+        hasPassword: Boolean(student.passwordHash),
       },
     });
 
@@ -584,7 +588,7 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
     }
 
     const student = await Student.findById(req.student.id)
-      .select('name email rollNumber isEmailVerified role classId')
+      .select('name email rollNumber isEmailVerified role classId passwordHash')
       .populate('classId', 'name semester section')
       .lean();
     if (!student) {
@@ -623,6 +627,7 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
        isActive: true,
        approvalStatus: 'Approved',
        role: { $in: ['CR', 'CR_ASSISTANT'] },
+       assignedClassId: { $exists: true, $ne: null },
     }).lean();
 
     res.status(200).json({
@@ -636,6 +641,7 @@ export const getStudentProfile = async (req: AuthRequest, res: Response): Promis
         classId: (student as any).classId,
         class: (student as any).classId,
         role: (student as any).role,
+        hasPassword: Boolean((student as any).passwordHash),
         staffRole: staffRecord ? staffRecord.role : null,
       },
       submissions: submissionsWithLateGrant,
@@ -794,6 +800,61 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     res.status(200).json({ success: true, message: 'Password changed successfully. Other sessions have been signed out.', token });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to change password.' });
+  }
+};
+
+export const setPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.student) {
+      res.status(401).json({ success: false, message: 'Not authenticated.' });
+      return;
+    }
+
+    const { newPassword, confirmPassword } = req.body;
+    if (!newPassword || !confirmPassword) {
+      res.status(400).json({ success: false, message: 'Please enter and confirm your password.' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      res.status(400).json({ success: false, message: 'Passwords do not match.' });
+      return;
+    }
+
+    const passValidation = validatePasswordStrength(newPassword);
+    if (!passValidation.isValid) {
+      res.status(400).json({ success: false, message: passValidation.message });
+      return;
+    }
+
+    const student = await Student.findById(req.student.id);
+    if (!student) {
+      res.status(404).json({ success: false, message: 'Student account not found.' });
+      return;
+    }
+    if (student.passwordHash) {
+      res.status(409).json({ success: false, message: 'A password is already set. Use Change Password instead.' });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, await bcrypt.genSalt(10));
+    student.passwordHash = passwordHash;
+    student.tokenVersion = (student.tokenVersion ?? 0) + 1;
+    await student.save();
+
+    await Admin.updateOne(
+      { email: student.email, studentId: student._id, role: { $in: ['CR', 'CR_ASSISTANT'] } },
+      { $set: { passwordHash } },
+    );
+
+    const token = jwt.sign(
+      { id: student._id, email: student.email, role: 'STUDENT', tokenVersion: student.tokenVersion },
+      getJwtSecret(),
+      { expiresIn: '7d' },
+    );
+    res.status(200).json({ success: true, message: 'Password set successfully.', token });
+  } catch (error) {
+    logError('[Set Student Password Error]', error);
+    res.status(500).json({ success: false, message: 'Failed to set password.' });
   }
 };
 

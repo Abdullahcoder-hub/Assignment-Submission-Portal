@@ -57,7 +57,7 @@ export const AdminDashboard: React.FC = () => {
   const canAccessTab = (tab: string) => {
     if (isSuperAdmin) return true;
     if (isCROrAssistant) {
-      return ['dashboard', 'quizzes', 'subjects', 'assignments', 'submissions', 'groups', 'late-requests', 'students', 'settings', 'account'].includes(tab);
+      return ['dashboard', 'quizzes', 'subjects', 'assignments', 'submissions', 'groups', 'late-requests', 'students', 'account'].includes(tab);
     }
     if (isTeacher) {
       return ['dashboard', 'quizzes', 'shared-assignments', 'subjects', 'assignments', 'submissions', 'groups', 'late-requests', 'account'].includes(tab);
@@ -1182,18 +1182,6 @@ export const AdminDashboard: React.FC = () => {
                 Registered Students
               </button>
 
-              <button
-                onClick={() => setActiveTab('settings')}
-                title={isSidebarCollapsed ? 'Class Join Code' : undefined}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition ${
-                  activeTab === 'settings'
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
-                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
-                }`}
-              >
-                <KeyRound className="w-5 h-5" />
-                Class Join Code
-              </button>
             </>
           )}
 

@@ -10,6 +10,7 @@ import {
   getStudentProfile,
   deleteStudentAccount,
   changePassword,
+  setPassword,
   checkRollNumberAvailability,
   createStudentStaffSession,
 } from '../controllers/studentAuthController.js';
@@ -29,6 +30,7 @@ router.post('/reset-password', resetPassword);
 router.get('/me', authenticateStudent, getStudentProfile);
 router.delete('/me', authenticateStudent, deleteStudentAccount);
 router.post('/change-password', authenticateStudent, changePassword);
+router.post('/set-password', authenticateStudent, setPassword);
 router.post('/staff-session', authenticateStudent, createStudentStaffSession);
 
 export default router;

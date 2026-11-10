@@ -16,6 +16,7 @@ import Group from '../models/Group.js';
 import CRApplication from '../models/CRApplication.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { generateRandomJoinCode } from '../utils/joinCode.js';
+import { logError } from '../utils/logger.js';
 
 const findAvailableClassStaff = (id: string, role: 'CR' | 'CR_ASSISTANT', classId?: mongoose.Types.ObjectId) =>
   Admin.findOne({
@@ -333,11 +334,6 @@ export const regenerateClassJoinCode = async (req: AuthRequest, res: Response): 
       return;
     }
 
-    if (!['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') || req.admin?.assignedClassId !== id) {
-      res.status(403).json({ success: false, message: 'Only the CR assigned to this class can manage its join code.' });
-      return;
-    }
-
     let newCode = generateRandomJoinCode();
     while (await Class.exists({ joinCode: newCode })) {
       newCode = generateRandomJoinCode();
@@ -362,10 +358,6 @@ export const updateClassJoinCode = async (req: AuthRequest, res: Response): Prom
   try {
     const { id } = req.params;
     const code = String(req.body.joinCode || '').trim().toUpperCase();
-    if (!['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') || req.admin?.assignedClassId !== id) {
-      res.status(403).json({ success: false, message: 'Only the CR assigned to this class can change its join code.' });
-      return;
-    }
     if (!/^[A-Z0-9-]{4,32}$/.test(code)) {
       res.status(400).json({ success: false, message: 'Join code must be 4–32 characters using letters, numbers, or hyphens.' });
       return;
@@ -401,11 +393,6 @@ export const toggleClassJoinCode = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    if (!['CR', 'CR_ASSISTANT'].includes(req.admin?.role || '') || req.admin?.assignedClassId !== id) {
-      res.status(403).json({ success: false, message: 'Only the CR assigned to this class can manage its join code.' });
-      return;
-    }
-
     classDoc.isJoinCodeActive = !classDoc.isJoinCodeActive;
     await classDoc.save();
 
@@ -416,6 +403,7 @@ export const toggleClassJoinCode = async (req: AuthRequest, res: Response): Prom
       isJoinCodeActive: classDoc.isJoinCodeActive,
     });
   } catch (error) {
+    logError('[Toggle Class Join Code Error]', error);
     res.status(500).json({ success: false, message: 'Failed to toggle join code.' });
   }
 };
