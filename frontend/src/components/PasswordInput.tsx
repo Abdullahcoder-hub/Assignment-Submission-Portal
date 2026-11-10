@@ -8,13 +8,17 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({ className = '', ..
 
   return (
     <div className="relative">
-      <input {...props} type={visible ? 'text' : 'password'} className={`${className} pr-10`} />
+      <input
+        {...props}
+        type={visible ? 'text' : 'password'}
+        className={`w-full h-12 pl-4 pr-11 bg-white border border-[#E3DCCF] rounded-xl text-[#172B45] text-sm placeholder:text-[#687386]/60 focus:outline-none focus:border-[#D6A84F] focus:ring-2 focus:ring-[#D6A84F]/25 transition ${className}`}
+      />
       <button
         type="button"
         onClick={() => setVisible((current) => !current)}
         aria-label={visible ? 'Hide password' : 'Show password'}
         aria-pressed={visible}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 min-h-11 min-w-11 rounded p-1 text-slate-500 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="absolute right-1.5 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center rounded-lg text-[#687386] hover:text-[#172B45] focus:outline-none focus:ring-2 focus:ring-[#D6A84F]/40 transition"
       >
         {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </button>

@@ -50,9 +50,9 @@ export const App: React.FC = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+        <div className="min-h-screen bg-[#F5F0E6] text-[#172B45] flex flex-col font-sans selection:bg-[#D6A84F]/30 selection:text-[#0B1F3A]">
           <Navbar />
-          <div className="flex-1">
+          <div className="flex-1 flex flex-col">
             <React.Suspense fallback={null}>
               <Routes>
                 {/* Home Route */}

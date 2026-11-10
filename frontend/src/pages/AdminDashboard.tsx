@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
 import api, { getApiErrorMessage, getDownloadErrorMessage } from '../api/axios';
 import { Subject, Assignment, Submission, DashboardStats, Group, LateRequest, RegisteredStudent, Class } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -322,14 +323,49 @@ export const AdminDashboard: React.FC = () => {
 
   const fetchSubmissionSummary = async () => {
     setLoadingSubmissionSummary(true);
+    setSubmissionSummaryLoaded(false);
     try {
       const res = await api.get('/submissions/summary');
       if (res.data.success) {
         setAssignmentSubmissionCounts(res.data.assignmentCounts || []);
         setSubmissionSummaryLoaded(true);
+      } else {
+        throw new Error('Failed to fetch submission summary.');
       }
     } catch (err) {
-      showToast('error', getApiErrorMessage(err, 'Failed to fetch submission summary.'));
+      if (axios.isAxiosError(err) && err.response?.status === 404 && filterSubjectId) {
+        try {
+          const subjectAssignments = assignments.filter((assignment) => {
+            const subjectId = typeof assignment.subjectId === 'string'
+              ? assignment.subjectId
+              : assignment.subjectId?._id;
+            return subjectId === filterSubjectId;
+          });
+          const counts = await Promise.all(subjectAssignments.map(async (assignment) => {
+            const response = await api.get(
+              `/submissions?assignmentId=${encodeURIComponent(assignment._id)}&limit=1`,
+            );
+            if (!response.data.success || !Number.isFinite(response.data.total)) {
+              throw new Error('The backend returned an invalid submission count.');
+            }
+            return {
+              assignmentId: assignment._id,
+              submittedCount: response.data.total,
+            };
+          }));
+          setAssignmentSubmissionCounts((current) => [
+            ...current.filter((entry) => !subjectAssignments.some(
+              (assignment) => assignment._id === entry.assignmentId,
+            )),
+            ...counts,
+          ]);
+          setSubmissionSummaryLoaded(true);
+        } catch (fallbackError) {
+          showToast('error', getApiErrorMessage(fallbackError, 'Failed to fetch submission counts.'));
+        }
+      } else {
+        showToast('error', getApiErrorMessage(err, 'Failed to fetch submission summary.'));
+      }
     } finally {
       setLoadingSubmissionSummary(false);
     }
@@ -633,11 +669,14 @@ export const AdminDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchDashboardStats();
     fetchSubjects();
     fetchAssignments();
     if (isSuperAdmin) fetchAdmins();
   }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (activeTab === 'dashboard') fetchDashboardStats();
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'settings' && isCROrAssistant) fetchJoinCode();
@@ -656,8 +695,8 @@ export const AdminDashboard: React.FC = () => {
   }, [activeTab, currentPage, filterAssignmentId, filterStatus, groupFilterSubject, groupFilterAssignment, groupSearch, lateFilterSubject, lateFilterStatus, lateSearch, studentSearch]);
 
   useEffect(() => {
-    if (activeTab === 'submissions') fetchSubmissionSummary();
-  }, [activeTab]);
+    if (activeTab === 'submissions' && filterSubjectId) fetchSubmissionSummary();
+  }, [activeTab, filterSubjectId]);
 
   // SUBJECT MODAL SUBMIT
   const handleSaveSubject = async (e: React.FormEvent) => {
@@ -910,7 +949,7 @@ export const AdminDashboard: React.FC = () => {
       <button
         type="button"
         onClick={() => setMobileSidebarOpen(true)}
-        className="md:hidden self-start m-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+        className={`md:hidden self-start m-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-800 text-slate-100 shadow-sm ${mobileSidebarOpen ? 'z-30' : 'relative z-[60]'}`}
         aria-label="Open staff navigation"
         aria-expanded={mobileSidebarOpen}
         aria-controls="admin-dashboard-navigation"
@@ -933,14 +972,22 @@ export const AdminDashboard: React.FC = () => {
         }}
         onPointerLeave={() => setSidebarCollapsed(true)}
         data-collapsed={isSidebarCollapsed}
-        className={`glass-panel-dark fixed left-0 top-16 bottom-0 z-50 mt-0 h-[calc(100dvh-4rem)] w-64 max-w-[85vw] overflow-y-auto border-r border-white/10 text-slate-300 backdrop-blur-xl transition-[width,transform] md:sticky md:top-16 md:bottom-auto md:z-auto md:mt-0 md:h-[calc(100vh-4rem)] md:max-w-none md:translate-x-0 md:overflow-y-visible ${
+        className={`glass-panel-dark fixed left-0 top-16 bottom-0 z-[60] mt-0 h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] w-[min(80vw,300px)] max-w-[300px] overflow-y-auto border-r border-white/10 text-slate-300 backdrop-blur-xl transition-[width,transform] duration-300 ease-out md:sticky md:top-16 md:bottom-auto md:z-auto md:mt-0 md:h-[calc(100vh-4rem)] md:max-h-none md:max-w-none md:translate-x-0 md:overflow-y-visible ${
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         } ${
           sidebarCollapsed ? 'md:w-16' : 'md:w-64'
         }`}
       >
-        <div className={`p-4 border-b border-white/10 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
-          {!isSidebarCollapsed && <div><h2 className="text-xs uppercase tracking-wider text-blue-400 font-bold">Staff Portal</h2><p className="text-sm font-semibold text-white mt-1">Management Suite</p></div>}
+        <div className={`min-h-[4.5rem] p-5 border-b border-white/10 flex items-center gap-3 ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+          {!isSidebarCollapsed && <div className="min-w-0"><h2 className="text-xs uppercase tracking-wider text-blue-400 font-bold">Staff Portal</h2><p className="text-sm font-semibold text-white mt-1">Management Suite</p></div>}
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(false)}
+            className="md:hidden inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white"
+            aria-label="Close staff navigation"
+          >
+            <X className="h-5 w-5" />
+          </button>
           <button
             type="button"
             onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}

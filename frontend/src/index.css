@@ -2,16 +2,37 @@
 @config "../tailwind.config.js";
 
 @layer base {
+  :root {
+    color-scheme: light;
+    --portal-header: #0b1f3a;
+    --portal-sidebar: #102744;
+    --portal-main: #f5f0e6;
+    --portal-card: #fffdf7;
+    --portal-accent: #d6a84f;
+    --portal-accent-hover: #c49a3a;
+    --portal-text: #172b45;
+    --portal-muted: #687386;
+    --portal-border: #e3dccf;
+    --portal-input: #ffffff;
+    --portal-hover: #ede5d6;
+    --portal-success: #23845b;
+    --portal-error: #dc4545;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 0;
+    min-height: 100%;
+  }
+
   body {
     margin: 0;
     min-height: 100vh;
-    background-color: #0f172a;
-    background-image: 
-      radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.12) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
-      radial-gradient(at 50% 100%, rgba(14, 165, 233, 0.08) 0px, transparent 50%);
+    background-color: var(--portal-main);
     background-attachment: fixed;
-    color: #0f172a;
+    color: var(--portal-text);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -20,28 +41,16 @@
 
 /* Modern 3D Glassmorphism & SaaS Utilities */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.90);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 
-    0 1px 0 0 rgba(255, 255, 255, 0.9) inset,
-    0 -1px 0 0 rgba(0, 0, 0, 0.04) inset,
-    0 20px 40px -15px rgba(0, 0, 0, 0.12),
-    0 8px 16px -6px rgba(0, 0, 0, 0.06);
+  background: var(--portal-card);
+  border: 1px solid var(--portal-border);
+  box-shadow: 0 10px 24px -18px rgba(11, 31, 58, 0.38), 0 1px 2px rgb(11 31 58 / 5%);
   transform: translateZ(0);
 }
 
 .glass-panel-dark {
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 
-    0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
-    0 -1px 0 0 rgba(0, 0, 0, 0.4) inset,
-    0 25px 50px -12px rgba(0, 0, 0, 0.6),
-    0 10px 20px -5px rgba(0, 0, 0, 0.4);
+  background: var(--portal-sidebar);
+  border: 1px solid rgb(255 253 247 / 12%);
+  box-shadow: 0 16px 36px -18px rgb(11 31 58 / 45%);
   transform: translateZ(0);
 }
 
@@ -53,17 +62,15 @@
 .card-3d:hover {
   transform: translateY(-4px) scale(1.002);
   box-shadow: 
-    0 1px 0 0 rgba(255, 255, 255, 1) inset,
-    0 30px 60px -15px rgba(15, 23, 42, 0.18),
-    0 12px 24px -6px rgba(15, 23, 42, 0.10);
+    0 1px 0 0 rgb(255 253 247 / 75%) inset,
+    0 20px 36px -18px rgb(11 31 58 / 28%),
+    0 8px 18px -8px rgb(11 31 58 / 14%);
 }
 
 .glass-pill {
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.3) inset, 0 4px 10px rgba(0, 0, 0, 0.1);
+  background: var(--portal-hover);
+  border: 1px solid var(--portal-border);
+  box-shadow: 0 1px 0 rgb(255 253 247 / 70%) inset, 0 4px 10px rgb(11 31 58 / 8%);
 }
 
 /* 3D Tactile Buttons & Badges */
@@ -72,21 +79,21 @@ button:not(:disabled):active {
 }
 
 .btn-3d-primary {
-  box-shadow: 0 4px 0 #1d4ed8, 0 8px 20px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 4px 0 var(--portal-accent-hover), 0 8px 20px rgb(196 154 58 / 24%);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .btn-3d-primary:active:not(:disabled) {
   transform: translateY(3px);
-  box-shadow: 0 1px 0 #1d4ed8, 0 3px 8px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 1px 0 var(--portal-accent-hover), 0 3px 8px rgb(196 154 58 / 20%);
 }
 
 .btn-3d-emerald {
-  box-shadow: 0 4px 0 #047857, 0 8px 20px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 4px 0 #176b49, 0 8px 20px rgb(35 132 91 / 22%);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .btn-3d-emerald:active:not(:disabled) {
   transform: translateY(3px);
-  box-shadow: 0 1px 0 #047857, 0 3px 8px rgba(16, 185, 129, 0.25);
+  box-shadow: 0 1px 0 #176b49, 0 3px 8px rgb(35 132 91 / 20%);
 }
 
 *,
@@ -101,7 +108,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--portal-accent);
   outline-offset: 2px;
 }
 
@@ -111,19 +118,23 @@ textarea:focus-visible,
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.05);
+  background: rgb(11 31 58 / 6%);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.5);
+  background: rgb(104 115 134 / 45%);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.7);
+  background: rgb(104 115 134 / 70%);
 }
 
 @media (max-width: 639px) {
   body {
     background-attachment: scroll;
+  }
+
+  #root {
+    overflow-x: clip;
   }
 
   .student-dashboard {
@@ -132,34 +143,19 @@ textarea:focus-visible,
     padding: 0;
   }
 
-  .student-dashboard aside nav {
-    display: flex;
-    gap: 0.5rem;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-  }
-
-  .student-dashboard aside nav > button {
-    width: auto;
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
-
   .student-dashboard > *,
   .student-dashboard :where(.flex, .grid) > * {
     min-width: 0;
   }
 
   .student-dashboard .glass-panel {
-    background-color: #fff;
+    background-color: var(--portal-card);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
 
   .student-dashboard .glass-panel-dark {
-    background-color: #0f172a;
+    background-color: var(--portal-sidebar);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -217,7 +213,7 @@ textarea:focus-visible,
   }
 
   .fixed.inset-0 > * {
-    max-height: calc(100dvh - 1.5rem);
+    max-height: calc(100dvh - max(1.5rem, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
     overflow-y: auto;
     flex-shrink: 0;
   }
@@ -274,6 +270,265 @@ textarea:focus-visible,
 .admin-dashboard aside[data-collapsed="true"] nav > button svg,
 .student-dashboard aside[data-collapsed="true"] nav > button svg {
   flex-shrink: 0;
+}
+
+[class~="bg-white"] {
+  background-color: var(--portal-card);
+}
+
+[class~="bg-slate-50"] {
+  background-color: var(--portal-main);
+}
+
+[class~="bg-slate-50/50"],
+[class~="bg-slate-50/80"],
+[class~="hover:bg-slate-50/80"]:hover {
+  background-color: var(--portal-hover);
+}
+
+[class~="bg-slate-100"] {
+  background-color: var(--portal-hover);
+}
+
+[class~="bg-slate-200"] {
+  background-color: var(--portal-border);
+}
+
+[class~="bg-slate-800"] {
+  background-color: var(--portal-header);
+}
+
+[class~="bg-slate-900"],
+[class~="bg-slate-950"] {
+  background-color: var(--portal-sidebar);
+}
+
+[class~="bg-slate-900/90"] {
+  background-color: var(--portal-header);
+}
+
+[class~="bg-slate-900/50"] {
+  background-color: var(--portal-sidebar);
+}
+
+[class~="bg-slate-900/60"] {
+  background-color: rgb(11 31 58 / 60%);
+}
+
+[class~="text-slate-900"],
+[class~="text-slate-800"],
+[class~="text-slate-700"] {
+  color: var(--portal-text);
+}
+
+[class~="text-slate-600"],
+[class~="text-slate-500"],
+[class~="text-slate-400"] {
+  color: var(--portal-muted);
+}
+
+[class~="text-slate-300"] {
+  color: var(--portal-muted);
+}
+
+[class~="border-slate-100"],
+[class~="border-slate-200"],
+[class~="border-slate-200/80"],
+[class~="border-slate-300"] {
+  border-color: var(--portal-border);
+}
+
+[class~="bg-blue-50"],
+[class~="bg-blue-100"],
+[class~="bg-blue-50/50"],
+[class~="bg-blue-50/70"],
+[class~="bg-blue-500/10"],
+[class~="bg-blue-600/10"],
+[class~="dark:bg-blue-900/20"],
+[class~="dark:bg-blue-900/30"] {
+  background-color: var(--portal-hover);
+}
+
+[class~="bg-blue-600/20"],
+[class~="bg-blue-600/30"] {
+  background-color: rgb(214 168 79 / 14%);
+}
+
+[class~="bg-blue-900/20"],
+[class~="bg-blue-900/30"],
+[class~="bg-blue-900/50"] {
+  background-color: var(--portal-sidebar);
+}
+
+[class~="bg-blue-500"],
+[class~="bg-blue-600"],
+[class~="bg-blue-700"],
+[class~="hover:bg-blue-600"]:hover,
+[class~="hover:bg-blue-700"]:hover {
+  background-color: var(--portal-header);
+}
+
+[class~="disabled:bg-blue-300"]:disabled,
+[class~="disabled:bg-blue-400"]:disabled,
+[class~="hover:bg-blue-50"]:hover,
+[class~="hover:bg-blue-100"]:hover {
+  background-color: var(--portal-hover);
+}
+
+[class~="disabled:bg-blue-300"]:disabled,
+[class~="disabled:bg-blue-400"]:disabled,
+[class~="disabled:bg-slate-400"]:disabled {
+  background-color: var(--portal-muted);
+}
+
+[class~="hover:bg-blue-900/80"]:hover {
+  background-color: var(--portal-header);
+}
+
+[class~="text-blue-200"] {
+  color: var(--portal-accent);
+}
+
+[class~="text-blue-100"],
+[class~="text-blue-900"],
+[class~="text-blue-800"],
+[class~="text-blue-700"],
+[class~="text-blue-600"],
+[class~="text-blue-500"] {
+  color: var(--portal-text);
+}
+
+[class~="text-blue-300"],
+[class~="text-blue-400"] {
+  color: var(--portal-accent);
+}
+
+[class~="border-blue-500"],
+[class~="border-blue-400"],
+[class~="border-blue-300"],
+[class~="border-blue-200"],
+[class~="border-blue-100"],
+[class~="border-blue-700/50"],
+[class~="border-blue-500/30"],
+[class~="dark:border-blue-500"] {
+  border-color: rgb(214 168 79 / 38%);
+}
+
+[class~="from-blue-600/10"] {
+  --tw-gradient-from: rgb(214 168 79 / 10%) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(214 168 79 / 0%) var(--tw-gradient-to-position);
+}
+
+[class~="to-blue-600/20"] {
+  --tw-gradient-to: rgb(214 168 79 / 20%) var(--tw-gradient-to-position);
+}
+
+[class~="from-blue-600"] {
+  --tw-gradient-from: var(--portal-header) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(11 31 58 / 0%) var(--tw-gradient-to-position);
+}
+
+[class~="to-blue-600"] {
+  --tw-gradient-to: var(--portal-header) var(--tw-gradient-to-position);
+}
+
+[class~="focus:ring-blue-500"]:focus {
+  --tw-ring-color: var(--portal-accent);
+}
+
+[class~="ring-blue-300"] {
+  --tw-ring-color: var(--portal-accent);
+}
+
+[class~="focus:border-blue-500"]:focus {
+  border-color: var(--portal-accent);
+}
+
+[class~="dark:text-blue-300"],
+[class~="dark:text-blue-400"] {
+  color: var(--portal-accent);
+}
+
+header.sticky {
+  background-color: var(--portal-header);
+  border-color: rgb(255 253 247 / 12%);
+}
+
+header.sticky [class~="text-slate-400"],
+header.sticky [class~="text-slate-300"],
+header.sticky [class~="text-slate-200"] {
+  color: rgb(255 253 247 / 78%);
+}
+
+header.sticky .bg-gradient-to-br {
+  background-image: linear-gradient(to bottom right, var(--portal-accent), var(--portal-accent-hover));
+}
+
+.admin-dashboard aside nav > button,
+.student-dashboard aside nav > button {
+  min-height: 2.75rem;
+  color: rgb(255 253 247 / 82%);
+}
+
+.admin-dashboard aside.glass-panel-dark [class~="text-slate-300"],
+.admin-dashboard aside.glass-panel-dark [class~="text-slate-400"],
+.student-dashboard aside.glass-panel-dark [class~="text-slate-300"],
+.student-dashboard aside.glass-panel-dark [class~="text-slate-400"] {
+  color: rgb(255 253 247 / 72%);
+}
+
+.admin-dashboard aside.glass-panel-dark [class~="text-blue-400"],
+.student-dashboard aside.glass-panel-dark [class~="text-blue-400"] {
+  color: var(--portal-accent);
+}
+
+.admin-dashboard aside nav > button[class*="from-blue-600"],
+.student-dashboard aside nav > button[class*="from-blue-600"] {
+  background: var(--portal-accent);
+  color: var(--portal-header);
+  box-shadow: 0 8px 18px -8px rgb(214 168 79 / 42%);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+select,
+textarea {
+  color: var(--portal-text);
+  background-color: var(--portal-input);
+  border-color: var(--portal-border);
+  border-radius: 0.75rem;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--portal-muted);
+  opacity: 0.8;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--portal-accent-hover);
+  --tw-ring-color: var(--portal-accent);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--portal-accent-hover);
+}
+
+.file-drop-zone {
+  border-color: var(--portal-border);
+  background-color: var(--portal-main);
+}
+
+.file-drop-zone[data-dragging="true"] {
+  border-color: var(--portal-accent-hover);
+  background-color: var(--portal-hover);
+}
+
+.file-drop-zone[data-has-file="true"] {
+  border-color: var(--portal-success);
+  background-color: rgb(35 132 91 / 7%);
 }
 
 @media (prefers-reduced-motion: reduce) {

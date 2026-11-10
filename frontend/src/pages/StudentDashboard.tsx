@@ -30,6 +30,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  X,
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
@@ -116,6 +117,7 @@ export const StudentDashboard: React.FC = () => {
 
   // UI & Late Request State
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<SubmissionReceipt | null>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -1035,6 +1037,7 @@ export const StudentDashboard: React.FC = () => {
     }
 
     setIsSubmitting(true);
+    setUploadProgress(0);
 
     try {
       if (isGroupSubmission && isPastDeadline) {
@@ -1066,7 +1069,7 @@ export const StudentDashboard: React.FC = () => {
       const submittedReceipts: SubmissionReceipt[] = [];
       const submissionErrors: string[] = [];
 
-      for (const target of membersToSubmit) {
+      for (const [targetIndex, target] of membersToSubmit.entries()) {
         const formData = new FormData();
         formData.append('subjectId', selectedSubjectId);
         formData.append('assignmentId', selectedAssignmentId);
@@ -1081,6 +1084,12 @@ export const StudentDashboard: React.FC = () => {
         try {
           const res = await api.post('/submissions', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
+            onUploadProgress: (progressEvent) => {
+              if (progressEvent.total) {
+                const currentUploadProgress = progressEvent.loaded / progressEvent.total;
+                setUploadProgress(Math.round(((targetIndex + currentUploadProgress) / membersToSubmit.length) * 100));
+              }
+            },
           });
           if (res.data.success) {
             submittedReceipts.push(res.data.submission as SubmissionReceipt);
@@ -1091,6 +1100,7 @@ export const StudentDashboard: React.FC = () => {
           submissionErrors.push(`${target.member?.name || student.name}: ${err.response?.data?.message || 'Submission failed.'}`);
         }
       }
+      setUploadProgress(100);
 
       if (submittedReceipts.length > 0) {
         await refreshSubmissionHistory();
@@ -1130,6 +1140,7 @@ export const StudentDashboard: React.FC = () => {
       setErrorMsg(err.response?.data?.message || 'Something went wrong on the server.');
     } finally {
       setIsSubmitting(false);
+      setUploadProgress(null);
     }
   };
 
@@ -1194,7 +1205,7 @@ export const StudentDashboard: React.FC = () => {
       <button
         type="button"
         onClick={() => setMobileSidebarOpen(true)}
-        className="md:hidden self-start m-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm"
+        className={`md:hidden self-start m-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-800 text-slate-100 shadow-sm ${mobileSidebarOpen ? 'z-30' : 'relative z-[60]'}`}
         aria-label="Open student navigation"
         aria-expanded={mobileSidebarOpen}
         aria-controls="student-dashboard-navigation"
@@ -1217,14 +1228,22 @@ export const StudentDashboard: React.FC = () => {
           }}
           onPointerLeave={() => setSidebarCollapsed(true)}
           data-collapsed={isSidebarCollapsed}
-          className={`glass-panel-dark fixed left-0 top-16 bottom-0 z-50 mt-0 h-[calc(100dvh-4rem)] w-64 max-w-[85vw] overflow-y-auto border-r border-white/10 text-slate-300 backdrop-blur-xl transition-[width,transform] md:sticky md:top-16 md:bottom-auto md:z-auto md:mt-0 md:h-[calc(100vh-4rem)] md:max-w-none md:translate-x-0 md:overflow-y-visible ${
+          className={`glass-panel-dark fixed left-0 top-16 bottom-0 z-[60] mt-0 h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] w-[min(80vw,300px)] max-w-[300px] overflow-y-auto border-r border-white/10 text-slate-300 backdrop-blur-xl transition-[width,transform] duration-300 ease-out md:sticky md:top-16 md:bottom-auto md:z-auto md:mt-0 md:h-[calc(100vh-4rem)] md:max-h-none md:max-w-none md:translate-x-0 md:overflow-y-visible ${
             mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
           } ${
             sidebarCollapsed ? 'md:w-16' : 'md:w-64'
           }`}
         >
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
-            {!isSidebarCollapsed && <div><h2 className="text-xs uppercase tracking-wider text-blue-400 font-bold">Student Portal</h2><p className="text-sm font-semibold text-white mt-1">Learning Suite</p></div>}
+          <div className="flex min-h-[4.5rem] items-center justify-between gap-3 p-5 border-b border-white/10">
+            {!isSidebarCollapsed && <div className="min-w-0"><h2 className="text-xs uppercase tracking-wider text-blue-400 font-bold">Student Portal</h2><p className="text-sm font-semibold text-white mt-1">Learning Suite</p></div>}
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(false)}
+              className="md:hidden inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white"
+              aria-label="Close student navigation"
+            >
+              <X className="h-5 w-5" />
+            </button>
             <button
               type="button"
               onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
@@ -1253,9 +1272,9 @@ export const StudentDashboard: React.FC = () => {
                 type="button"
                 onClick={() => handleTabChange(tab)}
                 title={isSidebarCollapsed ? label : undefined}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-center md:justify-start'} gap-3 px-3 py-3 text-xs sm:text-sm font-semibold rounded-xl transition ${
+                className={`min-h-11 w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-start'} gap-3 px-3 py-3 text-xs sm:text-sm font-semibold rounded-xl transition ${
                   activeTab === tab
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-lg shadow-blue-500/25'
+                    ? 'bg-[#D6A84F] text-[#0B1F3A] shadow-lg shadow-amber-900/15'
                     : 'hover:bg-white/10 text-slate-200 hover:text-white'
                 }`}
               >
@@ -1656,7 +1675,9 @@ export const StudentDashboard: React.FC = () => {
                   }}
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-2xl p-6 text-center transition cursor-pointer ${
+                  data-dragging={isDragging}
+                  data-has-file={Boolean(selectedFile)}
+                  className={`file-drop-zone border-2 border-dashed rounded-2xl p-6 text-center transition cursor-pointer ${
                     isDragging
                       ? 'border-blue-500 bg-blue-50'
                       : selectedFile
@@ -1669,27 +1690,32 @@ export const StudentDashboard: React.FC = () => {
                     id="student-file-upload"
                     onChange={handleFileChange}
                     disabled={isSubmitting}
+                    accept={selectedAssignment
+                      ? selectedAssignment.allowedFileTypes.map((type) => `.${type.replace(/^\./, '')}`).join(',')
+                      : '.pdf,.doc,.docx,.ppt,.pptx,.zip'}
+                    aria-label="Choose assignment file"
                     className="hidden"
                   />
                   <label htmlFor="student-file-upload" className="cursor-pointer block">
                     {selectedFile ? (
                       <div className="flex flex-col items-center gap-2">
                         <FileText className="w-10 h-10 text-emerald-600" />
-                        <p className="font-semibold text-slate-800 text-sm truncate max-w-xs">{selectedFile.name}</p>
+                        <p className="max-w-full break-all text-sm font-semibold text-slate-800">{selectedFile.name}</p>
                         <p className="text-xs text-slate-500">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
-                        <span className="text-xs font-semibold text-blue-600 hover:underline">Click to change</span>
+                        <span className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800">Change file</span>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-2">
                         <Upload className="w-10 h-10 text-slate-400" />
                         <p className="text-sm font-semibold text-slate-700">
-                          Drag & drop assignment file, or <span className="text-blue-600 underline">browse</span>
+                          Drag & drop assignment file, or
                         </p>
+                        <span className="rounded-lg bg-[#0B1F3A] px-4 py-2 text-xs font-bold text-white">Browse files</span>
                         <p className="text-xs text-slate-500">
                           Allowed:{' '}
                           {selectedAssignment
                             ? selectedAssignment.allowedFileTypes.join(', ').toUpperCase()
-                            : 'PDF, DOC, DOCX, PPT, ZIP'}{' '}
+                            : 'PDF, DOC, DOCX, PPT, PPTX, ZIP'}{' '}
                           (Max: {selectedAssignment ? selectedAssignment.maxFileSize : 10} MB)
                         </p>
                       </div>
@@ -1699,11 +1725,33 @@ export const StudentDashboard: React.FC = () => {
               </div>
             )}
 
+            {isSubmitting && (
+              <div role="status" aria-live="polite" className="space-y-2">
+                <div className="flex justify-between gap-3 text-xs font-semibold text-slate-600">
+                  <span>{uploadProgress === 100 ? 'Finishing submission...' : 'Uploading assignment...'}</span>
+                  {uploadProgress !== null && <span>{uploadProgress}%</span>}
+                </div>
+                <div
+                  className="h-2 overflow-hidden rounded-full bg-slate-200"
+                  role="progressbar"
+                  aria-label="Assignment upload progress"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={uploadProgress ?? 0}
+                >
+                  <div
+                    className="h-full rounded-full bg-[#D6A84F] transition-[width] duration-200"
+                    style={{ width: `${uploadProgress ?? 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             {canSubmitForSelection && (
               <button
                 type="submit"
                 disabled={isSubmitting || (selectedAssignment?.submissionType === 'Group' && selectedSubmissionMemberIds.length === 0)}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-base rounded-xl shadow-lg transition flex items-center justify-center gap-2"
+                className="w-full min-h-12 py-3.5 border border-[#D6A84F] bg-[#0B1F3A] hover:bg-[#102744] disabled:bg-slate-400 text-white font-bold text-base rounded-xl shadow-lg transition flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>

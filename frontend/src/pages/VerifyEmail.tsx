@@ -58,21 +58,24 @@ export const VerifyEmail: React.FC = () => {
   }, [token]);
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center py-12 px-4">
-      <div className="max-w-md w-full glass-panel rounded-3xl shadow-2xl border border-slate-200/80 p-8 text-center space-y-6">
+    <div className="min-h-[80vh] flex items-center justify-center py-10 px-4 sm:px-6 relative overflow-x-clip">
+      {/* Subtle warm ambient light */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#D6A84F]/5 rounded-full blur-3xl pointer-events-none -z-10" />
+
+      <div className="max-w-[416px] w-full bg-[#FFFDF7] rounded-2xl shadow-xl shadow-[#0B1F3A]/5 border border-[#E3DCCF] p-6 sm:p-8 text-center space-y-6">
         {loading ? (
           <div className="space-y-3 py-6">
-            <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto" />
-            <h3 className="text-lg font-bold text-slate-800">Verifying Email Address...</h3>
+            <Loader2 className="w-12 h-12 text-[#D6A84F] animate-spin mx-auto" />
+            <h3 className="text-lg font-bold text-[#0B1F3A]">Verifying Email Address...</h3>
           </div>
         ) : success ? (
           <div className="space-y-4">
-            <CheckCircle2 className="w-14 h-14 text-emerald-600 mx-auto" />
-            <h2 className="text-2xl font-extrabold text-slate-900">Email Verified!</h2>
-            <p className="text-sm text-slate-600">{message}</p>
+            <CheckCircle2 className="w-14 h-14 text-[#23845b] mx-auto" />
+            <h2 className="text-2xl font-bold text-[#0B1F3A] tracking-tight">Email Verified!</h2>
+            <p className="text-sm text-[#687386]">{message}</p>
             <Link
               to={loginPath}
-              className="inline-block w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow transition"
+              className="inline-flex items-center justify-center w-full h-12 bg-[#0B1F3A] hover:bg-[#18385D] text-[#FFFDF7] font-semibold text-sm rounded-xl shadow-md transition"
             >
               {loginPath === '/admin/login' ? 'Proceed to Staff Login' : 'Proceed to Student Login'}
             </Link>
@@ -80,11 +83,11 @@ export const VerifyEmail: React.FC = () => {
         ) : (
           <div className="space-y-4">
             <AlertCircle className="w-14 h-14 text-red-500 mx-auto" />
-            <h2 className="text-2xl font-extrabold text-slate-900">Verification Failed</h2>
-            <p className="text-sm text-slate-600">{message}</p>
+            <h2 className="text-2xl font-bold text-[#0B1F3A] tracking-tight">Verification Failed</h2>
+            <p className="text-sm text-[#687386]">{message}</p>
 
-            <div className="pt-4 border-t border-slate-200 space-y-3">
-              <label htmlFor="verify-resend-email" className="block text-xs text-slate-500 font-medium">Need a new verification link? Enter your account email address below:</label>
+            <div className="pt-4 border-t border-[#E3DCCF] space-y-3 text-left">
+              <label htmlFor="verify-resend-email" className="block text-xs text-[#687386] font-medium">Need a new verification link? Enter your account email address below:</label>
               <div className="flex gap-2">
                 <input
                   id="verify-resend-email"
@@ -92,24 +95,24 @@ export const VerifyEmail: React.FC = () => {
                   placeholder="you@example.com"
                   value={resendEmail}
                   onChange={(e) => setResendEmail(e.target.value)}
-                  className="min-w-0 flex-1 px-3 py-2 border rounded-xl text-xs"
+                  className="min-w-0 flex-1 h-11 px-3 bg-white border border-[#E3DCCF] focus:border-[#D6A84F] focus:ring-2 focus:ring-[#D6A84F]/25 rounded-xl text-xs text-[#172B45] placeholder:text-[#687386]/60 transition"
                 />
                 <button
                   type="button"
                   onClick={handleResend}
                   disabled={isResending}
-                  className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1"
+                  className="shrink-0 h-11 px-4 bg-[#0B1F3A] hover:bg-[#18385D] text-[#FFFDF7] font-semibold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
                 >
-                  {isResending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Resend'}
+                  {isResending ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#D6A84F]" /> : 'Resend'}
                 </button>
               </div>
-              {resendMsg && <p className="text-xs font-semibold text-blue-700">{resendMsg}</p>}
+              {resendMsg && <p className="text-xs font-semibold text-[#0B1F3A]">{resendMsg}</p>}
             </div>
 
             <div className="pt-2">
               <Link
                 to="/student/login"
-                className="inline-block px-6 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition"
+                className="inline-block px-6 py-2.5 bg-[#F5F0E6] hover:bg-[#EDE5D6] text-[#172B45] font-semibold text-xs rounded-xl transition"
               >
                 Back to Login
               </Link>

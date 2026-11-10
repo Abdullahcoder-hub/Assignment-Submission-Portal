@@ -209,27 +209,27 @@ export const StudentLogin: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-x-clip">
-      {/* Subtle background ambient light */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
+    <div className="min-h-[85vh] flex items-center justify-center py-10 px-4 sm:px-6 relative overflow-x-clip">
+      {/* Subtle warm ambient light */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#D6A84F]/5 rounded-full blur-3xl pointer-events-none -z-10" />
 
-      <div className="max-w-md w-full glass-panel rounded-3xl shadow-2xl border border-slate-200/80 dark:border-white/10 p-8 space-y-6">
-        <div className="text-center space-y-2">
-          <div className="inline-flex p-3 bg-gradient-to-tr from-blue-600/10 to-blue-600/20 text-blue-600 rounded-2xl mb-1 shadow-inner border border-blue-500/20">
-            <User className="w-9 h-9" />
+      <div className="max-w-[416px] w-full bg-[#FFFDF7] rounded-2xl shadow-xl shadow-[#0B1F3A]/5 border border-[#E3DCCF] p-6 sm:p-8 space-y-6">
+        <div className="text-center space-y-1">
+          <div className="w-14 h-14 mx-auto mb-2 rounded-2xl bg-[#0B1F3A]/5 border border-[#D6A84F]/30 text-[#D6A84F] flex items-center justify-center shadow-inner">
+            <User className="w-7 h-7 stroke-[2.2]" />
           </div>
-          <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Portal Sign In</h2>
-          <p className="text-sm text-slate-500">Log in to view assignments and submit your coursework.</p>
+          <h2 className="text-2xl font-bold text-[#0B1F3A] tracking-tight">Portal Sign In</h2>
+          <p className="text-sm text-[#687386]">Log in to view assignments and submit your coursework.</p>
         </div>
 
         {errorMsg && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-2">
-            <div className="flex items-center gap-3 text-red-700 text-sm font-medium">
-              <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          <div className="p-3.5 bg-red-50/80 border border-red-200 rounded-xl space-y-2">
+            <div className="flex items-center gap-2.5 text-red-700 text-xs sm:text-sm font-medium">
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
               <span>{errorMsg}</span>
             </div>
             {errorMsg.toLowerCase().includes('verified') && (
-              <div className="pt-2 border-t border-red-200 flex items-center justify-between">
+              <div className="pt-2 border-t border-red-200/80 flex items-center justify-between">
                 <span className="text-xs text-red-600">Didn't get the email?</span>
                 <button
                   type="button"
@@ -246,16 +246,16 @@ export const StudentLogin: React.FC = () => {
         )}
 
         {resendStatus && (
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-semibold flex items-center justify-between">
+          <div className="p-3 bg-[#F5F0E6] border border-[#D6A84F]/40 rounded-xl text-xs text-[#0B1F3A] font-semibold flex items-center justify-between">
             <span>{resendStatus}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="login-email" className="block text-sm font-semibold text-slate-700 mb-1.5">Email Address</label>
+            <label htmlFor="login-email" className="block text-xs font-semibold uppercase tracking-wider text-[#172B45] mb-1.5">Email Address</label>
             <div className="relative">
-              <Mail className="w-5 h-5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Mail className="w-5 h-5 text-[#687386] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 id="login-email"
                 type="email"
@@ -263,20 +263,20 @@ export const StudentLogin: React.FC = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-slate-800 text-sm"
+                className="w-full h-12 pl-11 pr-4 bg-white border border-[#E3DCCF] rounded-xl focus:ring-2 focus:ring-[#D6A84F]/25 focus:border-[#D6A84F] transition text-[#172B45] placeholder:text-[#687386]/60 text-sm"
               />
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor="login-password" className="block text-sm font-semibold text-slate-700">Password</label>
-              <Link to="/forgot-password" className="inline-flex min-h-11 items-center px-1 text-xs font-semibold text-blue-600 hover:underline">
+              <label htmlFor="login-password" className="block text-xs font-semibold uppercase tracking-wider text-[#172B45]">Password</label>
+              <Link to="/forgot-password" className="inline-flex min-h-8 items-center px-1 text-xs font-semibold text-[#0B1F3A] hover:text-[#C49A3A] transition">
                 Forgot Password?
               </Link>
             </div>
             <div className="relative">
-              <Lock className="w-5 h-5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Lock className="w-5 h-5 text-[#687386] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 id="login-password"
                 type={showPassword ? 'text' : 'password'}
@@ -284,12 +284,12 @@ export const StudentLogin: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-slate-800 text-sm"
+                className="w-full h-12 pl-11 pr-11 bg-white border border-[#E3DCCF] rounded-xl focus:ring-2 focus:ring-[#D6A84F]/25 focus:border-[#D6A84F] transition text-[#172B45] placeholder:text-[#687386]/60 text-sm"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center text-slate-400 hover:text-slate-600 p-1"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center text-[#687386] hover:text-[#172B45] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#D6A84F]/40 transition"
                 aria-label="Toggle password visibility"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -300,11 +300,11 @@ export const StudentLogin: React.FC = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-sm rounded-xl shadow-lg hover:shadow-blue-500/25 transition duration-200 flex items-center justify-center gap-2"
+            className="w-full h-12 bg-[#0B1F3A] hover:bg-[#18385D] active:bg-[#102744] disabled:bg-[#0B1F3A]/50 text-[#FFFDF7] font-semibold text-sm rounded-xl shadow-md hover:shadow-lg transition duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin text-[#D6A84F]" />
                 Signing in...
               </>
             ) : (
@@ -314,9 +314,9 @@ export const StudentLogin: React.FC = () => {
         </form>
 
         <div className="relative flex py-1 items-center">
-          <div className="flex-grow border-t border-slate-200"></div>
-          <span className="flex-shrink mx-4 text-xs font-semibold text-slate-400 uppercase">Or</span>
-          <div className="flex-grow border-t border-slate-200"></div>
+          <div className="flex-grow border-t border-[#E3DCCF]"></div>
+          <span className="flex-shrink mx-4 text-xs font-semibold text-[#687386] uppercase tracking-wider">Or</span>
+          <div className="flex-grow border-t border-[#E3DCCF]"></div>
         </div>
 
         {/* Official Google OAuth Login Button */}
@@ -337,15 +337,15 @@ export const StudentLogin: React.FC = () => {
             type="button"
             onClick={handleGoogleClick}
             disabled={isSubmitting}
-            className="w-full min-h-11 py-2 border border-dashed border-slate-300 hover:bg-slate-50 text-slate-500 font-medium text-xs rounded-xl transition flex items-center justify-center gap-2"
+            className="w-full h-10 border border-dashed border-[#E3DCCF] hover:bg-[#F5F0E6] text-[#687386] hover:text-[#172B45] font-medium text-xs rounded-xl transition flex items-center justify-center gap-2"
           >
             Simulate Google Login (Dev Mode)
           </button>
         )}
 
-        <div className="text-center text-xs text-slate-500 pt-2">
+        <div className="text-center text-xs text-[#687386] pt-1">
           Don't have a student account?{' '}
-          <Link to="/register" className="inline-flex min-h-11 items-center font-bold text-blue-600 hover:underline">
+          <Link to="/register" className="font-semibold text-[#0B1F3A] hover:text-[#C49A3A] transition underline-offset-2 hover:underline">
             Register with Class Join Code
           </Link>
         </div>
@@ -353,13 +353,15 @@ export const StudentLogin: React.FC = () => {
 
       {/* MODAL FOR FIRST TIME GOOGLE REGISTRATION JOIN CODE */}
       {googleJoinModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 border-b pb-3">
-              <KeyRound className="w-6 h-6 text-blue-600" />
-              <h3 className="text-lg font-bold text-slate-900">First-Time Google Registration</h3>
+        <div className="fixed inset-0 bg-[#0B1F3A]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-[#FFFDF7] rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#E3DCCF] space-y-4">
+            <div className="flex items-center gap-3 border-b border-[#E3DCCF] pb-3">
+              <div className="w-10 h-10 rounded-xl bg-[#0B1F3A]/5 border border-[#D6A84F]/30 text-[#D6A84F] flex items-center justify-center">
+                <KeyRound className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <h3 className="text-lg font-bold text-[#0B1F3A]">First-Time Google Registration</h3>
             </div>
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-[#687386]">
               Please enter your official Roll Number and the Class Join Code provided by your CR to complete registration.
             </p>
 
@@ -372,8 +374,8 @@ export const StudentLogin: React.FC = () => {
 
             <form onSubmit={handleGoogleJoinSubmit} className="space-y-4">
               <div>
-                <label htmlFor="google-roll-number" className="block text-xs font-bold text-slate-700 mb-1">
-                  Roll Number <span className="text-slate-400 font-normal">(7 digits, e.g. 2260000)</span>
+                <label htmlFor="google-roll-number" className="block text-xs font-bold text-[#172B45] mb-1">
+                  Roll Number <span className="text-[#687386] font-normal">(7 digits, e.g. 2260000)</span>
                 </label>
                 <div className="relative">
                   <input
@@ -385,19 +387,19 @@ export const StudentLogin: React.FC = () => {
                     value={googleRollNumber}
                     onChange={(e) => handleRollChange(e.target.value)}
                     required
-                    className={`w-full px-3 py-2 border rounded-xl font-mono text-sm tracking-wider transition ${
+                    className={`w-full h-11 px-3 bg-white border rounded-xl font-mono text-sm tracking-wider transition ${
                       rollCheckState?.exists
                         ? 'border-red-500 bg-red-50/40 text-red-900 focus:ring-2 focus:ring-red-400'
                         : rollCheckState?.isAvailable
                         ? 'border-emerald-500 bg-emerald-50/40 text-emerald-900 focus:ring-2 focus:ring-emerald-400'
                         : rollCheckState?.error
                         ? 'border-amber-400 focus:ring-2 focus:ring-amber-400'
-                        : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
+                        : 'border-[#E3DCCF] focus:ring-2 focus:ring-[#D6A84F]/25 focus:border-[#D6A84F]'
                     }`}
                   />
                   {rollCheckState?.loading && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                      <Loader2 className="w-4 h-4 text-[#D6A84F] animate-spin" />
                     </div>
                   )}
                   {rollCheckState && !rollCheckState.loading && rollCheckState.exists && (
@@ -414,8 +416,8 @@ export const StudentLogin: React.FC = () => {
 
                 {/* Instant Roll Status Indicator */}
                 {rollCheckState?.loading && (
-                  <p className="text-[11px] text-blue-600 mt-1 font-medium flex items-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Checking roll number availability...
+                  <p className="text-[11px] text-[#0B1F3A] mt-1 font-medium flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin text-[#D6A84F]" /> Checking roll number availability...
                   </p>
                 )}
                 {rollCheckState && !rollCheckState.loading && rollCheckState.exists && (
@@ -435,21 +437,22 @@ export const StudentLogin: React.FC = () => {
                   </p>
                 )}
                 {!rollCheckState && googleRollNumber.length > 0 && googleRollNumber.length < 7 && (
-                  <p className="text-[11px] text-slate-400 mt-1">
+                  <p className="text-[11px] text-[#687386] mt-1">
                     {7 - googleRollNumber.length} more digit{7 - googleRollNumber.length > 1 ? 's' : ''} needed
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Class Join Code</label>
+                <label htmlFor="google-join-code" className="block text-xs font-bold text-[#172B45] mb-1">Class Join Code</label>
                 <input
+                  id="google-join-code"
                   type="text"
                   placeholder="e.g. CLASS-2026-PORTAL"
                   value={googleJoinCode}
                   onChange={(e) => setGoogleJoinCode(e.target.value)}
                   required
-                  className="w-full px-3 py-2 border rounded-xl font-mono text-sm uppercase"
+                  className="w-full h-11 px-3 bg-white border border-[#E3DCCF] focus:border-[#D6A84F] focus:ring-2 focus:ring-[#D6A84F]/25 rounded-xl font-mono text-sm uppercase text-[#172B45]"
                 />
               </div>
 
@@ -457,15 +460,16 @@ export const StudentLogin: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setGoogleJoinModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl"
+                  className="h-10 px-4 text-xs font-semibold bg-[#F5F0E6] hover:bg-[#EDE5D6] text-[#172B45] rounded-xl transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting || rollCheckState?.loading || rollCheckState?.exists}
-                  className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white rounded-xl transition"
+                  className="h-10 px-4 text-xs font-semibold bg-[#0B1F3A] hover:bg-[#18385D] disabled:bg-[#0B1F3A]/40 disabled:cursor-not-allowed text-[#FFFDF7] rounded-xl transition flex items-center gap-1.5"
                 >
+                  {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#D6A84F]" />}
                   Complete Setup
                 </button>
               </div>

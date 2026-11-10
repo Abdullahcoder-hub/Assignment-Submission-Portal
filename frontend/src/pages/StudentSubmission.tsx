@@ -46,6 +46,7 @@ export const StudentSubmission: React.FC = () => {
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<SubmissionReceipt | null>(null);
 
@@ -212,6 +213,7 @@ export const StudentSubmission: React.FC = () => {
     if (!validateForm()) return;
 
     setIsSubmitting(true);
+    setUploadProgress(0);
     setErrorMsg(null);
 
     try {
@@ -229,9 +231,15 @@ export const StudentSubmission: React.FC = () => {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            setUploadProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));
+          }
+        },
       });
 
       if (res.data.success) {
+        setUploadProgress(100);
         setReceipt(res.data.submission);
       } else {
         setErrorMsg(res.data.message || 'Failed to submit assignment.');
@@ -241,6 +249,7 @@ export const StudentSubmission: React.FC = () => {
       setErrorMsg(serverMessage);
     } finally {
       setIsSubmitting(false);
+      setUploadProgress(null);
     }
   };
 
@@ -543,7 +552,9 @@ export const StudentSubmission: React.FC = () => {
               }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-2xl p-6 text-center transition cursor-pointer ${
+              data-dragging={isDragging}
+              data-has-file={Boolean(selectedFile)}
+              className={`file-drop-zone border-2 border-dashed rounded-2xl p-6 text-center transition cursor-pointer ${
                 isDragging
                   ? 'border-blue-500 bg-blue-50'
                   : selectedFile
@@ -556,6 +567,10 @@ export const StudentSubmission: React.FC = () => {
                 id="file-upload"
                 onChange={handleFileChange}
                 disabled={isSubmitting}
+                accept={selectedAssignment
+                  ? selectedAssignment.allowedFileTypes.map((type) => `.${type.replace(/^\./, '')}`).join(',')
+                  : '.pdf,.doc,.docx,.ppt,.pptx,.zip'}
+                aria-label="Choose assignment file"
                 className="hidden"
               />
               <label htmlFor="file-upload" className="cursor-pointer block">
@@ -563,13 +578,13 @@ export const StudentSubmission: React.FC = () => {
                   <div className="flex flex-col items-center gap-2">
                     <FileText className="w-10 h-10 text-emerald-600" />
                     <div>
-                      <p className="font-semibold text-slate-800 text-sm truncate max-w-xs">{selectedFile.name}</p>
+                      <p className="max-w-full break-all text-sm font-semibold text-slate-800">{selectedFile.name}</p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                       </p>
                     </div>
-                    <span className="text-xs font-semibold text-blue-600 hover:underline mt-1">
-                      Click to change file
+                    <span className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800">
+                      Change file
                     </span>
                   </div>
                 ) : (
@@ -577,8 +592,8 @@ export const StudentSubmission: React.FC = () => {
                     <Upload className="w-10 h-10 text-slate-400" />
                     <p className="text-sm font-semibold text-slate-700">
                       Drag & drop your assignment file here, or{' '}
-                      <span className="text-blue-600 underline">browse</span>
                     </p>
+                    <span className="rounded-lg bg-[#0B1F3A] px-4 py-2 text-xs font-bold text-white">Browse files</span>
                     <p className="text-xs text-slate-500">
                       Allowed formats:{' '}
                       {selectedAssignment
@@ -592,11 +607,33 @@ export const StudentSubmission: React.FC = () => {
             </div>
           </div>
 
+          {isSubmitting && (
+            <div role="status" aria-live="polite" className="space-y-2">
+              <div className="flex justify-between gap-3 text-xs font-semibold text-slate-600">
+                <span>{uploadProgress === 100 ? 'Finishing submission...' : 'Uploading assignment...'}</span>
+                {uploadProgress !== null && <span>{uploadProgress}%</span>}
+              </div>
+              <div
+                className="h-2 overflow-hidden rounded-full bg-slate-200"
+                role="progressbar"
+                aria-label="Assignment upload progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={uploadProgress ?? 0}
+              >
+                <div
+                  className="h-full rounded-full bg-[#D6A84F] transition-[width] duration-200"
+                  style={{ width: `${uploadProgress ?? 0}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Submit Button */}
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-base rounded-xl shadow-lg hover:shadow-blue-500/25 transition duration-200 flex items-center justify-center gap-2"
+            className="w-full min-h-12 py-3.5 border border-[#D6A84F] bg-[#0B1F3A] hover:bg-[#102744] disabled:bg-slate-400 text-white font-bold text-base rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2"
           >
             {isSubmitting ? (
               <>
