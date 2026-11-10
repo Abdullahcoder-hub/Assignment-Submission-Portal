@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, ShieldCheck, GraduationCap, UserCheck, User } from 'lucide-react';
+import { LogOut, ShieldCheck, UserCheck, User } from 'lucide-react';
 import { StudentUser, AdminUser } from '../types';
 
 export const Navbar: React.FC = () => {
@@ -25,6 +25,7 @@ export const Navbar: React.FC = () => {
   ].includes(location.pathname);
   const isStaff = role && ['SUPER_ADMIN', 'TEACHER', 'CR', 'CR_ASSISTANT'].includes(role);
   const dashboardPath = isStaff ? '/admin/dashboard' : '/student/dashboard';
+  const isDashboardRoute = ['/student/dashboard', '/admin/dashboard'].includes(location.pathname);
 
   const getRoleLabel = () => {
     if (role === 'SUPER_ADMIN') return 'Super Admin';
@@ -37,9 +38,7 @@ export const Navbar: React.FC = () => {
     <header className="bg-[#0B1F3A] text-[#FFFDF7] shadow-lg border-b border-[#D6A84F]/20 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-16 py-2 flex items-center justify-between gap-2">
         <Link to={isAuthenticated && !isAuthRoute ? dashboardPath : '/'} className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 hover:opacity-90 transition">
-          <div className="bg-gradient-to-br from-[#D6A84F] to-[#C49A3A] p-2 rounded-xl text-[#0B1F3A] shadow-md shadow-[#D6A84F]/20 border border-[#D6A84F]/40 shrink-0">
-            <GraduationCap className="w-6 h-6 stroke-[2.2]" />
-          </div>
+          {isDashboardRoute && <span className="h-11 w-11 shrink-0" aria-hidden="true" />}
           <div className="min-w-0">
             <h1 className="font-bold text-sm sm:text-lg leading-tight tracking-tight truncate text-[#FFFDF7]">Assignment & Quiz Portal</h1>
             <p className="hidden sm:block text-xs text-[#E3DCCF]/80">Class & Examination Portal</p>

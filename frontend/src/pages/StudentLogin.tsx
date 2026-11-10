@@ -218,7 +218,7 @@ export const StudentLogin: React.FC = () => {
           <div className="w-14 h-14 mx-auto mb-2 rounded-2xl bg-[#0B1F3A]/5 border border-[#D6A84F]/30 text-[#D6A84F] flex items-center justify-center shadow-inner">
             <User className="w-7 h-7 stroke-[2.2]" />
           </div>
-          <h2 className="text-2xl font-bold text-[#0B1F3A] tracking-tight">Portal Sign In</h2>
+          <h2 className="text-2xl font-bold text-[#0B1F3A] tracking-tight">Student Sign In</h2>
           <p className="text-sm text-[#687386]">Log in to view assignments and submit your coursework.</p>
         </div>
 

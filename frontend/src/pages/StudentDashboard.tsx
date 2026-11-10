@@ -1247,7 +1247,7 @@ export const StudentDashboard: React.FC = () => {
       <button
         type="button"
         onClick={() => setMobileSidebarOpen(true)}
-        className={`fixed left-3 top-20 md:hidden inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-800 text-slate-100 shadow-sm ${mobileSidebarOpen ? 'z-30' : 'z-[60]'}`}
+        className={`fixed left-3 top-3 md:hidden inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[#D6A84F]/40 bg-[#D6A84F] text-[#0B1F3A] shadow-sm ${mobileSidebarOpen ? 'z-30' : 'z-[60]'}`}
         aria-label="Open student navigation"
         aria-expanded={mobileSidebarOpen}
         aria-controls="student-dashboard-navigation"

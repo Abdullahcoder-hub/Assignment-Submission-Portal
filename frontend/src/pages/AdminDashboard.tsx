@@ -949,7 +949,7 @@ export const AdminDashboard: React.FC = () => {
       <button
         type="button"
         onClick={() => setMobileSidebarOpen(true)}
-        className={`md:hidden self-start m-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-800 text-slate-100 shadow-sm ${mobileSidebarOpen ? 'z-30' : 'relative z-[60]'}`}
+        className={`fixed left-3 top-3 md:hidden inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[#D6A84F]/40 bg-[#D6A84F] text-[#0B1F3A] shadow-sm ${mobileSidebarOpen ? 'z-30' : 'z-[60]'}`}
         aria-label="Open staff navigation"
         aria-expanded={mobileSidebarOpen}
         aria-controls="admin-dashboard-navigation"

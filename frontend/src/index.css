@@ -498,6 +498,13 @@ textarea {
   border-radius: 0.75rem;
 }
 
+select {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--portal-muted);
