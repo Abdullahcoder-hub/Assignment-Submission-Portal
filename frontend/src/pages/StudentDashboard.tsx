@@ -1092,7 +1092,29 @@ export const StudentDashboard: React.FC = () => {
             },
           });
           if (res.data.success) {
-            submittedReceipts.push(res.data.submission as SubmissionReceipt);
+            const receipt = res.data.submission as SubmissionReceipt;
+            submittedReceipts.push(receipt);
+            if (isGroupSubmission) {
+              setUploadGroup((current) => {
+                if (!current) return current;
+                const submittedMember = {
+                  studentName: receipt.studentName,
+                  rollNumber: receipt.rollNumber,
+                  sequenceNumber: target.sequenceNumber,
+                  submittedAt: receipt.submittedAt,
+                };
+                const submittedMembers = current.submittedMembers || [];
+                return {
+                  ...current,
+                  submittedMembers: [
+                    ...submittedMembers.filter(
+                      (submission) => submission.rollNumber.toLowerCase() !== receipt.rollNumber.toLowerCase()
+                    ),
+                    submittedMember,
+                  ],
+                };
+              });
+            }
           } else {
             submissionErrors.push(`${target.member?.name || student.name}: ${res.data.message || 'Submission failed.'}`);
           }
@@ -1107,7 +1129,27 @@ export const StudentDashboard: React.FC = () => {
         if (isGroupSubmission && selectedAssignment) {
           try {
             const groupRes = await api.get(`/groups/my-group/${selectedSubjectId}?assignmentId=${selectedAssignment._id}`);
-            const updatedGroup: Group | null = groupRes.data.group || null;
+            const fetchedGroup: Group | null = groupRes.data.group || null;
+            const updatedGroup = fetchedGroup && uploadGroup
+              ? {
+                  ...fetchedGroup,
+                  submittedMembers: [
+                    ...(fetchedGroup.submittedMembers || []).filter(
+                      (submission) => !submittedReceipts.some(
+                        (receipt) => receipt.rollNumber.toLowerCase() === submission.rollNumber.toLowerCase()
+                      )
+                    ),
+                    ...submittedReceipts.map((receipt) => ({
+                      studentName: receipt.studentName,
+                      rollNumber: receipt.rollNumber,
+                      sequenceNumber: membersToSubmit.find(
+                        (target) => target.member?.rollNumber.toLowerCase() === receipt.rollNumber.toLowerCase()
+                      )?.sequenceNumber,
+                      submittedAt: receipt.submittedAt,
+                    })),
+                  ],
+                }
+              : fetchedGroup;
             setUploadGroup(updatedGroup);
             const remainingMemberIds = (updatedGroup?.members || []).flatMap((member) => {
               const memberId = member.studentId
@@ -1205,7 +1247,7 @@ export const StudentDashboard: React.FC = () => {
       <button
         type="button"
         onClick={() => setMobileSidebarOpen(true)}
-        className={`md:hidden self-start m-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-800 text-slate-100 shadow-sm ${mobileSidebarOpen ? 'z-30' : 'relative z-[60]'}`}
+        className={`fixed left-3 top-20 md:hidden inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-800 text-slate-100 shadow-sm ${mobileSidebarOpen ? 'z-30' : 'z-[60]'}`}
         aria-label="Open student navigation"
         aria-expanded={mobileSidebarOpen}
         aria-controls="student-dashboard-navigation"
